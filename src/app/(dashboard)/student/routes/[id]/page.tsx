@@ -22,8 +22,8 @@ export default async function RouteDetailPage({
   return (
     <section className="max-w-2xl space-y-6">
       <div>
-        <Link href="/student/routes" className="text-sm text-muted-foreground underline">
-          ← All routes
+        <Link href="/student/schools" className="text-sm text-muted-foreground underline">
+          ← Back to campuses
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">{data.route.name}</h1>
         <p className="text-sm text-muted-foreground">

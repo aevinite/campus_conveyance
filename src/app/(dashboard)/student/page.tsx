@@ -36,15 +36,15 @@ export default async function StudentHome() {
 
       <section className="grid gap-5 sm:grid-cols-2">
         <Link
-          href="/student/routes"
+          href="/student/schools"
           className="group flex flex-col gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-6 transition-all hover:-translate-y-1 hover:bg-primary/15"
         >
           <span className="grid size-11 place-items-center rounded-xl bg-primary text-primary-foreground">
             <Search className="size-6" />
           </span>
-          <h2 className="text-lg font-semibold">Browse &amp; book</h2>
+          <h2 className="text-lg font-semibold">Browse campuses</h2>
           <p className="text-sm text-muted-foreground">
-            Find routes and reserve a seat on a bus or van.
+            Find your school or college, pick an agency and reserve a seat.
           </p>
           <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary">
             Start booking <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
