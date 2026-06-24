@@ -1,19 +1,20 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
-import { dashboardFor, roleFromClaims } from '@/lib/rbac/roles';
+import { dashboardFor } from '@/lib/rbac/roles';
 
 const PUBLIC = ['/', '/login', '/register', '/verify', '/forgot', '/reset', '/auth'];
 
 export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const { response, user, role } = await updateSession(request);
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
 
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
-  if (user && (path === '/login' || path === '/register')) {
-    const role = roleFromClaims(user.app_metadata as Record<string, unknown>);
+  // Only bounce a logged-in user off the auth pages once we can resolve their
+  // role — otherwise dashboardFor() would send them back to /login in a loop.
+  if (user && role && (path === '/login' || path === '/register')) {
     return NextResponse.redirect(new URL(dashboardFor(role), request.url));
   }
   return response;

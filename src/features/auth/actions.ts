@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { registerSchema, loginSchema, forgotSchema, resetSchema } from './schemas';
 import { registerUser, loginUser } from './services';
-import { dashboardFor, roleFromClaims } from '@/lib/rbac/roles';
+import { getSessionRole } from './session';
+import { dashboardFor } from '@/lib/rbac/roles';
 import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 
 export type AuthState = { error?: string; message?: string };
@@ -37,10 +38,7 @@ export async function loginAction(
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  const role = roleFromClaims(user?.app_metadata as Record<string, unknown>);
+  const role = await getSessionRole(db);
   revalidatePath('/', 'layout');
   redirect(dashboardFor(role));
 }

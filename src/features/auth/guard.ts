@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { roleFromClaims, type Role } from '@/lib/rbac/roles';
+import { getSessionRole } from './session';
+import type { Role } from '@/lib/rbac/roles';
 
 /**
  * Server-side guard for dashboard pages. Returns the user's role, or redirects
@@ -12,7 +13,7 @@ export async function requireRole(allowed: Role): Promise<Role> {
     data: { user },
   } = await db.auth.getUser();
   if (!user) redirect('/login');
-  const role = roleFromClaims(user.app_metadata as Record<string, unknown>);
+  const role = await getSessionRole(db);
   if (role !== allowed && role !== 'SUPER_ADMIN') redirect('/login');
-  return role!;
+  return role;
 }

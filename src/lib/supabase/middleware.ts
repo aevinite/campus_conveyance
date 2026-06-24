@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { roleFromClaims, type Role } from '@/lib/rbac/roles';
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -21,5 +22,12 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return { response, user };
+  let role: Role | undefined;
+  if (user) {
+    const { data } = await supabase.auth.getClaims();
+    role = roleFromClaims(
+      (data?.claims as { app_metadata?: unknown } | null)?.app_metadata,
+    );
+  }
+  return { response, user, role };
 }
