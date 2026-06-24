@@ -49,8 +49,6 @@ export default function RegisterPage() {
             >
               <option value="STUDENT">Student</option>
               <option value="PARENT">Parent</option>
-              <option value="DRIVER">Driver</option>
-              <option value="INSTITUTION_ADMIN">Institution Admin</option>
             </select>
           </div>
           {state.error && <p className="text-sm text-red-500">{state.error}</p>}
