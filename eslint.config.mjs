@@ -13,6 +13,19 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // eslint-config-next 16 enables the new React-Compiler-oriented
+      // react-hooks rules (eslint-plugin-react-hooks v6). They flag intentional,
+      // runtime-correct patterns we rely on — reacting to a completed
+      // useActionState result with a toast + local state update, and keeping a
+      // "latest value" ref for stable callbacks (e.g. the map click handler,
+      // whose setState runs in an event callback, not synchronously in render).
+      // These are not runtime bugs; disable until/unless we adopt the compiler.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/refs": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -8,8 +8,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +27,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,93 +41,240 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-2xl: calc(var(--radius) * 1.9);
+  --radius-3xl: calc(var(--radius) * 2.4);
+  --radius-4xl: calc(var(--radius) * 2.9);
+  --shadow-2xs: 0 1px 2px 0 oklch(0.2 0.03 265 / 0.04);
+  --shadow-xs: 0 1px 3px 0 oklch(0.2 0.03 265 / 0.06), 0 1px 2px -1px oklch(0.2 0.03 265 / 0.06);
+  --shadow-sm: 0 2px 6px -1px oklch(0.2 0.03 265 / 0.08), 0 1px 3px -1px oklch(0.2 0.03 265 / 0.06);
+  --shadow-md: 0 8px 20px -6px oklch(0.2 0.03 265 / 0.1), 0 2px 6px -2px oklch(0.2 0.03 265 / 0.06);
+  --shadow-lg: 0 16px 40px -12px oklch(0.2 0.03 265 / 0.14), 0 4px 10px -4px oklch(0.2 0.03 265 / 0.08);
+  --shadow-xl: 0 28px 60px -16px oklch(0.2 0.03 265 / 0.18);
 }
 
+/*
+  Campus Conveyance — clean modern SaaS theme, brand-matched.
+  Warm near-neutral canvas + the logo's amber as the primary action color and
+  blue as the accent, on a warm dark charcoal ink. All surfaces are token-driven
+  so the palette propagates across every page.
+*/
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.75rem;
+
+  /* Fixed brand colors (used by the logo + graphic accents) */
+  --brand-amber: #f4a521;
+  --brand-amber-deep: #b96c09;
+  --brand-blue: #2166d6;
+  --brand-pale: #f6d79e;
+
+  --background: oklch(0.995 0.004 80);
+  --foreground: oklch(0.24 0.02 62);
+
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.24 0.02 62);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.24 0.02 62);
+
+  --primary: oklch(0.63 0.17 53);
+  --primary-foreground: oklch(0.99 0.01 85);
+
+  --secondary: oklch(0.966 0.008 78);
+  --secondary-foreground: oklch(0.3 0.02 62);
+
+  --muted: oklch(0.968 0.006 78);
+  --muted-foreground: oklch(0.52 0.02 62);
+
+  --accent: oklch(0.95 0.03 72);
+  --accent-foreground: oklch(0.44 0.13 52);
+
+  --destructive: oklch(0.585 0.22 27);
+  --success: oklch(0.6 0.15 150);
+  --warning: oklch(0.66 0.16 58);
+
+  --border: oklch(0.905 0.008 72);
+  --input: oklch(0.905 0.008 72);
+  --ring: oklch(0.63 0.17 53);
+
+  --chart-1: oklch(0.63 0.17 53);
+  --chart-2: oklch(0.53 0.19 260);
+  --chart-3: oklch(0.62 0.13 172);
+  --chart-4: oklch(0.55 0.2 300);
+  --chart-5: oklch(0.62 0.2 35);
+
+  --sidebar: oklch(0.986 0.006 78);
+  --sidebar-foreground: oklch(0.24 0.02 62);
+  --sidebar-primary: oklch(0.63 0.17 53);
+  --sidebar-primary-foreground: oklch(0.99 0.01 85);
+  --sidebar-accent: oklch(0.95 0.03 72);
+  --sidebar-accent-foreground: oklch(0.44 0.13 52);
+  --sidebar-border: oklch(0.905 0.008 72);
+  --sidebar-ring: oklch(0.63 0.17 53);
 }
 
-/* Campus Conveyance theme — deep warm charcoal + school-bus amber. */
 .dark {
-  --background: oklch(0.17 0.008 80);
-  --foreground: oklch(0.97 0.01 90);
-  --card: oklch(0.215 0.01 80);
-  --card-foreground: oklch(0.97 0.01 90);
-  --popover: oklch(0.205 0.01 80);
-  --popover-foreground: oklch(0.97 0.01 90);
-  --primary: oklch(0.83 0.17 85);
-  --primary-foreground: oklch(0.22 0.05 75);
-  --secondary: oklch(0.27 0.01 80);
-  --secondary-foreground: oklch(0.97 0.01 90);
-  --muted: oklch(0.27 0.01 80);
-  --muted-foreground: oklch(0.74 0.02 85);
-  --accent: oklch(0.32 0.06 85);
-  --accent-foreground: oklch(0.97 0.01 90);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.83 0.17 85);
-  --chart-1: oklch(0.83 0.17 85);
-  --chart-2: oklch(0.7 0.15 70);
-  --chart-3: oklch(0.6 0.12 60);
-  --chart-4: oklch(0.5 0.1 80);
-  --chart-5: oklch(0.4 0.08 80);
-  --sidebar: oklch(0.2 0.01 80);
-  --sidebar-foreground: oklch(0.97 0.01 90);
-  --sidebar-primary: oklch(0.83 0.17 85);
-  --sidebar-primary-foreground: oklch(0.22 0.05 75);
-  --sidebar-accent: oklch(0.27 0.01 80);
-  --sidebar-accent-foreground: oklch(0.97 0.01 90);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.83 0.17 85);
+  --brand-amber: #f6ab2c;
+  --brand-amber-deep: #eea233;
+  --brand-blue: #5b9cf6;
+  --brand-pale: #f6d79e;
+
+  --background: oklch(0.19 0.012 65);
+  --foreground: oklch(0.96 0.01 82);
+
+  --card: oklch(0.235 0.014 65);
+  --card-foreground: oklch(0.96 0.01 82);
+  --popover: oklch(0.235 0.014 65);
+  --popover-foreground: oklch(0.96 0.01 82);
+
+  --primary: oklch(0.8 0.15 70);
+  --primary-foreground: oklch(0.24 0.04 58);
+
+  --secondary: oklch(0.28 0.014 65);
+  --secondary-foreground: oklch(0.96 0.01 82);
+
+  --muted: oklch(0.27 0.013 65);
+  --muted-foreground: oklch(0.73 0.02 76);
+
+  --accent: oklch(0.34 0.06 66);
+  --accent-foreground: oklch(0.9 0.07 72);
+
+  --destructive: oklch(0.68 0.19 24);
+  --success: oklch(0.72 0.14 155);
+  --warning: oklch(0.8 0.14 72);
+
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.8 0.15 70);
+
+  --chart-1: oklch(0.8 0.15 70);
+  --chart-2: oklch(0.68 0.16 258);
+  --chart-3: oklch(0.72 0.13 172);
+  --chart-4: oklch(0.68 0.18 300);
+  --chart-5: oklch(0.72 0.19 38);
+
+  --sidebar: oklch(0.215 0.013 65);
+  --sidebar-foreground: oklch(0.96 0.01 82);
+  --sidebar-primary: oklch(0.8 0.15 70);
+  --sidebar-primary-foreground: oklch(0.24 0.04 58);
+  --sidebar-accent: oklch(0.34 0.06 66);
+  --sidebar-accent-foreground: oklch(0.9 0.07 72);
+  --sidebar-border: oklch(1 0 0 / 11%);
+  --sidebar-ring: oklch(0.8 0.15 70);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading tracking-tight;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+}
+
+/* Data-viz palette. Marks use these; text/ink use the theme's foreground
+   tokens. Dark steps are re-tuned for the dark surface. */
+:root {
+  --viz-bus: #e8890c;      /* categorical slot 1 (amber) */
+  --viz-van: #2166d6;      /* categorical slot 2 (blue) */
+  --viz-students: #7c3aed; /* categorical slot 3 (violet) */
+  --viz-paid: #16a34a;     /* status: good */
+  --viz-pending: #eab308;  /* status: warning */
+  --viz-track: #ece7de;    /* bar track / gridline */
+}
+.dark {
+  --viz-bus: #f6ab2c;
+  --viz-van: #5b9cf6;
+  --viz-students: #a78bfa;
+  --viz-paid: #22c55e;
+  --viz-pending: #facc15;
+  --viz-track: #322d25;
+}
+
+/* Utility: subtle grid / dotted backdrop used on marketing + auth surfaces. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklch, var(--foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Hide the browser's built-in password reveal / clear controls (Edge/IE) so
+   password fields only ever show our own eye toggle — otherwise there are two
+   eye icons side by side. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* Print-to-PDF: hide app chrome and interactive controls, print clean. */
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  aside { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+  body { background: #fff !important; }
+  .print-block { break-inside: avoid; }
+}
+.print-only { display: none; }
+
+/* ---- Leaflet: always-light professional map (matches CARTO Positron) ---- */
+.leaflet-container {
+  font: inherit;
+  background: #eaeaec; /* light neutral behind tiles */
+}
+/* Custom numbered pin — remove Leaflet's default white icon box + add depth. */
+.cc-pin {
+  background: transparent;
+  border: none;
+}
+.cc-pin svg {
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}
+/* Zoom control: clean white buttons that sit well on the light map. */
+.leaflet-bar {
+  border: none !important;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.15) !important;
+  border-radius: 0.7rem !important;
+  overflow: hidden;
+}
+.leaflet-bar a,
+.leaflet-control-zoom a {
+  background: #ffffff !important;
+  color: #3f3f46 !important;
+  border-color: rgb(0 0 0 / 0.06) !important;
+}
+.leaflet-bar a:hover,
+.leaflet-control-zoom a:hover {
+  background: #f4f4f5 !important;
+  color: #18181b !important;
+}
+.leaflet-control-attribution {
+  background: rgb(255 255 255 / 0.82) !important;
+  color: #71717a !important;
+  border-top-left-radius: 0.6rem;
+  backdrop-filter: blur(4px);
+  font-size: 10px;
+}
+.leaflet-control-attribution a {
+  color: #6d5efc !important;
 }

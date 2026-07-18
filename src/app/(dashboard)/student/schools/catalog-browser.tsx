@@ -1,8 +1,10 @@
 'use client';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Search, School, GraduationCap, ArrowRight } from 'lucide-react';
+import { Search, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { InstitutionLogo } from '@/components/institution-logo';
+import { VerifiedBadge } from '@/components/verified-badge';
 import type { Institution, Kind } from '@/features/catalog/repository';
 
 type Filter = 'ALL' | Kind;
@@ -72,26 +74,32 @@ export function CatalogBrowser({ institutions }: { institutions: Institution[] }
             <Link
               key={i.id}
               href={`/student/schools/${i.id}`}
-              className="group overflow-hidden rounded-2xl border border-border bg-card/60 transition-all hover:-translate-y-1 hover:bg-card"
+              className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-sm"
             >
               <div
-                className="flex h-32 items-center justify-center"
+                className="relative flex h-24 items-end px-5"
                 style={{
                   background:
-                    'linear-gradient(135deg, oklch(0.83 0.17 85 / 0.25), oklch(0.3 0.04 80 / 0.4))',
+                    'linear-gradient(135deg, color-mix(in oklch, var(--primary) 26%, transparent), color-mix(in oklch, var(--chart-5) 24%, transparent))',
                 }}
               >
-                {i.kind === 'COLLEGE' ? (
-                  <GraduationCap className="size-10 text-primary" />
-                ) : (
-                  <School className="size-10 text-primary" />
-                )}
+                <div aria-hidden className="absolute inset-0 opacity-60 bg-grid" />
+                <InstitutionLogo
+                  name={i.name}
+                  kind={i.kind}
+                  imageUrl={i.image_url}
+                  className="relative -mb-8 size-16 ring-2 ring-background"
+                  iconClassName="size-7"
+                />
               </div>
-              <div className="space-y-1.5 p-5">
+              <div className="space-y-1.5 p-5 pt-10">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">
                   {i.kind === 'COLLEGE' ? 'College' : 'School'}
                 </span>
-                <h2 className="font-semibold">{i.name}</h2>
+                <h2 className="flex items-center gap-1.5 font-semibold">
+                  {i.name}
+                  <VerifiedBadge verified={i.is_verified} />
+                </h2>
                 <p className="line-clamp-2 text-sm text-muted-foreground">
                   {i.description}
                 </p>

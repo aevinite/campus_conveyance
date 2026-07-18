@@ -3,5 +3,13 @@ node_modules/
 .env*
 !.env.example
 npm-debug.log*
+# Local dev/server logs — runtime artifacts, never committed.
+*.log
+_dev.log
+_serverstart.log
 .DS_Store
 .pdfpages/
+.maintenance.json
+# Local tooling / build artifacts — not project code.
+.claude/
+tsconfig.tsbuildinfo

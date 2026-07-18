@@ -1,14 +1,15 @@
+import { Building2 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
+import { ComingSoon } from '@/components/coming-soon';
 
 export default async function InstitutionDashboard() {
   await requireRole('INSTITUTION_ADMIN');
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">Institution Dashboard</h1>
-      <p className="text-muted-foreground">
-        Manage routes, vehicles, drivers, students, bookings and payments —
-        coming in the next slices.
-      </p>
-    </section>
+    <ComingSoon
+      icon={Building2}
+      title="Institution Dashboard"
+      description="Run your campus transport end to end. Manage routes, vehicles, drivers, students, bookings, and payments — all in one place."
+      items={['Routes & vehicles', 'Drivers & students', 'Bookings overview', 'Payments & reports']}
+    />
   );
 }

@@ -1,0 +1,422 @@
+'use server';
+import { revalidatePath } from 'next/cache';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { toErrorResponse, AppError } from '@/lib/errors/app-error';
+import { collegeSchema, slugify } from './schemas';
+import { agencyProfileSchema } from '@/features/agency/schemas';
+
+export type FormState = { error?: string; message?: string };
+
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Record an admin action in audit_logs (issue 6). Best-effort — a logging
+ * failure must never break the action the admin actually asked for. Runs as the
+ * signed-in SUPER_ADMIN, whose id becomes actor_id; platform-level rows carry a
+ * null institution_id.
+ */
+async function logAction(
+  db: Db,
+  action: string,
+  entity: string,
+  entityId: string | null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    const { data } = await db.auth.getClaims();
+    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    await db.from('audit_logs').insert({ actor_id: actorId, action, entity, entity_id: entityId, metadata });
+  } catch {
+    /* swallow — logging is non-critical */
+  }
+}
+
+async function setAgency(db: Db, agencyId: string, patch: Record<string, unknown>) {
+  const { error } = await db.from('agencies').update(patch).eq('id', agencyId);
+  if (error) throw new AppError('ADMIN', error.message);
+}
+
+export async function approveAgencyAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  const { data: claimsData } = await db.auth.getClaims();
+  const userId = (claimsData?.claims as { sub?: string } | null)?.sub ?? null;
+  await setAgency(db, id, {
+    status: 'APPROVED',
+    approved_at: new Date().toISOString(),
+    approved_by: userId,
+    rejected_reason: null,
+  });
+  await logAction(db, 'AGENCY_APPROVED', 'agency', id);
+  revalidatePath('/aevinite/requests');
+  revalidatePath('/aevinite/providers');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function rejectAgencyAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return;
+  const reason = String(formData.get('reason') ?? '').trim();
+  const db = await createClient();
+  await setAgency(db, id, { status: 'REJECTED', rejected_reason: reason || null });
+  await logAction(db, 'AGENCY_REJECTED', 'agency', id, reason ? { reason } : {});
+  revalidatePath('/aevinite/requests');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function deleteAgencyAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  await setAgency(db, id, { is_deleted: true, deleted_at: new Date().toISOString() });
+  await logAction(db, 'AGENCY_DELETED', 'agency', id);
+  revalidatePath('/aevinite/providers');
+  revalidatePath('/aevinite/deleted-providers');
+  revalidatePath('/aevinite/requests'); // rejected providers are listed here too
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function restoreAgencyAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  await setAgency(db, id, { is_deleted: false, deleted_at: null });
+  await logAction(db, 'AGENCY_RESTORED', 'agency', id);
+  revalidatePath('/aevinite/providers');
+  revalidatePath('/aevinite/deleted-providers');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+/**
+ * Permanently remove an agency from the database. Hard-deletes the agencies row
+ * (cascades agency_services / agency_hidden_students / agency_service_requests,
+ * and nulls vehicles.agency_id / routes.agency_id) and deletes the owner's auth
+ * user (which cascades their profile), freeing the email for reuse. Irreversible
+ * — only reachable from the Deleted Service Providers page. Uses the service-role
+ * client so it works regardless of RLS.
+ */
+export async function permanentlyDeleteAgencyAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return;
+  const admin = createAdminClient();
+
+  // Grab the owner first so we can also remove their login after the row is gone.
+  const { data: agency } = await admin
+    .from('agencies')
+    .select('owner_profile_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  const { error } = await admin.from('agencies').delete().eq('id', id);
+  if (error) throw new AppError('ADMIN', error.message);
+
+  const ownerId = (agency as { owner_profile_id: string | null } | null)?.owner_profile_id;
+  if (ownerId) {
+    // Best-effort: the agency is already gone; a missing/failed user delete
+    // shouldn't surface as an error to the admin.
+    await admin.auth.admin.deleteUser(ownerId);
+  }
+
+  await logAction(await createClient(), 'AGENCY_PURGED', 'agency', id);
+  revalidatePath('/aevinite/deleted-providers');
+  revalidatePath('/aevinite/providers');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+/**
+ * Admin edit of a provider's business/verification details — the fields the
+ * agency submitted at signup. Runs as SUPER_ADMIN (RLS allows it), validates
+ * with the same schema the agency's own edit form uses, and logs the change.
+ */
+export async function updateAgencyDetailsAction(_: FormState, formData: FormData): Promise<FormState> {
+  const id = String(formData.get('agencyId') ?? '');
+  if (!id) return { error: 'Missing provider reference.' };
+  const parsed = agencyProfileSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the details.' };
+  }
+  const db = await createClient();
+  const d = parsed.data;
+  try {
+    const { error } = await db
+      .from('agencies')
+      .update({
+        name: d.name,
+        contact_person: d.contactPerson,
+        phone: d.phone,
+        legal_name: d.legalName,
+        registration_no: d.registrationNo,
+        gst_number: d.gstNumber,
+        pan_number: d.panNumber,
+        registered_address: d.registeredAddress,
+        description: d.description || null,
+        permit_doc_url: d.permitDocUrl || null,
+        fitness_doc_url: d.fitnessDocUrl || null,
+      })
+      .eq('id', id);
+    if (error) throw new AppError('ADMIN', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  await logAction(db, 'AGENCY_UPDATED', 'agency', id, { name: d.name });
+  revalidatePath('/aevinite/providers');
+  revalidatePath(`/aevinite/providers/${id}/edit`);
+  return { message: 'Provider details updated.' };
+}
+
+async function reviewerId(db: Awaited<ReturnType<typeof createClient>>): Promise<string | null> {
+  const { data } = await db.auth.getClaims();
+  return (data?.claims as { sub?: string } | null)?.sub ?? null;
+}
+
+/** Approve a service-area request: create the live service, then mark it approved. */
+export async function approveServiceRequestAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('requestId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+
+  // Claim the request ATOMICALLY: flip PENDING→APPROVED in one guarded UPDATE.
+  // Whoever wins gets the row back; a second (double-click / concurrent) call
+  // matches nothing and bails — so we can't run the insert twice and create a
+  // duplicate listing that students would then see twice.
+  const { data: claimed } = await db
+    .from('agency_service_requests')
+    .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: await reviewerId(db) })
+    .eq('id', id)
+    .eq('status', 'PENDING')
+    .select('id, agency_id, institution_id, vehicle_type, name, description')
+    .maybeSingle();
+  if (!claimed) return; // already handled by a concurrent approval
+
+  // Upsert (not insert) so an existing service for the same
+  // agency+institution+vehicle_type is never duplicated (backed by the unique
+  // index in migration 0036). ignoreDuplicates keeps the earliest row/name.
+  const { error: insErr } = await db.from('agency_services').upsert(
+    {
+      agency_id: claimed.agency_id,
+      institution_id: claimed.institution_id,
+      vehicle_type: claimed.vehicle_type,
+      name: claimed.name,
+      description: claimed.description,
+    },
+    { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true },
+  );
+  if (insErr) throw new AppError('ADMIN', insErr.message);
+
+  await logAction(db, 'SERVICE_REQUEST_APPROVED', 'agency_service_request', id, { name: claimed.name });
+  revalidatePath('/aevinite/service-requests');
+  // The newly-live service area shows on the providers page — refresh it (and
+  // the dashboard) so the change doesn't lag behind the approval.
+  revalidatePath('/aevinite/providers');
+  revalidatePath('/aevinite');
+}
+
+export async function rejectServiceRequestAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('requestId') ?? '');
+  if (!id) return;
+  const reason = String(formData.get('reason') ?? '').trim();
+  const db = await createClient();
+  const { data: updated, error } = await db
+    .from('agency_service_requests')
+    .update({
+      status: 'REJECTED',
+      rejected_reason: reason || null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: await reviewerId(db),
+    })
+    .eq('id', id)
+    // Only a still-PENDING request can be rejected — mirrors approve's atomic
+    // claim, so a reject-after-approve race can't flip an APPROVED request back
+    // to REJECTED while leaving the live agency_services row in place.
+    .eq('status', 'PENDING')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new AppError('ADMIN', error.message);
+  // Zero rows matched (already approved/rejected by a concurrent action) → don't
+  // write a misleading audit row or report success; just refresh and bail.
+  if (!updated) {
+    revalidatePath('/aevinite/service-requests');
+    return;
+  }
+  await logAction(db, 'SERVICE_REQUEST_REJECTED', 'agency_service_request', id, reason ? { reason } : {});
+  revalidatePath('/aevinite/service-requests');
+}
+
+async function setStudent(db: Db, profileId: string, patch: Record<string, unknown>) {
+  const { error } = await db.from('profiles').update(patch).eq('id', profileId);
+  if (error) throw new AppError('ADMIN', error.message);
+}
+
+export async function deleteStudentAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('studentId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  await setStudent(db, id, { is_deleted: true, deleted_at: new Date().toISOString() });
+  await logAction(db, 'STUDENT_DELETED', 'profile', id);
+  revalidatePath('/aevinite/students');
+  revalidatePath('/aevinite/deleted-students');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function restoreStudentAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('studentId') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  await setStudent(db, id, { is_deleted: false, deleted_at: null });
+  await logAction(db, 'STUDENT_RESTORED', 'profile', id);
+  revalidatePath('/aevinite/students');
+  revalidatePath('/aevinite/deleted-students');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+/**
+ * Permanently remove a soft-deleted student: deletes the auth user, which
+ * cascades their profile (profiles.id → auth.users on delete cascade) and frees
+ * the email for reuse. Irreversible — only reachable from Deleted Students.
+ * Mirrors permanentlyDeleteAgencyAction (issue 5: student/agency parity).
+ */
+export async function permanentlyDeleteStudentAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('studentId') ?? '');
+  if (!id) return;
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(await createClient(), 'STUDENT_PURGED', 'profile', id);
+  revalidatePath('/aevinite/deleted-students');
+  revalidatePath('/aevinite/students');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function addCollegeAction(_: FormState, formData: FormData): Promise<FormState> {
+  const parsed = collegeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: 'Please complete the college form.' };
+  const db = await createClient();
+  const d = parsed.data;
+  let newId: string | null = null;
+  try {
+    const { data, error } = await db
+      .from('institutions')
+      .insert({
+        name: d.name,
+        slug: slugify(d.name),
+        kind: d.kind,
+        area: d.area || null,
+        city: d.city || null,
+        image_url: d.imageUrl || null,
+        description: d.description || null,
+        is_verified: d.verified,
+      })
+      // Capture the new row's id so the Activity Log "Target" isn't "—".
+      .select('id')
+      .single();
+    if (error) throw new AppError('ADMIN', error.message);
+    newId = (data as { id: string }).id;
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  await logAction(db, 'COLLEGE_ADDED', 'institution', newId, { name: d.name });
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite'); // dashboard "Colleges & schools" count card
+  return { message: 'College added.' };
+}
+
+export async function updateCollegeAction(_: FormState, formData: FormData): Promise<FormState> {
+  const id = String(formData.get('id') ?? '');
+  const parsed = collegeSchema.safeParse(Object.fromEntries(formData));
+  if (!id || !parsed.success) return { error: 'Please complete the college form.' };
+  const db = await createClient();
+  const d = parsed.data;
+  try {
+    const { error } = await db
+      .from('institutions')
+      .update({
+        name: d.name,
+        kind: d.kind,
+        area: d.area || null,
+        city: d.city || null,
+        image_url: d.imageUrl || null,
+        description: d.description || null,
+        is_verified: d.verified,
+      })
+      .eq('id', id);
+    if (error) throw new AppError('ADMIN', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  await logAction(db, 'COLLEGE_UPDATED', 'institution', id, { name: d.name });
+  revalidatePath('/aevinite/colleges');
+  return { message: 'College updated.' };
+}
+
+/**
+ * Soft-delete a college/school (issue 2). Previously this hard-deleted the row —
+ * silently cascading away every route, agency service listing and student
+ * booking tied to that institution, and reporting "success" even when the
+ * delete failed. Now it just flags the row (reversible from Deleted Colleges),
+ * matching how agencies and students behave, and surfaces any DB error.
+ */
+export async function deleteCollegeAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  const { error } = await db
+    .from('institutions')
+    .update({ is_deleted: true, deleted_at: new Date().toISOString(), is_active: false })
+    .eq('id', id);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(db, 'COLLEGE_DELETED', 'institution', id);
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite/deleted-colleges');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+export async function restoreCollegeAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return;
+  const db = await createClient();
+  const { error } = await db
+    .from('institutions')
+    // Delete set is_active=false to hide it from students; restore must flip it
+    // back on, otherwise a "restored" college stays invisible to students.
+    .update({ is_deleted: false, deleted_at: null, is_active: true })
+    .eq('id', id);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(db, 'COLLEGE_RESTORED', 'institution', id);
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite/deleted-colleges');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+/**
+ * Permanently remove a soft-deleted college. This DOES cascade — wiping the
+ * institution's routes, route stops, agency service listings, bookings and
+ * payments (all FK `on delete cascade`). Irreversible; only reachable from the
+ * Deleted Colleges page behind an explicit confirm dialog. Uses the service-role
+ * client so it works regardless of RLS.
+ */
+export async function permanentlyDeleteCollegeAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return;
+  const admin = createAdminClient();
+  const { error } = await admin.from('institutions').delete().eq('id', id);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(await createClient(), 'COLLEGE_PURGED', 'institution', id);
+  revalidatePath('/aevinite/deleted-colleges');
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite'); // dashboard count cards
+}
+
+// Enable/disable a college. A disabled (is_active=false) college is hidden from
+// students so they can't browse or apply to it; the admin still sees it here.
+export async function toggleCollegeAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!id) return;
+  const active = String(formData.get('active') ?? '') === 'true';
+  const db = await createClient();
+  const { error } = await db.from('institutions').update({ is_active: active }).eq('id', id);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(db, active ? 'COLLEGE_ENABLED' : 'COLLEGE_DISABLED', 'institution', id);
+  revalidatePath('/aevinite/colleges');
+}

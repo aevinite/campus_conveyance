@@ -1,6 +1,7 @@
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listInstitutions } from '@/features/catalog/repository';
+import { BookingSteps } from '../booking-steps';
 import { CatalogBrowser } from './catalog-browser';
 
 export default async function SchoolsPage() {
@@ -10,11 +11,15 @@ export default async function SchoolsPage() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Schools &amp; Colleges</h1>
-        <p className="text-muted-foreground">
-          Pick your campus to see the agencies and routes that serve it.
-        </p>
+      <div className="space-y-4">
+        <BookingSteps active={1} />
+        <div>
+          <h1 className="text-2xl font-semibold">Pick your campus</h1>
+          <p className="text-muted-foreground">
+            Choose your school or college — you&apos;ll see every bus and van that
+            goes there next.
+          </p>
+        </div>
       </div>
       <CatalogBrowser institutions={institutions} />
     </section>

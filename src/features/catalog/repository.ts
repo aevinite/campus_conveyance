@@ -9,18 +9,12 @@ export interface Institution {
   kind: Kind;
   description: string | null;
   image_url: string | null;
+  is_verified: boolean;
 }
-export interface AgencyCard {
-  id: string;
-  name: string;
-  description: string | null;
-  routeCount: number;
-}
-
 export async function listInstitutions(db: SupabaseClient): Promise<Institution[]> {
   const { data, error } = await db
     .from('institutions')
-    .select('id, name, kind, description, image_url')
+    .select('id, name, kind, description, image_url, is_verified')
     .eq('is_active', true)
     .order('name');
   if (error) throw error;
@@ -31,91 +25,81 @@ export async function getInstitution(
   db: SupabaseClient,
   id: string,
 ): Promise<Institution | null> {
+  // Only active institutions are visible to students — a disabled one 404s even
+  // via a direct URL, so students can't apply to an unavailable campus.
   const { data } = await db
     .from('institutions')
-    .select('id, name, kind, description, image_url')
+    .select('id, name, kind, description, image_url, is_verified')
     .eq('id', id)
+    .eq('is_active', true)
     .maybeSingle();
   return (data as Institution) ?? null;
 }
 
-/** Distinct agencies offering the given vehicle type at this institution. */
-export async function listAgenciesForInstitution(
-  db: SupabaseClient,
-  institutionId: string,
-  type: VehicleType,
-): Promise<AgencyCard[]> {
-  const { data, error } = await db
-    .from('routes')
-    .select('agency_id, agencies(id, name, description)')
-    .eq('institution_id', institutionId)
-    .eq('vehicle_type', type);
-  if (error) throw error;
-
-  const byId = new Map<string, AgencyCard>();
-  for (const row of data ?? []) {
-    const a = row.agencies as
-      | { id: string; name: string; description: string | null }
-      | { id: string; name: string; description: string | null }[]
-      | null;
-    const agency = Array.isArray(a) ? a[0] : a;
-    if (!agency) continue;
-    const existing = byId.get(agency.id);
-    if (existing) existing.routeCount += 1;
-    else
-      byId.set(agency.id, {
-        id: agency.id,
-        name: agency.name,
-        description: agency.description,
-        routeCount: 1,
-      });
-  }
-  return [...byId.values()].sort((x, y) => x.name.localeCompare(y.name));
-}
-
-export async function getAgency(db: SupabaseClient, id: string) {
-  const { data } = await db
-    .from('agencies')
-    .select('id, name, description, phone, email')
-    .eq('id', id)
-    .maybeSingle();
-  return data as
-    | { id: string; name: string; description: string | null; phone: string | null; email: string | null }
-    | null;
-}
-
-export interface RouteWithSeats {
+/** One bookable ride to a campus — everything the student compares at a glance. */
+export interface CampusRoute {
   id: string;
   name: string;
+  vehicleType: VehicleType;
+  agencyName: string | null;
+  busNumber: string | null;
+  isAc: boolean | null;
+  departureTime: string | null;
+  price_cents: number | null;
   total: number;
   available: number;
 }
 
-/** Routes for one agency + vehicle type at an institution, with seat counts. */
-export async function listAgencyRoutes(
+/**
+ * Every active route serving an institution, across ALL approved agencies and
+ * both vehicle types — the single list the student picks a ride from (replaces
+ * the old type-tab → agency → route drill-down).
+ */
+export async function listInstitutionRoutes(
   db: SupabaseClient,
   institutionId: string,
-  agencyId: string,
-  type: VehicleType,
-): Promise<RouteWithSeats[]> {
+): Promise<CampusRoute[]> {
   const { data, error } = await db
     .from('routes')
     .select(
-      'id, name, route_assignments(seat_allocations(total_seats, reserved_seats))',
+      `id, name, vehicle_type, price_cents, departure_time,
+       agencies(name, status, is_deleted),
+       vehicles(bus_number, is_ac),
+       route_assignments(seat_allocations(total_seats, reserved_seats))`,
     )
     .eq('institution_id', institutionId)
-    .eq('agency_id', agencyId)
-    .eq('vehicle_type', type)
-    .order('name');
+    .eq('is_active', true)
+    .order('departure_time', { ascending: true, nullsFirst: false });
   if (error) throw error;
 
-  return (data ?? []).map((r) => {
-    const assignments = (r.route_assignments ?? []) as {
-      seat_allocations: { total_seats: number; reserved_seats: number }[] | null;
-    }[];
-    const alloc = assignments[0]?.seat_allocations?.[0];
+  type AgencyRef = { name: string; status: string; is_deleted: boolean };
+  type VehicleRef = { bus_number: string | null; is_ac: boolean | null };
+  type AssignRef = {
+    seat_allocations: { total_seats: number; reserved_seats: number }[] | null;
+  };
+  const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+
+  const rows: CampusRoute[] = [];
+  for (const r of data ?? []) {
+    const agency = one(r.agencies as AgencyRef | AgencyRef[] | null);
+    // Routes of suspended/soft-deleted agencies are not bookable.
+    if (agency && (agency.status !== 'APPROVED' || agency.is_deleted)) continue;
+    const vehicle = one(r.vehicles as VehicleRef | VehicleRef[] | null);
+    const alloc = (r.route_assignments as AssignRef[] | null)?.[0]?.seat_allocations?.[0];
     const total = alloc?.total_seats ?? 0;
     const reserved = alloc?.reserved_seats ?? 0;
-    return { id: r.id as string, name: r.name as string, total, available: Math.max(total - reserved, 0) };
-  });
+    rows.push({
+      id: r.id as string,
+      name: r.name as string,
+      vehicleType: (r.vehicle_type as VehicleType) ?? 'BUS',
+      agencyName: agency?.name ?? null,
+      busNumber: vehicle?.bus_number ?? null,
+      isAc: vehicle?.is_ac ?? null,
+      departureTime: (r.departure_time as string) ?? null,
+      price_cents: (r.price_cents as number) ?? null,
+      total,
+      available: Math.max(total - reserved, 0),
+    });
+  }
+  return rows;
 }

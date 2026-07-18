@@ -19,15 +19,14 @@ export async function updateSession(request: NextRequest) {
       },
     },
   );
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  let role: Role | undefined;
-  if (user) {
-    const { data } = await supabase.auth.getClaims();
-    role = roleFromClaims(
-      (data?.claims as { app_metadata?: unknown } | null)?.app_metadata,
-    );
-  }
+  // getClaims() verifies the JWT locally (asymmetric signing keys) and refreshes
+  // the session only when the token is actually expiring, so we avoid the
+  // guaranteed network round-trip that getUser() makes on every request.
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims as { sub?: string; app_metadata?: unknown } | null;
+  const user = claims?.sub ? { id: claims.sub } : null;
+  const role: Role | undefined = user
+    ? roleFromClaims(claims?.app_metadata)
+    : undefined;
   return { response, user, role };
 }

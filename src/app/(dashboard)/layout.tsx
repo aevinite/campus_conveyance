@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionRole } from '@/features/auth/session';
-import { logoutAction } from '@/features/auth/actions';
+import { getSessionClaims } from '@/features/auth/session';
+import { isAccountDeactivated } from '@/features/auth/account-status';
 import { Logo } from '@/components/brand';
-import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { UserMenu } from '@/components/user-menu';
 
 export default async function DashboardLayout({
   children,
@@ -11,27 +12,27 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect('/login');
-  const role = (await getSessionRole(db)) ?? 'STUDENT';
+  const { userId, role: sessionRole, fullName, email } = await getSessionClaims(db);
+  if (!userId) redirect('/login');
+  // Removed (soft-deleted) accounts keep a live session — deny them at the layout
+  // boundary too, not just on individual pages.
+  if (await isAccountDeactivated(db, userId, sessionRole)) {
+    await db.auth.signOut();
+    redirect('/login');
+  }
+  const role = sessionRole ?? 'STUDENT';
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-3 backdrop-blur">
-        <Logo href="/student" />
-        <div className="flex items-center gap-3">
-          <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            {role}
-          </span>
-          <form action={logoutAction}>
-            <Button type="submit" variant="outline" size="sm">
-              Log out
-            </Button>
-          </form>
+    <div className="min-h-screen bg-muted/30">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/70 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+          <Logo href="/student" />
+          <div className="flex items-center gap-2.5">
+            <ThemeToggle />
+            <UserMenu name={fullName ?? ''} email={email ?? ''} role={role} />
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl p-6">{children}</main>
+      <main className="mx-auto max-w-6xl p-6 lg:py-8">{children}</main>
     </div>
   );
 }

@@ -1,117 +1,85 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Bus, Truck, ArrowRight, Building2 } from 'lucide-react';
+import { InstitutionLogo } from '@/components/institution-logo';
+import { VerifiedBadge } from '@/components/verified-badge';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
-import {
-  getInstitution,
-  listAgenciesForInstitution,
-  type VehicleType,
-} from '@/features/catalog/repository';
+import { getInstitution, listInstitutionRoutes } from '@/features/catalog/repository';
+import { expireStaleHolds } from '@/features/booking/repository';
+import { BookingSteps } from '../../booking-steps';
+import { RoutesExplorer } from './routes-explorer';
 
+/**
+ * Step 2 of the booking flow. One flat, comparable list of every ride serving
+ * this campus (all agencies, buses AND vans) — the student picks the ride
+ * directly instead of drilling through type-tab → agency → routes.
+ */
 export default async function SchoolDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ type?: string }>;
 }) {
   await requireRole('STUDENT');
   const { id } = await params;
-  const { type: rawType } = await searchParams;
-  const type: VehicleType = rawType === 'VAN' ? 'VAN' : 'BUS';
 
   const db = await createClient();
-  const inst = await getInstitution(db, id);
+  // Free lapsed unpaid holds so the seat counts on the cards are honest.
+  await expireStaleHolds(db);
+  const [inst, routes] = await Promise.all([
+    getInstitution(db, id),
+    listInstitutionRoutes(db, id),
+  ]);
   if (!inst) notFound();
-  const agencies = await listAgenciesForInstitution(db, id, type);
-
-  const tabs: { key: VehicleType; label: string; icon: typeof Bus }[] = [
-    { key: 'BUS', label: 'Bus', icon: Bus },
-    { key: 'VAN', label: 'Van', icon: Truck },
-  ];
 
   return (
-    <section className="space-y-8">
-      <div>
-        <Link href="/student/schools" className="text-sm text-muted-foreground underline">
+    <section className="space-y-6">
+      <div className="space-y-4">
+        <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
           ← All campuses
         </Link>
-        <div className="mt-4 overflow-hidden rounded-3xl border border-border">
+        <BookingSteps active={2} />
+        <div className="overflow-hidden rounded-3xl border border-border bg-card">
           <div
-            className="flex h-40 items-center justify-center"
+            className="relative h-24 sm:h-28"
             style={{
               background:
-                'linear-gradient(135deg, oklch(0.83 0.17 85 / 0.3), oklch(0.3 0.04 80 / 0.5))',
+                'linear-gradient(135deg, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--chart-5) 28%, transparent))',
             }}
           >
-            <Building2 className="size-14 text-primary" />
+            <div aria-hidden className="absolute inset-0 opacity-60 bg-grid" />
           </div>
-          <div className="space-y-1 p-6">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              {inst.kind === 'COLLEGE' ? 'College' : 'School'}
-            </span>
-            <h1 className="text-2xl font-semibold">{inst.name}</h1>
-            <p className="max-w-2xl text-muted-foreground">{inst.description}</p>
+          <div className="px-6 pb-6">
+            <div className="-mt-12 flex items-end gap-4">
+              <InstitutionLogo
+                name={inst.name}
+                kind={inst.kind}
+                imageUrl={inst.image_url}
+                className="size-24 ring-2 ring-background"
+                iconClassName="size-10"
+              />
+              <span className="mb-1 inline-flex items-center rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {inst.kind === 'COLLEGE' ? 'College' : 'School'}
+              </span>
+            </div>
+            <h1 className="mt-4 flex items-center gap-2 text-2xl font-semibold">
+              {inst.name}
+              <VerifiedBadge verified={inst.is_verified} className="text-[1.25rem]" />
+            </h1>
+            <p className="mt-1.5 max-w-2xl leading-relaxed text-muted-foreground">
+              {inst.description}
+            </p>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Choose your transport</h2>
-          <div className="flex rounded-lg border border-border p-0.5">
-            {tabs.map((t) => (
-              <Link
-                key={t.key}
-                href={`/student/schools/${id}?type=${t.key}`}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
-                  type === t.key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <t.icon className="size-4" />
-                {t.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {agencies.length === 0 ? (
-          <p className="text-muted-foreground">
-            No {type === 'BUS' ? 'bus' : 'van'} agencies serve this campus yet.
-          </p>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2">
-            {agencies.map((a) => (
-              <Link
-                key={a.id}
-                href={`/student/schools/${id}/agencies/${a.id}?type=${type}`}
-                className="group flex flex-col gap-2 rounded-2xl border border-border bg-card/60 p-6 transition-all hover:-translate-y-1 hover:bg-card"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="grid size-11 place-items-center rounded-xl bg-primary text-primary-foreground">
-                    {type === 'BUS' ? <Bus className="size-6" /> : <Truck className="size-6" />}
-                  </span>
-                  <div>
-                    <h3 className="font-semibold">{a.name}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {a.routeCount} {type === 'BUS' ? 'bus' : 'van'} route
-                      {a.routeCount === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                </div>
-                <p className="line-clamp-2 text-sm text-muted-foreground">{a.description}</p>
-                <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-medium text-primary">
-                  View routes
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold">Pick your bus</h2>
+        <p className="text-sm text-muted-foreground">
+          Every ride to {inst.name} — compare fares, timings and live seats, then
+          tap one to reserve.
+        </p>
       </div>
+      <RoutesExplorer routes={routes} />
     </section>
   );
 }

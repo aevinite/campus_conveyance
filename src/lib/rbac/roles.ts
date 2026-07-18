@@ -4,15 +4,17 @@ export const ROLES = [
   'STUDENT',
   'PARENT',
   'DRIVER',
+  'AGENCY',
 ] as const;
 export type Role = (typeof ROLES)[number];
 
 export const DASHBOARD_BY_ROLE: Record<Role, string> = {
-  SUPER_ADMIN: '/super-admin',
+  SUPER_ADMIN: '/aevinite',
   INSTITUTION_ADMIN: '/institution',
   STUDENT: '/student',
   PARENT: '/parent',
   DRIVER: '/driver',
+  AGENCY: '/agency',
 };
 
 export function dashboardFor(role: Role | undefined): string {
