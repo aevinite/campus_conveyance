@@ -16,7 +16,7 @@ import {
 // the role guard. `bookings` is only meaningful for riders.
 const MENU: Record<string, { profile: string; settings: string; bookings?: string }> = {
   STUDENT: { profile: '/student/profile', settings: '/student/profile', bookings: '/student/bookings' },
-  PARENT: { profile: '/parent', settings: '/parent' },
+  PARENT: { profile: '/parent/profile', settings: '/parent/profile' },
   AGENCY: { profile: '/agency/account', settings: '/agency/settings' },
   DRIVER: { profile: '/driver/profile', settings: '/driver/profile' },
   INSTITUTION_ADMIN: { profile: '/institution', settings: '/institution' },

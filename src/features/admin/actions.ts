@@ -1,5 +1,6 @@
 'use server';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toErrorResponse, AppError } from '@/lib/errors/app-error';
@@ -22,11 +23,17 @@ async function logAction(
   entity: string,
   entityId: string | null,
   metadata: Record<string, unknown> = {},
+  actorId?: string | null,
 ): Promise<void> {
   try {
-    const { data } = await db.auth.getClaims();
-    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
-    await db.from('audit_logs').insert({ actor_id: actorId, action, entity, entity_id: entityId, metadata });
+    // Reuse an already-resolved actor id when the caller has one (approve reads
+    // claims for approved_by), so we don't decode the JWT a second time.
+    let uid = actorId;
+    if (uid === undefined) {
+      const { data } = await db.auth.getClaims();
+      uid = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    }
+    await db.from('audit_logs').insert({ actor_id: uid, action, entity, entity_id: entityId, metadata });
   } catch {
     /* swallow — logging is non-critical */
   }
@@ -49,10 +56,10 @@ export async function approveAgencyAction(formData: FormData): Promise<void> {
     approved_by: userId,
     rejected_reason: null,
   });
-  await logAction(db, 'AGENCY_APPROVED', 'agency', id);
+  await logAction(db, 'AGENCY_APPROVED', 'agency', id, {}, userId);
   revalidatePath('/aevinite/requests');
   revalidatePath('/aevinite/providers');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function rejectAgencyAction(formData: FormData): Promise<void> {
@@ -63,7 +70,7 @@ export async function rejectAgencyAction(formData: FormData): Promise<void> {
   await setAgency(db, id, { status: 'REJECTED', rejected_reason: reason || null });
   await logAction(db, 'AGENCY_REJECTED', 'agency', id, reason ? { reason } : {});
   revalidatePath('/aevinite/requests');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function deleteAgencyAction(formData: FormData): Promise<void> {
@@ -75,7 +82,7 @@ export async function deleteAgencyAction(formData: FormData): Promise<void> {
   revalidatePath('/aevinite/providers');
   revalidatePath('/aevinite/deleted-providers');
   revalidatePath('/aevinite/requests'); // rejected providers are listed here too
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function restoreAgencyAction(formData: FormData): Promise<void> {
@@ -86,7 +93,7 @@ export async function restoreAgencyAction(formData: FormData): Promise<void> {
   await logAction(db, 'AGENCY_RESTORED', 'agency', id);
   revalidatePath('/aevinite/providers');
   revalidatePath('/aevinite/deleted-providers');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 /**
@@ -122,7 +129,7 @@ export async function permanentlyDeleteAgencyAction(formData: FormData): Promise
   await logAction(await createClient(), 'AGENCY_PURGED', 'agency', id);
   revalidatePath('/aevinite/deleted-providers');
   revalidatePath('/aevinite/providers');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 /**
@@ -210,7 +217,7 @@ export async function approveServiceRequestAction(formData: FormData): Promise<v
   // The newly-live service area shows on the providers page — refresh it (and
   // the dashboard) so the change doesn't lag behind the approval.
   revalidatePath('/aevinite/providers');
-  revalidatePath('/aevinite');
+  revalidatePath('/aevinite'); updateTag('admin-report'); // report tag (future-proof if it aggregates service areas)
 }
 
 export async function rejectServiceRequestAction(formData: FormData): Promise<void> {
@@ -242,6 +249,7 @@ export async function rejectServiceRequestAction(formData: FormData): Promise<vo
   }
   await logAction(db, 'SERVICE_REQUEST_REJECTED', 'agency_service_request', id, reason ? { reason } : {});
   revalidatePath('/aevinite/service-requests');
+  updateTag('admin-report'); // report tag (future-proof)
 }
 
 async function setStudent(db: Db, profileId: string, patch: Record<string, unknown>) {
@@ -257,7 +265,7 @@ export async function deleteStudentAction(formData: FormData): Promise<void> {
   await logAction(db, 'STUDENT_DELETED', 'profile', id);
   revalidatePath('/aevinite/students');
   revalidatePath('/aevinite/deleted-students');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function restoreStudentAction(formData: FormData): Promise<void> {
@@ -268,7 +276,7 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
   await logAction(db, 'STUDENT_RESTORED', 'profile', id);
   revalidatePath('/aevinite/students');
   revalidatePath('/aevinite/deleted-students');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 /**
@@ -286,7 +294,7 @@ export async function permanentlyDeleteStudentAction(formData: FormData): Promis
   await logAction(await createClient(), 'STUDENT_PURGED', 'profile', id);
   revalidatePath('/aevinite/deleted-students');
   revalidatePath('/aevinite/students');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function addCollegeAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -318,8 +326,10 @@ export async function addCollegeAction(_: FormState, formData: FormData): Promis
   }
   await logAction(db, 'COLLEGE_ADDED', 'institution', newId, { name: d.name });
   revalidatePath('/aevinite/colleges');
-  revalidatePath('/aevinite'); // dashboard "Colleges & schools" count card
-  return { message: 'College added.' };
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report
+  // Redirect to the list on success instead of leaving the filled form up —
+  // otherwise a second submit (or a back-forward) creates a near-duplicate college.
+  redirect('/aevinite/colleges');
 }
 
 export async function updateCollegeAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -369,7 +379,7 @@ export async function deleteCollegeAction(formData: FormData): Promise<void> {
   await logAction(db, 'COLLEGE_DELETED', 'institution', id);
   revalidatePath('/aevinite/colleges');
   revalidatePath('/aevinite/deleted-colleges');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 export async function restoreCollegeAction(formData: FormData): Promise<void> {
@@ -386,7 +396,7 @@ export async function restoreCollegeAction(formData: FormData): Promise<void> {
   await logAction(db, 'COLLEGE_RESTORED', 'institution', id);
   revalidatePath('/aevinite/colleges');
   revalidatePath('/aevinite/deleted-colleges');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 /**
@@ -405,7 +415,7 @@ export async function permanentlyDeleteCollegeAction(formData: FormData): Promis
   await logAction(await createClient(), 'COLLEGE_PURGED', 'institution', id);
   revalidatePath('/aevinite/deleted-colleges');
   revalidatePath('/aevinite/colleges');
-  revalidatePath('/aevinite'); // dashboard count cards
+  revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
 }
 
 // Enable/disable a college. A disabled (is_active=false) college is hidden from

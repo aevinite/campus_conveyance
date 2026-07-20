@@ -1,26 +1,34 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getMyAgency, listMyBookings, listMyStudents } from '@/features/agency/repository';
-import { expireStaleHolds } from '@/features/booking/repository';
+import { getMyAgency, listOnboardBookings, countOnboardBookings } from '@/features/agency/repository';
 import { hideStudentAction } from '@/features/agency/actions';
 import { SubmitButton } from '@/components/submit-button';
 import { BookingCard } from '../booking-card';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AgencyStudentsPage() {
+const PAGE_SIZE = 20;
+
+export default async function AgencyStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
-  await expireStaleHolds(db); // sweep lapsed holds so counts/roster are honest
   const agency = await getMyAgency(db);
-  const [bookings, students] = agency
-    ? await Promise.all([listMyBookings(db, agency.id), listMyStudents(db, agency.id)])
-    : [[], []];
-
-  // Only students you have accepted onto a bus (CONFIRMED). A student's details
-  // are NOT shown here until you confirm the booking — pending requests live in
-  // Manage Booking, where you review the details and accept/reject. Hidden
-  // (deleted) students are excluded and shown under Deleted Students.
-  const hidden = new Set(students.filter((s) => s.hidden).map((s) => s.student_id));
-  const onboard = bookings.filter(
-    (b) => b.status === 'CONFIRMED' && b.student_id && !hidden.has(b.student_id),
-  );
+  // CONFIRMED + not-hidden, paginated and counted in the DB (migration 0059) so
+  // the list, the page fill, and the pager total all agree — hidden (removed)
+  // students, shown under Deleted Students, never consume limit/offset slots or
+  // pad "Page X of Y".
+  const [onboard, total] = agency
+    ? await Promise.all([
+        listOnboardBookings(db, agency.id, { limit: PAGE_SIZE, offset }),
+        countOnboardBookings(db, agency.id),
+      ])
+    : [[], 0];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/agency/students?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -61,6 +69,7 @@ export default async function AgencyStudentsPage() {
               }
             />
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/agency/students" />
         </div>
       )}
     </section>

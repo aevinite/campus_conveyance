@@ -143,9 +143,22 @@ export function BusForm({ drivers = [] }: { drivers?: { id: string; name: string
           <Field name="driverName" label="Driver name" required />
           <Field name="driverPhone" label="Driver phone number" type="tel" required placeholder="e.g. +91 90000 00000" />
           <Field name="driverLicenseNo" label="Driving licence number" required placeholder="e.g. GJ0120210001234" />
+          <Field name="driverGovtId" label="Aadhaar / ID card number (optional)" placeholder="e.g. XXXX XXXX 1234" />
+          <Field name="driverAltPhone" label="Alternate / emergency contact (optional)" type="tel" placeholder="e.g. +91 90000 00000" />
           <Field name="driverExperienceYears" label="Experience (years, optional)" type="number" min={0} placeholder="e.g. 8" />
+          <Field name="driverDob" label="Date of birth (optional)" type="date" />
+          <Field name="driverBloodGroup" label="Blood group (optional)" placeholder="e.g. O+" />
           <Field name="driverEmail" label="Driver email (optional)" type="email" placeholder="driver@example.com" />
+          <Field name="driverAddress" label="Residential address (optional)" placeholder="House, street, city" />
         </div>
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-input px-3 py-2.5 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input type="checkbox" name="driverVerified" className="size-4 accent-primary" />
+          <span>Background / police verification completed for this driver</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          These details are shown to students and parents (the ID number is masked) so they know exactly
+          who is driving — it helps them feel safe.
+        </p>
         <div className="space-y-1.5">
           <Label htmlFor="driverPhoto">Driver photo (optional)</Label>
           <input ref={driverPhotoRef} id="driverPhoto" name="driverPhoto" type="file" accept="image/*" className={fileCls} />
@@ -168,6 +181,27 @@ export function BusForm({ drivers = [] }: { drivers?: { id: string; name: string
             </p>
           </div>
         )}
+      </div>
+
+      {/* Conductor details */}
+      <div className="space-y-4 border-t border-border pt-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Conductor details (optional)</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field name="conductorName" label="Conductor name" />
+          <Field name="conductorPhone" label="Conductor phone number" type="tel" placeholder="e.g. +91 90000 00000" />
+          <Field name="conductorGovtId" label="Aadhaar / ID card number" placeholder="e.g. XXXX XXXX 1234" />
+          <Field name="conductorAltPhone" label="Alternate / emergency contact" type="tel" />
+          <Field name="conductorDob" label="Date of birth" type="date" />
+          <Field name="conductorBloodGroup" label="Blood group" placeholder="e.g. O+" />
+          <Field name="conductorAddress" label="Residential address" placeholder="House, street, city" />
+        </div>
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-input px-3 py-2.5 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input type="checkbox" name="conductorVerified" className="size-4 accent-primary" />
+          <span>Background / police verification completed for this conductor</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          A bus has one driver and one conductor. These details are shown to students and parents too.
+        </p>
       </div>
 
       <FormStatus error={state.error} message={state.message} />

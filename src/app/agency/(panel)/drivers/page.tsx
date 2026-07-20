@@ -1,13 +1,32 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getMyAgency, listMyDrivers } from '@/features/agency/repository';
+import { getMyAgency, listMyDriversPage, countMyDrivers } from '@/features/agency/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Pager, pageParams } from '@/components/pager';
 import { DriverForm } from './driver-form';
 import { EditableDriverCard } from './editable-driver-card';
 
-export default async function AgencyDriversPage() {
+const PAGE_SIZE = 10;
+
+export default async function AgencyDriversPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
   const agency = await getMyAgency(db);
-  const drivers = agency ? await listMyDrivers(db, agency.id) : [];
+  // Paginated + is_deleted-filtered in the DB (migration 0064) — no longer
+  // loads the whole roster and filters in JS.
+  const [drivers, total] = agency
+    ? await Promise.all([
+        listMyDriversPage(db, agency.id, { deleted: false, limit: PAGE_SIZE, offset }),
+        countMyDrivers(db, agency.id, false),
+      ])
+    : [[], 0];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/agency/drivers?page=${totalPages}`);
 
   return (
     <section className="space-y-6">
@@ -40,6 +59,7 @@ export default async function AgencyDriversPage() {
               {drivers.map((d) => (
                 <EditableDriverCard key={d.driver_id} driver={d} />
               ))}
+              <Pager page={page} totalPages={totalPages} basePath="/agency/drivers" />
             </div>
           )}
         </div>

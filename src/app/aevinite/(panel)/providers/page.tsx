@@ -1,17 +1,27 @@
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { listAgenciesDetailed, type AgencyDetail } from '@/features/admin/repository';
+import { listAgenciesDetailed, ADMIN_PAGE_SIZE, type AgencyDetail } from '@/features/admin/repository';
 import { deleteAgencyAction } from '@/features/admin/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
+import { Pager, pageParams } from '@/components/pager';
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '—';
 
-export default async function AdminProvidersPage() {
+export default async function AdminProvidersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const agencies = await listAgenciesDetailed(db);
+  const { rows: agencies, total } = await listAgenciesDetailed(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/providers?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -31,6 +41,7 @@ export default async function AdminProvidersPage() {
           ))}
         </div>
       )}
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/providers" />
     </section>
   );
 }

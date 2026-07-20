@@ -1,6 +1,8 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listAuditLogs } from '@/features/admin/repository';
+import { listAuditLogs, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { DataTable } from '@/components/data-table';
+import { Pager, pageParams } from '@/components/pager';
 import { cn } from '@/lib/utils';
 
 // Human-readable label + tone for each logged action code.
@@ -34,9 +36,17 @@ const TONE: Record<'good' | 'bad' | 'warn' | 'muted', string> = {
   muted: 'bg-muted text-muted-foreground',
 };
 
-export default async function AdminAuditPage() {
+export default async function AdminAuditPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const logs = await listAuditLogs(db);
+  const { rows: logs, total } = await listAuditLogs(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/audit?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -50,10 +60,14 @@ export default async function AdminAuditPage() {
         headers={['Action', 'Target', 'Details', 'By', 'When']}
         rows={logs.map((l) => {
           const meta = ACTIONS[l.action] ?? { label: l.action, tone: 'muted' as const };
-          const detail =
+          // Target = the affected entity's NAME (colleges/providers/service
+          // requests log one), falling back to a short id, then the entity type.
+          const target =
             (l.metadata.name as string) ||
-            (l.metadata.reason ? `Reason: ${l.metadata.reason as string}` : '') ||
-            (l.entity_id ? l.entity_id.slice(0, 8) : '—');
+            (l.entity_id ? l.entity_id.slice(0, 8) : '') ||
+            (l.entity ?? '—');
+          // Details carries the reason (if any), else the entity type for context.
+          const detail = l.metadata.reason ? `Reason: ${l.metadata.reason as string}` : (l.entity ?? '—');
           return [
             <span
               key="a"
@@ -61,7 +75,7 @@ export default async function AdminAuditPage() {
             >
               {meta.label}
             </span>,
-            l.entity ?? '—',
+            target,
             <span key="d" className="text-muted-foreground">
               {detail}
             </span>,
@@ -71,6 +85,7 @@ export default async function AdminAuditPage() {
         })}
         empty="No admin activity recorded yet."
       />
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/audit" />
     </section>
   );
 }

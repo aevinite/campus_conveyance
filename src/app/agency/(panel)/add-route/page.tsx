@@ -6,9 +6,13 @@ import { RouteForm } from './route-form';
 export default async function AddRoutePage() {
   const db = await createClient();
   const agency = await getMyAgency(db);
-  const [services, buses] = await Promise.all([
+  // All three reads only depend on agency.id — fetch them together, not in series.
+  const [services, buses, usedRes] = await Promise.all([
     agency ? listMyServices(db, agency.id) : Promise.resolve([]),
     agency ? listMyBuses(db, agency.id) : Promise.resolve([]),
+    agency
+      ? db.from('routes').select('vehicle_id').eq('agency_id', agency.id).not('vehicle_id', 'is', null)
+      : Promise.resolve({ data: [] as { vehicle_id: string | null }[] }),
   ]);
 
   // The colleges the agency serves (deduped) — the route's end location.
@@ -18,13 +22,8 @@ export default async function AddRoutePage() {
 
   // A bus can only be on one route — hide buses already assigned to a route.
   const usedVehicleIds = new Set<string>();
-  if (agency) {
-    const { data: used } = await db
-      .from('routes')
-      .select('vehicle_id')
-      .eq('agency_id', agency.id)
-      .not('vehicle_id', 'is', null);
-    for (const r of used ?? []) if (r.vehicle_id) usedVehicleIds.add(r.vehicle_id as string);
+  for (const r of (usedRes.data ?? []) as { vehicle_id: string | null }[]) {
+    if (r.vehicle_id) usedVehicleIds.add(r.vehicle_id);
   }
   const availableBuses = buses.filter((b) => !usedVehicleIds.has(b.id));
 

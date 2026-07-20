@@ -1,41 +1,79 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Search, ArrowRight } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { Search, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
-import type { Institution, Kind } from '@/features/catalog/repository';
+import type { Institution, KindFilter } from '@/features/catalog/repository';
 
-type Filter = 'ALL' | Kind;
-
-const TABS: { key: Filter; label: string }[] = [
+const TABS: { key: KindFilter; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'SCHOOL', label: 'Schools' },
   { key: 'COLLEGE', label: 'Colleges' },
 ];
 
-export function CatalogBrowser({ institutions }: { institutions: Institution[] }) {
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('ALL');
-  const [asc, setAsc] = useState(true);
+// Server-paginated catalog. Search / kind / sort / page all live in the URL, so
+// the server returns just the matching page — no client-side filtering of a
+// full-catalog payload. This component only drives navigation + renders a page.
+export function CatalogBrowser({
+  institutions,
+  query,
+  kind,
+  sort,
+  page,
+  totalPages,
+}: {
+  institutions: Institution[];
+  query: string;
+  kind: KindFilter;
+  sort: 'asc' | 'desc';
+  page: number;
+  totalPages: number;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [text, setText] = useState(query);
+  const [isPending, startTransition] = useTransition();
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return institutions
-      .filter((i) => filter === 'ALL' || i.kind === filter)
-      .filter((i) => !q || i.name.toLowerCase().includes(q))
-      .sort((a, b) => (asc ? 1 : -1) * a.name.localeCompare(b.name));
-  }, [institutions, query, filter, asc]);
+  // Build a URL from the current filters + overrides. Any filter change resets
+  // to page 1 unless a page is explicitly passed.
+  const urlFor = (next: Partial<{ q: string; kind: KindFilter; sort: 'asc' | 'desc'; page: number }>) => {
+    const q = next.q ?? query;
+    const k = next.kind ?? kind;
+    const s = next.sort ?? sort;
+    const p = next.page ?? 1;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (k !== 'ALL') params.set('kind', k);
+    if (s !== 'asc') params.set('sort', s);
+    if (p > 1) params.set('page', String(p));
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  };
+  const go = (next: Parameters<typeof urlFor>[0]) =>
+    startTransition(() => router.replace(urlFor(next)));
+
+  // Keep the box in sync if the server query changes (e.g. back/forward).
+  useEffect(() => setText(query), [query]);
+
+  // Debounce typing → URL (server refetches the matching page).
+  useEffect(() => {
+    if (text.trim() === query) return;
+    const t = setTimeout(() => go({ q: text.trim(), page: 1 }), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 transition-opacity ${isPending ? 'opacity-60' : ''}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
             placeholder="Search schools & colleges…"
             className="pl-9"
           />
@@ -45,9 +83,9 @@ export function CatalogBrowser({ institutions }: { institutions: Institution[] }
             {TABS.map((t) => (
               <button
                 key={t.key}
-                onClick={() => setFilter(t.key)}
+                onClick={() => go({ kind: t.key, page: 1 })}
                 className={`rounded-md px-3 py-1 text-sm transition-colors ${
-                  filter === t.key
+                  kind === t.key
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
@@ -57,20 +95,20 @@ export function CatalogBrowser({ institutions }: { institutions: Institution[] }
             ))}
           </div>
           <button
-            onClick={() => setAsc((v) => !v)}
+            onClick={() => go({ sort: sort === 'asc' ? 'desc' : 'asc', page: 1 })}
             className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
             title="Toggle sort order"
           >
-            {asc ? 'A→Z' : 'Z→A'}
+            {sort === 'asc' ? 'A→Z' : 'Z→A'}
           </button>
         </div>
       </div>
 
-      {shown.length === 0 ? (
+      {institutions.length === 0 ? (
         <p className="text-muted-foreground">No campuses match your search.</p>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {shown.map((i) => (
+          {institutions.map((i) => (
             <Link
               key={i.id}
               href={`/student/schools/${i.id}`}
@@ -110,6 +148,34 @@ export function CatalogBrowser({ institutions }: { institutions: Institution[] }
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          {page > 1 ? (
+            <Link
+              href={urlFor({ page: page - 1 })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              <ArrowLeft className="size-4" /> Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={urlFor({ page: page + 1 })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Next <ArrowRight className="size-4" />
+            </Link>
+          ) : (
+            <span />
+          )}
         </div>
       )}
     </div>

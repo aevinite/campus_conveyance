@@ -49,7 +49,7 @@ export default function AdminLoginPage() {
             {pending ? 'Signing in…' : 'Login'}
           </Button>
           <p className="text-center text-sm">
-            <Link href="/forgot" className="font-medium text-primary transition-colors hover:text-primary/70">
+            <Link href="/forgot?back=/aevinite/login" className="font-medium text-primary transition-colors hover:text-primary/70">
               Forgot password?
             </Link>
           </p>

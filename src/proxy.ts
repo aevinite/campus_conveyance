@@ -16,7 +16,7 @@ const PUBLIC = [
   '/api/public-stats',
   // Public portals for the other actors. These exact prefixes do NOT match
   // the protected '/agency' and '/aevinite' dashboards (guarded by their layouts).
-  '/agency/login', '/agency/register', '/aevinite/login', '/driver/login',
+  '/agency/login', '/agency/register', '/agency/forgot', '/aevinite/login', '/driver/login',
 ];
 
 export async function proxy(request: NextRequest) {

@@ -3,23 +3,25 @@ import { createClient } from '@/lib/supabase/server';
 import {
   getDriverProfile,
   listDriverBuses,
-  listDriverBookings,
+  countDriverBookings,
 } from '@/features/driver/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default async function DriverDashboard() {
   const db = await createClient();
-  const [me, buses, bookings] = await Promise.all([
+  const [me, buses, riders] = await Promise.all([
     getDriverProfile(db),
     listDriverBuses(db),
-    listDriverBookings(db),
+    countDriverBookings(db),
   ]);
-  const confirmed = bookings.filter((b) => b.status === 'CONFIRMED').length;
+  // driver_buses is one row PER ROUTE, so a bus on two routes appears twice —
+  // count DISTINCT vehicles for "Buses assigned".
+  const busCount = new Set(buses.map((b) => b.vehicle_id)).size;
 
   const cards = [
-    { label: 'Buses assigned', value: buses.length, href: '/driver/buses' },
-    { label: 'Riders (confirmed)', value: confirmed, href: '/driver/riders' },
-    { label: 'Total riders', value: bookings.length, href: '/driver/riders' },
+    { label: 'Buses assigned', value: busCount, href: '/driver/buses' },
+    { label: 'Riders (confirmed)', value: riders.confirmed, href: '/driver/riders' },
+    { label: 'Total riders', value: riders.total, href: '/driver/riders' },
   ];
 
   return (
@@ -57,7 +59,7 @@ export default async function DriverDashboard() {
             <ul className="space-y-2 text-sm">
               {buses.map((b) => (
                 <li
-                  key={b.vehicle_id}
+                  key={`${b.vehicle_id}:${b.route_id ?? 'none'}`}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/40 p-3"
                 >
                   <span className="font-medium">

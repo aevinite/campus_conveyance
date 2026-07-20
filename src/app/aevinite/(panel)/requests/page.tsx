@@ -1,9 +1,18 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listAgencyRequests, listRejectedAgencies } from '@/features/admin/repository';
+import {
+  listAgencyRequests,
+  countPendingAgencies,
+  listRejectedAgencies,
+  countRejectedAgencies,
+} from '@/features/admin/repository';
 import { approveAgencyAction, rejectAgencyAction, deleteAgencyAction } from '@/features/admin/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
+import { Pager, pageParams } from '@/components/pager';
+
+const PAGE_SIZE = 10;
 
 function Detail({ label, value }: { label: string; value: string | null }) {
   return (
@@ -14,12 +23,41 @@ function Detail({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-export default async function AdminRequestsPage() {
+export default async function AdminRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; rej?: string }>;
+}) {
+  const sp = await searchParams;
+  // Two independent lists on one page: pending (?page=) and rejected (?rej=).
+  const { page, offset } = pageParams(sp.page, PAGE_SIZE);
+  const { page: rejPage, offset: rejOffset } = pageParams(sp.rej, PAGE_SIZE);
   const db = await createClient();
-  const [requests, rejected] = await Promise.all([
-    listAgencyRequests(db),
-    listRejectedAgencies(db),
+  const [requests, pendingTotal, rejected, rejectedTotal] = await Promise.all([
+    listAgencyRequests(db, { limit: PAGE_SIZE, offset }),
+    countPendingAgencies(db),
+    listRejectedAgencies(db, { limit: PAGE_SIZE, offset: rejOffset }),
+    countRejectedAgencies(db),
   ]);
+  const pendingPages = Math.max(1, Math.ceil(pendingTotal / PAGE_SIZE));
+  const rejectedPages = Math.max(1, Math.ceil(rejectedTotal / PAGE_SIZE));
+  // Out-of-range redirect (e.g. after approving the last item on page 2, or a
+  // hand-typed ?page=999) — preserve the OTHER list's page. Mirrors the sibling
+  // paginated pages.
+  const clampUrl = (p: string, rj: string) => {
+    const sp2 = new URLSearchParams();
+    if (p !== '1') sp2.set('page', p);
+    if (rj !== '1') sp2.set('rej', rj);
+    const qs = sp2.toString();
+    return qs ? `/aevinite/requests?${qs}` : '/aevinite/requests';
+  };
+  if (pendingTotal > 0 && page > pendingPages) {
+    redirect(clampUrl(String(pendingPages), String(rejPage)));
+  }
+  if (rejectedTotal > 0 && rejPage > rejectedPages) {
+    redirect(clampUrl(String(page), String(rejectedPages)));
+  }
+  const carry = { page: sp.page, rej: sp.rej };
 
   return (
     <section className="space-y-4">
@@ -86,10 +124,11 @@ export default async function AdminRequestsPage() {
               </CardContent>
             </Card>
           ))}
+          <Pager page={page} totalPages={pendingPages} basePath="/aevinite/requests" param="page" params={carry} />
         </div>
       )}
 
-      {rejected.length > 0 && (
+      {rejectedTotal > 0 && (
         <div className="space-y-3 pt-4">
           <h2 className="text-lg font-semibold text-muted-foreground">Rejected applications</h2>
           {rejected.map((r) => (
@@ -119,6 +158,7 @@ export default async function AdminRequestsPage() {
               </CardContent>
             </Card>
           ))}
+          <Pager page={rejPage} totalPages={rejectedPages} basePath="/aevinite/requests" param="rej" params={carry} />
         </div>
       )}
     </section>

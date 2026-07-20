@@ -1,18 +1,38 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { getMyAgency, listMyBusesFull, listMyDrivers } from '@/features/agency/repository';
+import { getMyAgency, listMyBusesFull, countMyBusesFull, listUnassignedDrivers } from '@/features/agency/repository';
 import { buttonVariants } from '@/components/ui/button';
+import { Pager, pageParams } from '@/components/pager';
 import { EditableBusCard } from './editable-bus-card';
 
-export default async function AgencyBusesPage() {
+const PAGE_SIZE = 10;
+
+export default async function AgencyBusesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
   const agency = await getMyAgency(db);
-  const [buses, driverRows] = await Promise.all([
-    agency ? listMyBusesFull(db, agency.id) : Promise.resolve([]),
-    agency ? listMyDrivers(db, agency.id) : Promise.resolve([]),
+  const [buses, total, unassigned] = await Promise.all([
+    agency ? listMyBusesFull(db, agency.id, { limit: PAGE_SIZE, offset }) : Promise.resolve([]),
+    agency ? countMyBusesFull(db, agency.id) : Promise.resolve(0),
+    agency ? listUnassignedDrivers(db, agency.id) : Promise.resolve([]),
   ]);
-  const drivers = driverRows.map((d) => ({ id: d.driver_id, name: d.name ?? d.email ?? 'Driver' }));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/agency/buses?page=${totalPages}`);
+  // Substitute pool: active registered drivers not permanently assigned to a bus.
+  // (Each card reconstructs its own current-driver option from the bus row, so we
+  // don't hand every card the whole agency roster.)
+  const substituteDrivers = unassigned.map((d) => ({
+    id: d.driver_id,
+    name: d.name,
+    phone: d.phone,
+  }));
 
   return (
     <section className="space-y-5">
@@ -36,8 +56,9 @@ export default async function AgencyBusesPage() {
       ) : (
         <div className="space-y-4">
           {buses.map((b) => (
-            <EditableBusCard key={b.id} bus={b} drivers={drivers} />
+            <EditableBusCard key={b.id} bus={b} substituteDrivers={substituteDrivers} />
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/agency/buses" />
         </div>
       )}
     </section>

@@ -1,13 +1,25 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listDeletedStudents } from '@/features/admin/repository';
+import { listDeletedStudents, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { restoreStudentAction, permanentlyDeleteStudentAction } from '@/features/admin/actions';
 import { DataTable } from '@/components/data-table';
 import { SubmitButton } from '@/components/submit-button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AdminDeletedStudentsPage() {
+export default async function AdminDeletedStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const students = await listDeletedStudents(db);
+  const { rows: students, total } = await listDeletedStudents(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  // Don't strand the admin on an out-of-range page (e.g. after restoring the last
+  // item on the final page).
+  if (total > 0 && page > totalPages) redirect(`/aevinite/deleted-students?page=${totalPages}`);
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Deleted Students</h1>
@@ -37,6 +49,7 @@ export default async function AdminDeletedStudentsPage() {
         ])}
         empty="No deleted students."
       />
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/deleted-students" />
     </section>
   );
 }

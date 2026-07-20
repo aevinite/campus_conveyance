@@ -147,6 +147,104 @@ export async function sendContactInquiryEmail(inquiry: {
   });
 }
 
+export interface BookingEmailDetails {
+  studentName: string | null;
+  institutionName: string | null;
+  routeName: string | null;
+  busNumber: string | null;
+  busModel: string | null;
+  isAc: boolean | null;
+  registrationNo: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
+  conductorName: string | null;
+  conductorPhone: string | null;
+  agencyName: string | null;
+  pickupName: string | null;
+  departureTime: string | null; // "HH:MM:SS"
+  fare: string | null; // formatted, e.g. "₹1,200"
+  methodLabel: string | null;
+  paidAt: string | null; // formatted IST timestamp
+  bookingRef: string; // short booking reference
+}
+
+/** Booking-confirmed mail sent to the student's signup email after payment. */
+export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDetails) {
+  const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const bus = [
+    d.busNumber ? `Bus ${d.busNumber}` : null,
+    d.busModel,
+    d.isAc == null ? null : d.isAc ? 'AC' : 'Non-AC',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const rows: [string, string | null][] = [
+    ['School / College', d.institutionName],
+    ['Route', d.routeName],
+    ['Bus', bus || null],
+    ['Registration no.', d.registrationNo],
+    ['Driver', [d.driverName, d.driverPhone].filter(Boolean).join(' · ') || null],
+    ['Conductor', [d.conductorName, d.conductorPhone].filter(Boolean).join(' · ') || null],
+    ['Agency', d.agencyName],
+    ['Pickup stop', d.pickupName],
+    ['Departure', d.departureTime],
+    ['Fare paid', d.fare],
+    ['Paid via', d.methodLabel],
+    ['Paid on', d.paidAt],
+    ['Booking reference', d.bookingRef],
+  ];
+  const tableHtml = rows
+    .filter(([, v]) => v)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:7px 16px 7px 0;color:#888;white-space:nowrap;vertical-align:top">${k}</td><td style="padding:7px 0;font-weight:600">${esc(v as string)}</td></tr>`,
+    )
+    .join('');
+  const tableText = rows
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
+
+  const html = `
+    <div style="font-family:Segoe UI,system-ui,sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
+      <h2 style="margin:0 0 8px">✅ Your seat is confirmed${d.studentName ? `, ${esc(d.studentName.split(' ')[0])}` : ''}!</h2>
+      <p style="color:#555;line-height:1.5">
+        Payment received — your bus seat is booked. Here are your ride details:
+      </p>
+      <table style="border-collapse:collapse;font-size:14px;margin:14px 0;background:#f6f5ff;border-radius:12px;padding:8px" cellpadding="0">
+        <tr><td style="padding:14px 16px 4px">
+          <table style="border-collapse:collapse;font-size:14px">${tableHtml}</table>
+        </td></tr>
+        <tr><td style="height:10px"></td></tr>
+      </table>
+      <p style="margin:22px 0">
+        <a href="${site}/student/bookings"
+           style="background:#6d5efc;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;display:inline-block">
+          View my booking
+        </a>
+      </p>
+      <p style="color:#aaa;font-size:12px;margin-top:22px">
+        The driver or bus may occasionally change for a day — the app always
+        shows the latest details. Have a safe trip!
+      </p>
+    </div>`;
+
+  await getTransport().sendMail({
+    from,
+    to,
+    replyTo: process.env.GMAIL_SENDER,
+    subject: `Booking confirmed — ${d.routeName ?? 'your bus seat'}${d.institutionName ? ` to ${d.institutionName}` : ''}`,
+    text:
+      `Your seat is confirmed!\n\n` +
+      `Payment received — your bus seat is booked.\n\n${tableText}\n\n` +
+      `View my booking: ${site}/student/bookings\n\nHave a safe trip!`,
+    html,
+  });
+}
+
 export async function sendSignupConfirmationEmail(to: string, confirmLink: string) {
   const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
   const html = `

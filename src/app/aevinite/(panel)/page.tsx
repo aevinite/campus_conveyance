@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { getAdminReport } from '@/features/admin/repository';
+import { getAdminReport, countPendingAgencies } from '@/features/admin/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
@@ -13,11 +13,14 @@ const inr = (cents: number) =>
 
 export default async function AdminDashboard() {
   const db = await createClient();
-  const report = await getAdminReport(db);
+  // The report (incl. counts) is cached 60s + shared with the CSV. The pending
+  // count is the actionable one an admin watches, so read it LIVE here so a
+  // just-arrived application shows immediately rather than up to 60s late.
+  const [report, livePending] = await Promise.all([getAdminReport(), countPendingAgencies(db)]);
   const { counts, providers, totals, payments } = report;
 
   const cards = [
-    { label: 'Pending requests', value: counts.requests, href: '/aevinite/requests' },
+    { label: 'Pending requests', value: livePending, href: '/aevinite/requests' },
     { label: 'Service providers', value: counts.agencies, href: '/aevinite/providers' },
     { label: 'Students', value: counts.students, href: '/aevinite/students' },
     { label: 'Colleges & schools', value: counts.colleges, href: '/aevinite/colleges' },

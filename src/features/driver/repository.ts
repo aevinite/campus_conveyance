@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface DriverProfile {
@@ -37,23 +38,68 @@ export interface DriverBooking {
   route_name: string | null;
   pickup_name: string | null;
   college_name: string | null;
+  /** Latest journey stage recorded today: BOARDED | REACHED | GOT_OFF | null. */
+  current_stage: string | null;
 }
 
-/** The signed-in driver's own profile (null if the account isn't a driver). */
-export async function getDriverProfile(db: SupabaseClient): Promise<DriverProfile | null> {
-  const { data, error } = await db.rpc('driver_profile');
+export interface DriverStatus {
+  is_online: boolean;
+  lat: number | null;
+  lng: number | null;
+  updated_at: string | null;
+}
+
+/** The signed-in driver's live-tracking state (drives the online/offline toggle). */
+export async function getDriverStatus(db: SupabaseClient): Promise<DriverStatus> {
+  const { data, error } = await db.rpc('driver_status');
   if (error) throw error;
-  return ((data ?? [])[0] as DriverProfile) ?? null;
+  return (
+    ((data ?? [])[0] as DriverStatus) ?? {
+      is_online: false,
+      lat: null,
+      lng: null,
+      updated_at: null,
+    }
+  );
 }
 
-export async function listDriverBuses(db: SupabaseClient): Promise<DriverBus[]> {
+/** The signed-in driver's own profile (null if the account isn't a driver).
+ *  Memoized per request: the panel layout and every page read it. */
+export const getDriverProfile = cache(
+  async (db: SupabaseClient): Promise<DriverProfile | null> => {
+    const { data, error } = await db.rpc('driver_profile');
+    if (error) throw error;
+    return ((data ?? [])[0] as DriverProfile) ?? null;
+  },
+);
+
+/** Buses the driver drives today (one row per route). Memoized per request —
+ *  the layout (to decide whether to show the live-tracking toggle) and the
+ *  dashboard/buses pages all read it. */
+export const listDriverBuses = cache(async (db: SupabaseClient): Promise<DriverBus[]> => {
   const { data, error } = await db.rpc('driver_buses');
   if (error) throw error;
   return (data ?? []) as DriverBus[];
-}
+});
 
-export async function listDriverBookings(db: SupabaseClient): Promise<DriverBooking[]> {
-  const { data, error } = await db.rpc('driver_bookings');
+export async function listDriverBookings(
+  db: SupabaseClient,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<DriverBooking[]> {
+  const { data, error } = await db.rpc('driver_bookings', {
+    p_limit: opts.limit ?? null,
+    p_offset: opts.offset ?? 0,
+  });
   if (error) throw error;
   return (data ?? []) as DriverBooking[];
+}
+
+/** Roster totals for the dashboard cards (no full-roster fetch). */
+export async function countDriverBookings(
+  db: SupabaseClient,
+): Promise<{ total: number; confirmed: number }> {
+  const { data, error } = await db.rpc('driver_bookings_count');
+  if (error) throw error;
+  const row = (data ?? [])[0] as { total: number; confirmed: number } | undefined;
+  return { total: Number(row?.total ?? 0), confirmed: Number(row?.confirmed ?? 0) };
 }

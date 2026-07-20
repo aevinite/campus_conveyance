@@ -1,5 +1,5 @@
 'use server';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
@@ -12,12 +12,13 @@ import {
   agencyProfileSchema,
   serviceRequestSchema,
   busSchema,
+  busDriverChangeSchema,
   routeSchema,
   routeEditSchema,
   driverSchema,
   driverEditSchema,
 } from './schemas';
-import { getMyAgency } from './repository';
+import { getMyAgency, agencyReportTag } from './repository';
 import {
   confirmBooking,
   rejectBooking,
@@ -336,11 +337,19 @@ async function resolveAgencyDriverId(
   db: Awaited<ReturnType<typeof createClient>>,
   agencyId: string,
   driverId: string | undefined,
+  excludeBusId?: string,
 ): Promise<string | null> {
   if (!driverId) return null;
-  const { data } = await db.rpc('agency_drivers', { p_agency_id: agencyId });
-  const ok = ((data ?? []) as { driver_id: string }[]).some((x) => x.driver_id === driverId);
-  return ok ? driverId : null;
+  // Targeted owner-checked lookup (migration 0065) — no full-roster fetch.
+  const { data } = await db.rpc('agency_driver', { p_agency_id: agencyId, p_driver_id: driverId });
+  if (((data ?? []) as unknown[]).length === 0) return null;
+  // A driver can be the PERMANENT driver of only one bus. If already assigned to
+  // a DIFFERENT vehicle, don't assign here (server backstop; the edit dropdown
+  // also filters to unassigned). excludeBusId keeps a bus's own driver on edit.
+  let q = db.from('vehicles').select('id').eq('agency_id', agencyId).eq('driver_id', driverId);
+  if (excludeBusId) q = q.neq('id', excludeBusId);
+  const { data: taken } = await q.limit(1).maybeSingle();
+  return taken ? null : driverId;
 }
 
 export async function addBusAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -376,16 +385,30 @@ export async function addBusAction(_: FormState, formData: FormData): Promise<Fo
       driver_email: d.driverEmail || null,
       driver_license_no: d.driverLicenseNo,
       driver_experience_years: d.driverExperienceYears ?? null,
+      driver_govt_id: d.driverGovtId || null,
+      driver_address: d.driverAddress || null,
+      driver_alt_phone: d.driverAltPhone || null,
+      driver_dob: d.driverDob || null,
+      driver_blood_group: d.driverBloodGroup || null,
+      driver_verified: d.driverVerified === 'on',
       driver_photo_url: driverPhotoUrl,
+      conductor_name: d.conductorName || null,
+      conductor_phone: d.conductorPhone || null,
+      conductor_govt_id: d.conductorGovtId || null,
+      conductor_address: d.conductorAddress || null,
+      conductor_alt_phone: d.conductorAltPhone || null,
+      conductor_dob: d.conductorDob || null,
+      conductor_blood_group: d.conductorBloodGroup || null,
+      conductor_verified: d.conductorVerified === 'on',
       driver_id: driverId,
     });
     if (error) throw new AppError('BUS', error.message);
+    revalidatePath('/agency/add-bus');
+    revalidatePath('/agency/buses');
+    revalidatePath('/agency'); updateTag(agencyReportTag(agency.id)); // dashboard fleet tiles
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
-  revalidatePath('/agency/add-bus');
-  revalidatePath('/agency/buses');
-  revalidatePath('/agency'); // dashboard fleet tiles
   return { message: 'Bus added.' };
 }
 
@@ -413,7 +436,21 @@ export async function updateBusAction(_: FormState, formData: FormData): Promise
       driver_email: d.driverEmail || null,
       driver_license_no: d.driverLicenseNo,
       driver_experience_years: d.driverExperienceYears ?? null,
-      driver_id: await resolveAgencyDriverId(db, agency.id, d.driverId),
+      driver_govt_id: d.driverGovtId || null,
+      driver_address: d.driverAddress || null,
+      driver_alt_phone: d.driverAltPhone || null,
+      driver_dob: d.driverDob || null,
+      driver_blood_group: d.driverBloodGroup || null,
+      driver_verified: d.driverVerified === 'on',
+      conductor_name: d.conductorName || null,
+      conductor_phone: d.conductorPhone || null,
+      conductor_govt_id: d.conductorGovtId || null,
+      conductor_address: d.conductorAddress || null,
+      conductor_alt_phone: d.conductorAltPhone || null,
+      conductor_dob: d.conductorDob || null,
+      conductor_blood_group: d.conductorBloodGroup || null,
+      conductor_verified: d.conductorVerified === 'on',
+      driver_id: await resolveAgencyDriverId(db, agency.id, d.driverId, busId),
     };
     // Bus photos: the edit form sends the full set. Only require at least one so
     // legacy buses with fewer than 5 photos remain editable.
@@ -433,11 +470,60 @@ export async function updateBusAction(_: FormState, formData: FormData): Promise
       .eq('id', busId)
       .eq('agency_id', agency.id);
     if (error) throw new AppError('BUS', error.message);
+    revalidatePath('/agency/buses');
+    updateTag(agencyReportTag(agency.id)); // fleet split may change (e.g. AC/type edits)
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  return { message: 'Bus updated.' };
+}
+
+/**
+ * Set a substitute driver for a bus for TODAY (the regular driver didn't turn
+ * up). Doesn't touch the bus's permanent driver — it records a one-day override
+ * that students and parents see as "driver changed for today".
+ */
+export async function changeBusDriverAction(_: FormState, formData: FormData): Promise<FormState> {
+  const busId = String(formData.get('busId') ?? '');
+  if (!busId) return { error: 'Missing bus reference.' };
+  const parsed = busDriverChangeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the details.' };
+  }
+  const db = await createClient();
+  try {
+    await requireApprovedAgency(db);
+    const d = parsed.data;
+    const { error } = await db.rpc('set_bus_driver_today_by_driver', {
+      p_vehicle_id: busId,
+      p_driver_id: d.driverId,
+      p_reason: d.reason || null,
+      p_role: d.role,
+    });
+    if (error) throw new AppError('BUS', error.message);
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
   revalidatePath('/agency/buses');
-  return { message: 'Bus updated.' };
+  const noun = parsed.data.role === 'CONDUCTOR' ? 'conductor' : 'driver';
+  return { message: `Today’s ${noun} updated — students and parents will see the change.` };
+}
+
+/** Revert today's substitute so the bus shows its regular driver/conductor again. */
+export async function revertBusDriverAction(_: FormState, formData: FormData): Promise<FormState> {
+  const busId = String(formData.get('busId') ?? '');
+  if (!busId) return { error: 'Missing bus reference.' };
+  const role = String(formData.get('role') ?? 'DRIVER') === 'CONDUCTOR' ? 'CONDUCTOR' : 'DRIVER';
+  const db = await createClient();
+  try {
+    await requireApprovedAgency(db);
+    const { error } = await db.rpc('clear_bus_driver_today', { p_vehicle_id: busId, p_role: role });
+    if (error) throw new AppError('BUS', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  revalidatePath('/agency/buses');
+  return { message: `Reverted to the regular ${role === 'CONDUCTOR' ? 'conductor' : 'driver'} for today.` };
 }
 
 /** Parse + validate the map stops JSON. Every stop needs coords + a description. */
@@ -501,15 +587,15 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
       .limit(1)
       .maybeSingle();
     await addRoute(db, agency.id, parsed.data, (svc as { id: string } | null)?.id ?? null, stops);
+    // The bus picker lives on /agency/add-route and hides buses already on a route;
+    // revalidate THAT path (not the non-existent /agency/routes/new) so the just-
+    // assigned bus disappears from the list and can't be put on a second route.
+    revalidatePath('/agency/add-route');
+    revalidatePath('/agency/routes');
+    revalidatePath('/agency'); updateTag(agencyReportTag(agency.id)); // dashboard route/fleet tiles
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
-  // The bus picker lives on /agency/add-route and hides buses already on a route;
-  // revalidate THAT path (not the non-existent /agency/routes/new) so the just-
-  // assigned bus disappears from the list and can't be put on a second route.
-  revalidatePath('/agency/add-route');
-  revalidatePath('/agency/routes');
-  revalidatePath('/agency'); // dashboard route/fleet tiles
   return { message: 'Route added with pickup stops.' };
 }
 
@@ -527,7 +613,7 @@ export async function updateRouteAction(_: FormState, formData: FormData): Promi
   }
   const db = await createClient();
   try {
-    await requireApprovedAgency(db);
+    const agency = await requireApprovedAgency(db);
     const { count } = await db
       .from('bookings')
       .select('id', { count: 'exact', head: true })
@@ -548,6 +634,7 @@ export async function updateRouteAction(_: FormState, formData: FormData): Promi
       stops,
     );
     revalidatePath('/agency/routes');
+    updateTag(agencyReportTag(agency.id)); // route price feeds dashboard revenue-by-route
     return {
       message: replaced
         ? 'Route updated.'
@@ -597,6 +684,11 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
       agency_id: agency.id,
       profile_id: uid,
       license_no: d.licenseNo || null,
+      aadhaar_no: d.aadhaarNo || null,
+      address: d.address || null,
+      blood_group: d.bloodGroup || null,
+      dob: d.dob || null,
+      alt_phone: d.altPhone || null,
       is_active: true,
     });
     if (dErr) {
@@ -607,6 +699,10 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
     return { error: toErrorResponse(e).message };
   }
   revalidatePath('/agency/drivers');
+  // A new driver is immediately eligible as an unassigned/substitute driver, so
+  // refresh the bus driver dropdowns (add-bus + edit-bus cards) that list them.
+  revalidatePath('/agency/buses');
+  revalidatePath('/agency/add-bus');
   return { message: `Driver account created for ${d.email}. Share these credentials with the driver.` };
 }
 
@@ -622,11 +718,10 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
   const d = parsed.data;
   try {
     const agency = await requireApprovedAgency(db);
-    // Confirm the driver belongs to this agency + get their login (profile) id.
-    const { data: rows } = await db.rpc('agency_drivers', { p_agency_id: agency.id });
-    const row = ((rows ?? []) as { driver_id: string; profile_id: string | null; email: string | null }[]).find(
-      (x) => x.driver_id === driverId,
-    );
+    // Confirm the driver belongs to this agency + get their login (profile) id —
+    // targeted lookup (migration 0065), not a full-roster scan.
+    const { data: rows } = await db.rpc('agency_driver', { p_agency_id: agency.id, p_driver_id: driverId });
+    const row = ((rows ?? []) as { driver_id: string; profile_id: string | null; email: string | null }[])[0];
     if (!row) return { error: 'Driver not found for this agency.' };
     const uid = row.profile_id;
     if (!uid) return { error: 'This driver is not linked to a login account.' };
@@ -650,7 +745,15 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
     await admin.from('profiles').update({ full_name: d.name, phone: d.phone || null, email: d.email }).eq('id', uid);
     const { error: eDrv } = await admin
       .from('drivers')
-      .update({ license_no: d.licenseNo || null, is_active: d.isActive === 'true' })
+      .update({
+        license_no: d.licenseNo || null,
+        aadhaar_no: d.aadhaarNo || null,
+        address: d.address || null,
+        blood_group: d.bloodGroup || null,
+        dob: d.dob || null,
+        alt_phone: d.altPhone || null,
+        is_active: d.isActive === 'true',
+      })
       .eq('id', driverId)
       .eq('agency_id', agency.id);
     if (eDrv) throw new AppError('DRIVER', eDrv.message);
@@ -659,6 +762,70 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
   }
   revalidatePath('/agency/drivers');
   return { message: 'Driver updated.' };
+}
+
+/** Soft-delete a driver: hide from Manage Drivers, move to Deleted Drivers, and
+ *  unassign them from any bus. Reversible via restoreDriverAction. */
+export async function softDeleteDriverAction(formData: FormData): Promise<void> {
+  const driverId = String(formData.get('driverId') ?? '');
+  if (!driverId) return;
+  const db = await createClient();
+  const agency = await getMyAgency(db);
+  if (!agency) return;
+  const admin = createAdminClient();
+  await admin
+    .from('drivers')
+    .update({ is_deleted: true, is_active: false, deleted_at: new Date().toISOString() })
+    .eq('id', driverId)
+    .eq('agency_id', agency.id);
+  // A removed driver must not stay assigned to a bus.
+  await admin.from('vehicles').update({ driver_id: null }).eq('driver_id', driverId).eq('agency_id', agency.id);
+  revalidatePath('/agency/drivers');
+  revalidatePath('/agency/deleted-drivers');
+  revalidatePath('/agency/buses');
+}
+
+/** Restore a soft-deleted driver back to the active roster. */
+export async function restoreDriverAction(formData: FormData): Promise<void> {
+  const driverId = String(formData.get('driverId') ?? '');
+  if (!driverId) return;
+  const db = await createClient();
+  const agency = await getMyAgency(db);
+  if (!agency) return;
+  const admin = createAdminClient();
+  await admin
+    .from('drivers')
+    .update({ is_deleted: false, is_active: true, deleted_at: null })
+    .eq('id', driverId)
+    .eq('agency_id', agency.id);
+  revalidatePath('/agency/drivers');
+  revalidatePath('/agency/deleted-drivers');
+}
+
+/** HARD-delete a driver (from Deleted Drivers): permanently remove the drivers
+ *  row AND their login/auth account. Irreversible. */
+export async function hardDeleteDriverAction(formData: FormData): Promise<void> {
+  const driverId = String(formData.get('driverId') ?? '');
+  if (!driverId) return;
+  const db = await createClient();
+  const agency = await getMyAgency(db);
+  if (!agency) return;
+  const admin = createAdminClient();
+  // Scope to this agency; only ever hard-delete something already soft-deleted.
+  const { data: row } = await admin
+    .from('drivers')
+    .select('profile_id, is_deleted')
+    .eq('id', driverId)
+    .eq('agency_id', agency.id)
+    .maybeSingle();
+  if (!row || (row as { is_deleted: boolean }).is_deleted !== true) return;
+  // Remove the driver row first (vehicles.driver_id / bus_driver_changes.driver_id
+  // are ON DELETE SET NULL), then delete the login account for good.
+  await admin.from('drivers').delete().eq('id', driverId).eq('agency_id', agency.id);
+  const profileId = (row as { profile_id: string | null }).profile_id;
+  if (profileId) await admin.auth.admin.deleteUser(profileId);
+  revalidatePath('/agency/deleted-drivers');
+  revalidatePath('/agency/drivers');
 }
 
 /**
@@ -686,6 +853,9 @@ async function decideBooking(
   revalidatePath('/agency/view-bookings');
   revalidatePath('/agency/students');
   revalidatePath('/agency');
+  // The acting user is the agency owner; bust their own report cache.
+  const agency = await getMyAgency(db);
+  if (agency) updateTag(agencyReportTag(agency.id)); // dashboard bookings/revenue/students tiles
   if (notice) redirect(`/agency/bookings?notice=${encodeURIComponent(notice)}`);
 }
 
@@ -710,9 +880,11 @@ export async function hideStudentAction(formData: FormData): Promise<void> {
     .eq('student_id', studentId)
     .in('status', ['PENDING', 'CONFIRMED'])
     .eq('routes.agency_id', agency.id);
-  for (const b of rows ?? []) {
-    await db.rpc('reject_booking', { p_booking_id: b.id as string });
-  }
+  // One-active-booking rule bounds this to ~1, but reject them concurrently
+  // rather than in a serial await loop.
+  await Promise.all(
+    (rows ?? []).map((b) => db.rpc('reject_booking', { p_booking_id: b.id as string })),
+  );
   await db.from('agency_hidden_students').upsert({
     agency_id: agency.id,
     student_id: studentId,
@@ -720,10 +892,13 @@ export async function hideStudentAction(formData: FormData): Promise<void> {
   revalidatePath('/agency/students');
   revalidatePath('/agency/deleted-students');
   // Removing a student cancels their bookings (frees seats), so refresh the same
-  // surfaces a booking decision does — the dashboard Active-students count/donut
-  // and View Booking were stale until a manual reload.
+  // surfaces a booking decision does — the dashboard Active-students count/donut,
+  // View Booking, and Manage Booking (their now-rejected PENDING request lingered
+  // there) were stale until a manual reload.
+  revalidatePath('/agency/bookings');
   revalidatePath('/agency/view-bookings');
   revalidatePath('/agency');
+  updateTag(agencyReportTag(agency.id)); // dashboard students/bookings tiles
 }
 
 export async function restoreStudentAction(formData: FormData): Promise<void> {
@@ -739,4 +914,5 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
     .eq('student_id', studentId);
   revalidatePath('/agency/students');
   revalidatePath('/agency/deleted-students');
+  updateTag(agencyReportTag(agency.id)); // restored student re-enters the dashboard counts
 }

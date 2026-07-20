@@ -114,9 +114,15 @@ export default function MapStopPicker({
     };
   }, []);
 
+  // Redraw markers only when the marker-affecting data changes (positions +
+  // count) — NOT on every `value` change. Editing a stop's name/description
+  // produces a new value array each keystroke, which was clearing and re-adding
+  // all markers on every character. redraw() still reads the latest names via
+  // valueRef, so tooltips stay correct the next time a marker actually moves.
+  const markerSig = value.map((s) => `${s.lat},${s.lng}`).join('|');
   useEffect(() => {
     redraw();
-  }, [value]);
+  }, [markerSig]);
 
   // Debounced autocomplete via our server proxy (reliable + India-biased).
   useEffect(() => {

@@ -13,8 +13,8 @@ import {
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
-import { listMyBookings } from '@/features/booking/repository';
-import { listInstitutions } from '@/features/catalog/repository';
+import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/repository';
+import { institutionKindCounts, listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 
@@ -82,26 +82,30 @@ const STEPS = [
 export default async function StudentHome() {
   await requireRole('STUDENT');
   const db = await createClient();
-  const [{ fullName }, bookings, institutions] = await Promise.all([
+  const [{ fullName }, recentRows, statusCounts, kinds, featured] = await Promise.all([
     getSessionClaims(db),
-    listMyBookings(db),
-    listInstitutions(db),
+    // Only the few rows the home actually shows, not the whole history + driver
+    // overlay; counts come from a SQL GROUP BY, institutions from head counts.
+    listRecentBookings(db, 8),
+    myBookingStatusCounts(db),
+    institutionKindCounts(db),
+    listFeaturedInstitutions(db, 3),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
 
-  const active = bookings.filter((b) => b.status !== 'CANCELLED' && b.status !== 'REJECTED');
-  const recent = bookings.slice(0, 4);
+  const active = recentRows.filter((b) => b.status !== 'CANCELLED' && b.status !== 'REJECTED');
+  const recent = recentRows.slice(0, 4);
   const nextTrip = active.find((b) => b.status === 'CONFIRMED') ?? active[0] ?? null;
 
-  const schoolsCount = institutions.filter((i) => i.kind === 'SCHOOL').length;
-  const collegesCount = institutions.filter((i) => i.kind === 'COLLEGE').length;
-  const featured = institutions.slice(0, 3);
+  const schoolsCount = kinds.schools;
+  const collegesCount = kinds.colleges;
 
   // Status breakdown for the mini bar chart (only non-empty buckets).
-  const breakdown = (['CONFIRMED', 'PENDING', 'WAITLISTED', 'CANCELLED', 'REJECTED'] as const)
-    .map((s) => ({ status: s, count: bookings.filter((b) => b.status === s).length }))
+  // Cancelled bookings are hidden from the student panel entirely.
+  const breakdown = (['CONFIRMED', 'PENDING', 'WAITLISTED', 'REJECTED'] as const)
+    .map((s) => ({ status: s, count: statusCounts[s] ?? 0 }))
     .filter((x) => x.count > 0);
-  const totalBookings = bookings.length;
+  const totalBookings = breakdown.reduce((a, b) => a + b.count, 0);
 
   return (
     <div className="space-y-8">
@@ -156,7 +160,7 @@ export default async function StudentHome() {
             </span>
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-primary">
-                Your next trip
+                Your active booking
               </p>
               <p className="mt-0.5 truncate text-lg font-semibold">{nextTrip.routeName}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">

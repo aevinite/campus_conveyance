@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { unstable_cache } from 'next/cache';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export interface AgencyRequest {
   id: string;
@@ -44,13 +46,22 @@ const REQUEST_COLS =
 
 /** Agency applications in a given status (PENDING for review, REJECTED so a
  *  rejected provider stays visible and can be re-approved or removed). */
-async function agencyApplications(db: SupabaseClient, status: string): Promise<AgencyRequest[]> {
-  const { data, error } = await db
+async function agencyApplications(
+  db: SupabaseClient,
+  status: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<AgencyRequest[]> {
+  let q = db
     .from('agencies')
     .select(REQUEST_COLS)
     .eq('status', status)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
+  if (opts.limit != null) {
+    const off = opts.offset ?? 0;
+    q = q.range(off, off + opts.limit - 1);
+  }
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((a) => {
     const rows = (a.agency_services ?? []) as {
@@ -80,11 +91,42 @@ async function agencyApplications(db: SupabaseClient, status: string): Promise<A
   });
 }
 
-/** Pending applications awaiting admin review. */
-export const listAgencyRequests = (db: SupabaseClient) => agencyApplications(db, 'PENDING');
+/** Pending applications awaiting admin review. Paginated: though admins clear
+ *  the queue, a backlog could otherwise hit PostgREST's 1000-row cap. */
+export const listAgencyRequests = (
+  db: SupabaseClient,
+  opts: { limit?: number; offset?: number } = {},
+) => agencyApplications(db, 'PENDING', opts);
+
+/** Live count of pending applications — read uncached on the admin dashboard so
+ *  the "Requests" card reflects a brand-new application immediately (the report
+ *  counts are cached 60s and a new signup isn't an admin action that busts them). */
+export async function countPendingAgencies(db: SupabaseClient): Promise<number> {
+  const { count } = await db
+    .from('agencies')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'PENDING')
+    .eq('is_deleted', false);
+  return count ?? 0;
+}
 /** Rejected applications — kept visible so the admin can re-approve or remove
- *  them (previously they vanished from every admin page). */
-export const listRejectedAgencies = (db: SupabaseClient) => agencyApplications(db, 'REJECTED');
+ *  them (previously they vanished from every admin page). Paginated because,
+ *  unlike pending (which admins clear), rejected rows accumulate forever and
+ *  would eventually hit PostgREST's 1000-row cap. */
+export const listRejectedAgencies = (
+  db: SupabaseClient,
+  opts: { limit?: number; offset?: number } = {},
+) => agencyApplications(db, 'REJECTED', opts);
+
+/** Count of rejected applications, for the Rejected section pager. */
+export async function countRejectedAgencies(db: SupabaseClient): Promise<number> {
+  const { count } = await db
+    .from('agencies')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'REJECTED')
+    .eq('is_deleted', false);
+  return count ?? 0;
+}
 
 export interface ServiceRequest {
   id: string;
@@ -97,12 +139,20 @@ export interface ServiceRequest {
 }
 
 /** Pending agency service-area requests, for admin review. */
-export async function listServiceRequests(db: SupabaseClient): Promise<ServiceRequest[]> {
-  const { data, error } = await db
+export async function listServiceRequests(
+  db: SupabaseClient,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<ServiceRequest[]> {
+  let q = db
     .from('agency_service_requests')
     .select('id, name, description, vehicle_type, created_at, agencies(name), institutions(name)')
     .eq('status', 'PENDING')
     .order('created_at', { ascending: false });
+  if (opts.limit != null) {
+    const off = opts.offset ?? 0;
+    q = q.range(off, off + opts.limit - 1);
+  }
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((r) => {
     const ag = r.agencies as { name: string } | { name: string }[] | null;
@@ -119,16 +169,15 @@ export async function listServiceRequests(db: SupabaseClient): Promise<ServiceRe
   });
 }
 
-export async function listAgencies(db: SupabaseClient): Promise<AgencyRow[]> {
-  const { data, error } = await db
-    .from('agencies')
-    .select('id, name, email, phone')
-    .eq('status', 'APPROVED')
-    .eq('is_deleted', false)
-    .order('name');
-  if (error) throw error;
-  return (data ?? []) as AgencyRow[];
+/** Count of pending service-area requests, for that page's pager. */
+export async function countServiceRequests(db: SupabaseClient): Promise<number> {
+  const { count } = await db
+    .from('agency_service_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'PENDING');
+  return count ?? 0;
 }
+
 
 // Full provider record — everything captured at signup — for the admin Manage
 // Service Providers page, so the admin can review and edit it in place.
@@ -186,15 +235,20 @@ function mapAgencyDetail(a: Record<string, unknown>): AgencyDetail {
 }
 
 /** Approved (non-deleted) providers with full signup detail, for the admin list. */
-export async function listAgenciesDetailed(db: SupabaseClient): Promise<AgencyDetail[]> {
-  const { data, error } = await db
+export async function listAgenciesDetailed(
+  db: SupabaseClient,
+  opts: PageOpts = {},
+): Promise<Paged<AgencyDetail>> {
+  let q = db
     .from('agencies')
-    .select(AGENCY_DETAIL_COLS)
+    .select(AGENCY_DETAIL_COLS, { count: 'exact' })
     .eq('status', 'APPROVED')
     .eq('is_deleted', false)
     .order('name');
+  if (opts.limit != null) q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  const { data, error, count } = await q;
   if (error) throw error;
-  return (data ?? []).map((a) => mapAgencyDetail(a as Record<string, unknown>));
+  return { rows: (data ?? []).map((a) => mapAgencyDetail(a as Record<string, unknown>)), total: count ?? 0 };
 }
 
 /** One provider's full detail (for the admin edit page). */
@@ -204,40 +258,53 @@ export async function getAgencyDetail(db: SupabaseClient, id: string): Promise<A
   return data ? mapAgencyDetail(data as Record<string, unknown>) : null;
 }
 
-export async function listDeletedAgencies(db: SupabaseClient): Promise<AgencyRow[]> {
-  const { data, error } = await db
+export async function listDeletedAgencies(db: SupabaseClient, opts: PageOpts = {}): Promise<Paged<AgencyRow>> {
+  let q = db
     .from('agencies')
-    .select('id, name, email, phone')
+    .select('id, name, email, phone', { count: 'exact' })
     .eq('is_deleted', true)
     .order('name');
+  if (opts.limit != null) q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  const { data, error, count } = await q;
   if (error) throw error;
-  return (data ?? []) as AgencyRow[];
+  return { rows: (data ?? []) as AgencyRow[], total: count ?? 0 };
 }
 
-async function students(db: SupabaseClient, deleted: boolean): Promise<StudentRow[]> {
-  const { data, error } = await db
+// Server-side paging so these list pages don't silently truncate at PostgREST's
+// ~1000-row cap (which also undercounted). Each returns the page rows + the exact
+// total (count: 'exact', head-free) for the pager.
+export const ADMIN_PAGE_SIZE = 50;
+export interface Paged<T> { rows: T[]; total: number; }
+export interface PageOpts { limit?: number; offset?: number }
+
+async function students(db: SupabaseClient, deleted: boolean, opts: PageOpts = {}): Promise<Paged<StudentRow>> {
+  let q = db
     .from('profiles')
-    .select('id, full_name, email, phone')
+    .select('id, full_name, email, phone', { count: 'exact' })
     .eq('role', 'STUDENT')
     .eq('is_deleted', deleted)
     .order('full_name');
+  if (opts.limit != null) q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  const { data, error, count } = await q;
   if (error) throw error;
-  return (data ?? []) as StudentRow[];
+  return { rows: (data ?? []) as StudentRow[], total: count ?? 0 };
 }
-export const listStudents = (db: SupabaseClient) => students(db, false);
-export const listDeletedStudents = (db: SupabaseClient) => students(db, true);
+export const listStudents = (db: SupabaseClient, opts?: PageOpts) => students(db, false, opts);
+export const listDeletedStudents = (db: SupabaseClient, opts?: PageOpts) => students(db, true, opts);
 
-async function colleges(db: SupabaseClient, deleted: boolean): Promise<CollegeRow[]> {
-  const { data, error } = await db
+async function colleges(db: SupabaseClient, deleted: boolean, opts: PageOpts = {}): Promise<Paged<CollegeRow>> {
+  let q = db
     .from('institutions')
-    .select('id, name, kind, area, city, image_url, description, is_active, is_verified')
+    .select('id, name, kind, area, city, image_url, description, is_active, is_verified', { count: 'exact' })
     .eq('is_deleted', deleted)
     .order('name');
+  if (opts.limit != null) q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  const { data, error, count } = await q;
   if (error) throw error;
-  return (data ?? []) as CollegeRow[];
+  return { rows: (data ?? []) as CollegeRow[], total: count ?? 0 };
 }
-export const listColleges = (db: SupabaseClient) => colleges(db, false);
-export const listDeletedColleges = (db: SupabaseClient) => colleges(db, true);
+export const listColleges = (db: SupabaseClient, opts?: PageOpts) => colleges(db, false, opts);
+export const listDeletedColleges = (db: SupabaseClient, opts?: PageOpts) => colleges(db, true, opts);
 
 export interface AdminCounts {
   requests: number;
@@ -245,19 +312,34 @@ export interface AdminCounts {
   students: number;
   colleges: number;
 }
-export async function getCounts(db: SupabaseClient): Promise<AdminCounts> {
-  const [requests, agencies, studentCount, colleges] = await Promise.all([
-    db.from('agencies').select('id', { count: 'exact', head: true }).eq('status', 'PENDING').eq('is_deleted', false),
-    db.from('agencies').select('id', { count: 'exact', head: true }).eq('status', 'APPROVED').eq('is_deleted', false),
-    db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'STUDENT').eq('is_deleted', false),
-    db.from('institutions').select('id', { count: 'exact', head: true }).eq('is_deleted', false),
-  ]);
-  return {
-    requests: requests.count ?? 0,
-    agencies: agencies.count ?? 0,
-    students: studentCount.count ?? 0,
-    colleges: colleges.count ?? 0,
-  };
+// The 4 dashboard count cards. Cached 60s + service-role and tagged
+// 'admin-report' — the same tag the report agg uses — so the dashboard and the
+// CSV export share ONE computation (was 4 uncached count queries on every
+// dashboard render AND every CSV download), and an admin mutation busting the
+// tag refreshes both instantly. Counts are global, so the service-role client
+// (not the per-request one) is correct here.
+const cachedCounts = unstable_cache(
+  async (): Promise<AdminCounts> => {
+    const admin = createAdminClient();
+    const [requests, agencies, studentCount, colleges] = await Promise.all([
+      admin.from('agencies').select('id', { count: 'exact', head: true }).eq('status', 'PENDING').eq('is_deleted', false),
+      admin.from('agencies').select('id', { count: 'exact', head: true }).eq('status', 'APPROVED').eq('is_deleted', false),
+      admin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'STUDENT').eq('is_deleted', false),
+      admin.from('institutions').select('id', { count: 'exact', head: true }).eq('is_deleted', false),
+    ]);
+    return {
+      requests: requests.count ?? 0,
+      agencies: agencies.count ?? 0,
+      students: studentCount.count ?? 0,
+      colleges: colleges.count ?? 0,
+    };
+  },
+  ['admin-counts'],
+  { revalidate: 60, tags: ['admin-report'] },
+);
+
+export function getCounts(): Promise<AdminCounts> {
+  return cachedCounts();
 }
 
 // ---- Admin report ---------------------------------------------------------
@@ -289,73 +371,41 @@ export interface AdminReport {
   generatedAt: string;
 }
 
-const ACTIVE_BOOKING = ['PENDING', 'CONFIRMED'];
+// Provider fleet/rider rows + payment summary, aggregated in SQL (GROUP BY) via
+// the admin_report RPC instead of streaming every booking/vehicle row into Node.
+// Cached 60s + service-role (the RPC is security-definer, granted to service_role
+// only), so the dashboard and the CSV export share one computation instead of two
+// full-table scans each. Was also silently truncating at PostgREST's ~1000-row
+// cap before this.
+const cachedAdminReportAgg = unstable_cache(
+  async () => {
+    const admin = createAdminClient();
+    const { data } = await admin.rpc('admin_report');
+    const agg = (data ?? {}) as {
+      providers?: ProviderReportRow[];
+      totals?: { buses: number; vans: number; students: number };
+      payments?: PaymentSummary;
+    };
+    // Stamp WHEN the data was actually computed (cache-fill time) — not when the
+    // page read it — so generatedAt can't claim "now" over ≤60s-stale cached data.
+    return { ...agg, generatedAt: new Date().toISOString() };
+  },
+  ['admin-report-agg'],
+  // Tagged so admin mutations can bust it immediately (revalidateTag) instead of
+  // the charts lagging up to 60s behind the count cards.
+  { revalidate: 60, tags: ['admin-report'] },
+);
 
-export async function getAdminReport(db: SupabaseClient): Promise<AdminReport> {
-  const [counts, agenciesRes, vehiclesRes, bookingsRes, feesRes] = await Promise.all([
-    getCounts(db),
-    db.from('agencies').select('id, name').eq('status', 'APPROVED').eq('is_deleted', false).order('name'),
-    db.from('vehicles').select('agency_id, vehicle_type').not('agency_id', 'is', null),
-    // Each active booking, tagged with its provider via the route it's on.
-    db.from('bookings').select('student_id, status, routes(agency_id)').in('status', ACTIVE_BOOKING),
-    // Fee/payment status comes from the booking itself (is_paid) and the route
-    // price. Only ACTIVE bookings (PENDING/CONFIRMED) count toward revenue —
-    // REJECTED and WAITLISTED bookings are not money owed and were wrongly
-    // inflating "unpaid due" (they merely weren't CANCELLED).
-    db.from('bookings').select('is_paid, routes(price_cents)').in('status', ACTIVE_BOOKING),
-  ]);
-  if (agenciesRes.error) throw agenciesRes.error;
-  if (vehiclesRes.error) throw vehiclesRes.error;
-  if (bookingsRes.error) throw bookingsRes.error;
-  if (feesRes.error) throw feesRes.error;
-
-  // Seed one row per approved provider so every provider shows on the chart.
-  const rows = new Map<string, ProviderReportRow>();
-  for (const a of (agenciesRes.data ?? []) as { id: string; name: string }[]) {
-    rows.set(a.id, { agencyId: a.id, name: a.name, buses: 0, vans: 0, students: 0 });
-  }
-
-  for (const v of (vehiclesRes.data ?? []) as { agency_id: string | null; vehicle_type: string }[]) {
-    const row = v.agency_id ? rows.get(v.agency_id) : undefined;
-    if (!row) continue;
-    if (v.vehicle_type === 'VAN') row.vans += 1;
-    else row.buses += 1;
-  }
-
-  // Count each student once per provider they ride with.
-  const seen = new Set<string>();
-  for (const b of (bookingsRes.data ?? []) as {
-    student_id: string;
-    routes: { agency_id: string | null } | { agency_id: string | null }[] | null;
-  }[]) {
-    const route = Array.isArray(b.routes) ? b.routes[0] : b.routes;
-    const agencyId = route?.agency_id;
-    const row = agencyId ? rows.get(agencyId) : undefined;
-    if (!row) continue;
-    const key = `${agencyId}:${b.student_id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    row.students += 1;
-  }
-
-  const providers = [...rows.values()];
-  const totals = providers.reduce(
-    (acc, r) => ({ buses: acc.buses + r.buses, vans: acc.vans + r.vans, students: acc.students + r.students }),
-    { buses: 0, vans: 0, students: 0 },
-  );
-
-  const payments: PaymentSummary = { paidCount: 0, unpaidCount: 0, paidCents: 0, unpaidCents: 0 };
-  for (const b of (feesRes.data ?? []) as {
-    is_paid: boolean;
-    routes: { price_cents: number | null } | { price_cents: number | null }[] | null;
-  }[]) {
-    const route = Array.isArray(b.routes) ? b.routes[0] : b.routes;
-    const cents = Number(route?.price_cents) || 0;
-    if (b.is_paid) { payments.paidCount += 1; payments.paidCents += cents; }
-    else { payments.unpaidCount += 1; payments.unpaidCents += cents; }
-  }
-
-  return { counts, providers, totals, payments, generatedAt: new Date().toISOString() };
+// No db param needed: both halves read via the cached service-role clients.
+export async function getAdminReport(): Promise<AdminReport> {
+  const [counts, agg] = await Promise.all([cachedCounts(), cachedAdminReportAgg()]);
+  return {
+    counts,
+    providers: agg.providers ?? [],
+    totals: agg.totals ?? { buses: 0, vans: 0, students: 0 },
+    payments: agg.payments ?? { paidCount: 0, unpaidCount: 0, paidCents: 0, unpaidCents: 0 },
+    generatedAt: agg.generatedAt ?? new Date().toISOString(),
+  };
 }
 
 // ---- Admin activity log ---------------------------------------------------
@@ -372,14 +422,16 @@ export interface AuditLogRow {
 }
 
 /** Most recent admin actions (approvals/rejections/deletes/restores/toggles). */
-export async function listAuditLogs(db: SupabaseClient, limit = 1000): Promise<AuditLogRow[]> {
-  const { data, error } = await db
+export async function listAuditLogs(db: SupabaseClient, opts: PageOpts = {}): Promise<Paged<AuditLogRow>> {
+  const limit = opts.limit ?? 1000;
+  const offset = opts.offset ?? 0;
+  const { data, error, count } = await db
     .from('audit_logs')
-    .select('id, action, entity, entity_id, metadata, created_at, profiles(full_name, email)')
+    .select('id, action, entity, entity_id, metadata, created_at, profiles(full_name, email)', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
   if (error) throw error;
-  return (data ?? []).map((r) => {
+  const rows = (data ?? []).map((r) => {
     const actor = (Array.isArray(r.profiles) ? r.profiles[0] : r.profiles) as
       | { full_name: string | null; email: string | null }
       | null;
@@ -394,4 +446,5 @@ export async function listAuditLogs(db: SupabaseClient, limit = 1000): Promise<A
       actorEmail: actor?.email ?? null,
     };
   });
+  return { rows, total: count ?? 0 };
 }

@@ -114,6 +114,14 @@ export async function loginAction(
 
 export async function logoutAction() {
   const db = await createClient();
+  // A driver logging out must stop sharing live location NOW — otherwise the
+  // family map keeps showing a frozen "live" bus until the 2-min freshness
+  // window lapses. Do it server-side before signOut, because the client's
+  // unmount beacon can't authenticate once the session is gone.
+  const { role } = await getSessionClaims(db);
+  if (role === 'DRIVER') {
+    await db.rpc('driver_set_online', { p_online: false });
+  }
   await db.auth.signOut();
   redirect('/login');
 }
@@ -141,7 +149,10 @@ export async function forgotAction(
   const { data: profile, error: lookupError } = await admin
     .from('profiles')
     .select('id, is_deleted, role')
-    .ilike('email', email)
+    // Indexed equality on the generated lower(email) column (migration 0060) —
+    // `email` is already trimmed + lowercased above. Was a case-insensitive
+    // ilike seq scan on a public, unauthenticated endpoint.
+    .eq('email_lower', email)
     .maybeSingle();
   if (lookupError) return { error: 'Something went wrong. Please try again.' };
   if (!profile) return { error: 'This email is not registered.' };
@@ -206,6 +217,18 @@ export async function resetAction(
   const parsed = resetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: 'Password must be at least 8 characters.' };
   const db = await createClient();
+  // Read the role from the recovery session BEFORE updating, so we can send the
+  // user back to the login page that matches their panel (e.g. an agency owner
+  // returns to /agency/login, not the student login).
+  const { userId, role: claimRole } = await getSessionClaims(db);
+  // The recovery JWT sometimes lacks the injected role claim; fall back to the
+  // profile's role (readable under the active recovery session via profiles_self)
+  // so a non-student isn't dumped on the student /login.
+  let role = claimRole;
+  if (!role && userId) {
+    const { data } = await db.from('profiles').select('role').eq('id', userId).maybeSingle();
+    role = (data as { role?: typeof claimRole } | null)?.role ?? undefined;
+  }
   try {
     const { error } = await db.auth.updateUser({ password: parsed.data.password });
     if (error) throw new AuthError(error.message);
@@ -213,11 +236,19 @@ export async function resetAction(
     return { error: toErrorResponse(e).message };
   }
   // The reset link established a RECOVERY session, so after changing the password
-  // the user is actually signed in. Redirecting to /login while still logged in
-  // is confusing — tear the recovery session down so /login is honest and they
-  // sign in fresh with the new password.
+  // the user is actually signed in. Redirecting to a login page while still
+  // logged in is confusing — tear the recovery session down so login is honest
+  // and they sign in fresh with the new password.
   await db.auth.signOut();
-  redirect('/login');
+  const loginPath =
+    role === 'AGENCY'
+      ? '/agency/login'
+      : role === 'DRIVER'
+        ? '/driver/login'
+        : role === 'SUPER_ADMIN' || role === 'INSTITUTION_ADMIN'
+          ? '/aevinite/login'
+          : '/login';
+  redirect(loginPath);
 }
 
 // Update the signed-in user's own profile (name + phone). Keeps the JWT's

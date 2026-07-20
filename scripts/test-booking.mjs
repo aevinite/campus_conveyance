@@ -35,21 +35,25 @@ const results = await Promise.all(
 );
 
 const bookings = results.filter((r) => !r.error).map((r) => r.data);
-const confirmed = bookings.filter((b) => b.status === 'CONFIRMED');
+// reserve_seat HOLDS a seat as PENDING (the approval-first flow; auto-approve in
+// 0040 does not confirm at reserve time — payment does). So a successfully-held
+// seat is PENDING, and the overflow is WAITLISTED. (Was asserting CONFIRMED,
+// which reserve_seat never returns — a guaranteed false FAIL post-0040.)
+const held = bookings.filter((b) => b.status === 'PENDING');
 const waitlisted = bookings.filter((b) => b.status === 'WAITLISTED');
 const errors = results.filter((r) => r.error);
 
 const { data: alloc } = await admin
   .from('seat_allocations').select('reserved_seats, total_seats').limit(1).single();
 
-console.log(`  confirmed:  ${confirmed.length}`);
-console.log(`  waitlisted: ${waitlisted.length}`);
-console.log(`  errors:     ${errors.length}${errors.length ? ' → ' + errors[0].error.message : ''}`);
+console.log(`  held (PENDING): ${held.length}`);
+console.log(`  waitlisted:     ${waitlisted.length}`);
+console.log(`  errors:         ${errors.length}${errors.length ? ' → ' + errors[0].error.message : ''}`);
 console.log(`  reserved_seats in DB: ${alloc.reserved_seats}/${alloc.total_seats}`);
 
-const ok = confirmed.length === 2 && waitlisted.length === ATTEMPTS - 2 &&
+const ok = held.length === 2 && waitlisted.length === ATTEMPTS - 2 &&
   alloc.reserved_seats === 2 && errors.length === 0;
-console.log(ok ? '\nPASS: never overbooked; exactly 2 seats taken under race.' : '\nFAIL: see counts above.');
+console.log(ok ? '\nPASS: never overbooked; exactly 2 seats held under race.' : '\nFAIL: see counts above.');
 
 // Cleanup: cancel everything so the seed stays at 0 reserved.
 for (const b of bookings) {

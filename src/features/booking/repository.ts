@@ -1,5 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSessionClaims } from '@/features/auth/session';
+import { todayIST } from '@/lib/today-ist';
+
+/** Today's substitute staff member for a bus (null when the regular one is on duty). */
+export interface DriverChange {
+  name: string;
+  phone: string | null;
+  reason: string | null;
+  govtId: string | null;
+  bloodGroup: string | null;
+  altPhone: string | null;
+}
 
 export interface RouteSummary {
   id: string;
@@ -29,6 +40,16 @@ export interface VehicleInfo {
   driver_license_no: string | null;
   driver_experience_years: number | null;
   driver_photo_url: string | null;
+  driver_govt_id: string | null;
+  driver_alt_phone: string | null;
+  driver_blood_group: string | null;
+  driver_verified: boolean | null;
+  conductor_name: string | null;
+  conductor_phone: string | null;
+  conductor_govt_id: string | null;
+  conductor_blood_group: string | null;
+  conductor_alt_phone: string | null;
+  conductor_verified: boolean | null;
 }
 export interface Availability {
   total: number;
@@ -47,17 +68,11 @@ export interface BookingRow {
   expires_at: string | null;
   /** Why a CANCELLED booking was cancelled: 'STUDENT' | 'PAYMENT_TIMEOUT' | null. */
   cancel_cause: string | null;
-}
-
-/** Routes for the caller's institution (RLS-scoped). */
-export async function listRoutes(db: SupabaseClient): Promise<RouteSummary[]> {
-  const { data, error } = await db
-    .from('routes')
-    .select('id, name, price_cents')
-    .eq('is_active', true)
-    .order('name');
-  if (error) throw error;
-  return (data ?? []) as RouteSummary[];
+  bus_number: string | null;
+  /** Effective driver for today (substitute if changed, else the regular one). */
+  driver_name: string | null;
+  driver_phone: string | null;
+  driver_changed: boolean;
 }
 
 /**
@@ -80,31 +95,58 @@ export interface ActiveBooking {
   pickup_stop_id: string | null;
 }
 
-export async function getMyActiveBookingForRoute(
+/** The caller's single active booking on ANY route (one bus at a time). */
+export interface CurrentBooking extends ActiveBooking {
+  routeId: string | null;
+  routeName: string | null;
+}
+
+export async function getMyActiveBooking(
   db: SupabaseClient,
-  routeId: string,
-): Promise<ActiveBooking | null> {
-  // Scope to THIS student explicitly rather than trusting RLS alone: resolve the
-  // caller's students row and filter by it, so the query means "my booking" even
-  // if a policy is ever loosened.
+): Promise<CurrentBooking | null> {
   const { userId } = await getSessionClaims(db);
   if (!userId) return null;
-  const { data: student } = await db
-    .from('students')
-    .select('id')
-    .eq('profile_id', userId)
-    .maybeSingle();
-  if (!student) return null;
+  // One round-trip: resolve the caller's student row via an inner embed instead
+  // of a separate students lookup, then the active booking, in a single query.
   const { data } = await db
     .from('bookings')
-    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id')
-    .eq('route_id', routeId)
-    .eq('student_id', (student as { id: string }).id)
+    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, routes(id, name), students!inner(profile_id)')
+    .eq('students.profile_id', userId)
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
+    // The one-active-booking unique index already guarantees ≤1 match; the
+    // explicit order makes the pick deterministic even if that ever loosened.
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  return (data as ActiveBooking | null) ?? null;
+  if (!data) return null;
+  // A PENDING hold whose payment window has lapsed is effectively dead: the row
+  // is swept by the pg_cron job and by reserve_seat's own internal sweep, but
+  // until then it still reads as PENDING. Treat it as "no active booking" here so
+  // the student can re-request immediately — WITHOUT issuing a table-wide expiry
+  // UPDATE on this hot browse path (that's the cron's job; see migration 0052).
+  const pendingExpiresAt = (data.expires_at as string) ?? null;
+  if (
+    data.status === 'PENDING' &&
+    !data.is_paid &&
+    pendingExpiresAt &&
+    new Date(pendingExpiresAt).getTime() <= Date.now()
+  ) {
+    return null;
+  }
+  const r = data.routes as { id: string; name: string } | { id: string; name: string }[] | null;
+  const route = Array.isArray(r) ? r[0] : r;
+  return {
+    id: data.id as string,
+    status: data.status as string,
+    is_paid: (data.is_paid as boolean) ?? false,
+    approved_at: (data.approved_at as string) ?? null,
+    expires_at: (data.expires_at as string) ?? null,
+    pickup_stop_id: (data.pickup_stop_id as string) ?? null,
+    routeId: route?.id ?? null,
+    routeName: route?.name ?? null,
+  };
 }
+
 
 export async function getRouteWithStops(
   db: SupabaseClient,
@@ -114,14 +156,30 @@ export async function getRouteWithStops(
   stops: Stop[];
   vehicle: VehicleInfo | null;
   institutionName: string | null;
+  driverChange: DriverChange | null;
+  conductorChange: DriverChange | null;
 } | null> {
-  const { data: route } = await db
-    .from('routes')
-    .select(
-      'id, name, price_cents, is_active, institutions(name, is_active, is_deleted), agencies(status, is_deleted), vehicles(bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url)',
-    )
-    .eq('id', routeId)
-    .maybeSingle();
+  // Route and its stops both key only off routeId, so fetch them together
+  // rather than serially (one round-trip instead of two on the hot detail page).
+  const [{ data: route }, { data: stops }] = await Promise.all([
+    db
+      .from('routes')
+      .select(
+        // Only the vehicle columns the detail page actually renders (dropped the
+        // never-shown driver_address/driver_dob/conductor_address/conductor_dob).
+        'id, name, price_cents, is_active, institutions(name, is_active, is_deleted), agencies(status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id, driver_blood_group, driver_alt_phone, effective_date))',
+      )
+      .eq('id', routeId)
+      // Only TODAY's substitute rows are embedded (bus_driver_changes accumulate
+      // daily) — this replaces a separate third round-trip for the changes.
+      .eq('vehicles.bus_driver_changes.effective_date', todayIST())
+      .maybeSingle(),
+    db
+      .from('route_stops')
+      .select('id, name, sequence, lat, lng, address, description')
+      .eq('route_id', routeId)
+      .order('sequence'),
+  ]);
   if (!route) return null;
 
   // A route reachable via an old bookmark must still be LIVE, or the student
@@ -135,15 +193,41 @@ export async function getRouteWithStops(
   const agencyRel = (route as { agencies: { status: string; is_deleted: boolean } | { status: string; is_deleted: boolean }[] | null }).agencies;
   const agency = Array.isArray(agencyRel) ? agencyRel[0] : agencyRel;
   if (agency && (agency.status !== 'APPROVED' || agency.is_deleted === true)) return null;
-  const { data: stops } = await db
-    .from('route_stops')
-    .select('id, name, sequence, lat, lng, address, description')
-    .eq('route_id', routeId)
-    .order('sequence');
-  const v = (route as { vehicles: VehicleInfo | VehicleInfo[] | null }).vehicles;
-  const vehicle = (Array.isArray(v) ? v[0] : v) ?? null;
+  type ChangeRow = {
+    role: string; driver_name: string; driver_phone: string | null; reason: string | null;
+    driver_govt_id: string | null; driver_blood_group: string | null; driver_alt_phone: string | null;
+  };
+  type VehicleRow = VehicleInfo & { id?: string; bus_driver_changes?: ChangeRow[] };
+  const v = (route as { vehicles: VehicleRow | VehicleRow[] | null }).vehicles;
+  const vehicleRow = (Array.isArray(v) ? v[0] : v) ?? null;
   const inst = (route as { institutions: { name: string } | { name: string }[] | null }).institutions;
   const institutionName = (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? null;
+
+  // Today's substitutes (driver and/or conductor) — embedded in the route query
+  // above (filtered to today's effective_date), so no separate round-trip.
+  let driverChange: DriverChange | null = null;
+  let conductorChange: DriverChange | null = null;
+  for (const c of vehicleRow?.bus_driver_changes ?? []) {
+    const change: DriverChange = {
+      name: c.driver_name,
+      phone: c.driver_phone ?? null,
+      reason: c.reason ?? null,
+      govtId: c.driver_govt_id ?? null,
+      bloodGroup: c.driver_blood_group ?? null,
+      altPhone: c.driver_alt_phone ?? null,
+    };
+    if (c.role === 'CONDUCTOR') conductorChange = change;
+    else driverChange = change;
+  }
+  // Strip the embed so the returned vehicle matches VehicleInfo.
+  const vehicle: VehicleInfo | null = vehicleRow
+    ? (() => {
+        const { bus_driver_changes: _bdc, ...rest } = vehicleRow;
+        void _bdc;
+        return rest as VehicleInfo;
+      })()
+    : null;
+
   return {
     route: {
       id: route.id as string,
@@ -153,6 +237,8 @@ export async function getRouteWithStops(
     stops: (stops ?? []) as Stop[],
     vehicle,
     institutionName,
+    driverChange,
+    conductorChange,
   };
 }
 
@@ -160,27 +246,64 @@ export async function getAvailability(
   db: SupabaseClient,
   routeId: string,
 ): Promise<Availability> {
-  const { data } = await db
+  const { data: alloc } = await db
     .from('seat_allocations')
-    .select('total_seats, reserved_seats, route_assignments!inner(route_id)')
+    .select('id, total_seats, route_assignments!inner(route_id)')
     .eq('route_assignments.route_id', routeId)
     .limit(1)
     .maybeSingle();
-  const total = (data?.total_seats as number) ?? 0;
-  const reserved = (data?.reserved_seats as number) ?? 0;
+  const total = (alloc?.total_seats as number) ?? 0;
+  if (!alloc) return { total: 0, reserved: 0, available: 0 };
+  // Count active bookings LIVE (same PENDING/CONFIRMED count reserve_seat uses
+  // under the allocation lock), rather than the trigger-maintained
+  // reserved_seats — so the displayed seats can't drift from the actual reserve
+  // outcome if that trigger ever lags. Backed by idx_bookings_alloc_status.
+  const { count } = await db
+    .from('bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('seat_allocation_id', (alloc as { id: string }).id)
+    .in('status', ['PENDING', 'CONFIRMED']);
+  const reserved = count ?? 0;
   return { total, reserved, available: Math.max(total - reserved, 0) };
 }
 
-export async function listMyBookings(db: SupabaseClient): Promise<BookingRow[]> {
-  const { data, error } = await db
+/** Count of the student's own non-cancelled bookings, for My Bookings paging. */
+export async function countMyBookings(db: SupabaseClient): Promise<number> {
+  const { count } = await db
     .from('bookings')
-    .select('id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, routes(id, name, price_cents)')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'CANCELLED');
+  return count ?? 0;
+}
+
+export async function listMyBookings(
+  db: SupabaseClient,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<BookingRow[]> {
+  let q = db
+    .from('bookings')
+    .select(
+      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, routes(id, name, price_cents, vehicles(id, bus_number, driver_name, driver_phone))',
+    )
+    // Cancelled bookings are hidden from the student panel entirely
+    // (user decision 2026-07-18) — whatever the cancel reason.
+    .neq('status', 'CANCELLED')
     .order('created_at', { ascending: false });
+  if (opts.limit != null) {
+    const off = opts.offset ?? 0;
+    q = q.range(off, off + opts.limit - 1);
+  }
+  const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((b) => {
-    type RouteRef = { id: string; name: string; price_cents: number | null };
+
+  type VehRef = { id: string; bus_number: string | null; driver_name: string | null; driver_phone: string | null };
+  type RouteRef = { id: string; name: string; price_cents: number | null; vehicles: VehRef | VehRef[] | null };
+
+  const rows = (data ?? []).map((b) => {
     const routes = b.routes as RouteRef | RouteRef[] | null;
     const route = Array.isArray(routes) ? routes[0] : routes;
+    const veh = route?.vehicles as VehRef | VehRef[] | null | undefined;
+    const vehicle = (Array.isArray(veh) ? veh[0] : veh) ?? null;
     return {
       id: b.id as string,
       status: b.status as string,
@@ -192,6 +315,72 @@ export async function listMyBookings(db: SupabaseClient): Promise<BookingRow[]> 
       approved_at: (b.approved_at as string) ?? null,
       expires_at: (b.expires_at as string) ?? null,
       cancel_cause: (b.cancel_cause as string) ?? null,
+      _vehicleId: vehicle?.id ?? null,
+      bus_number: vehicle?.bus_number ?? null,
+      driver_name: vehicle?.driver_name ?? null,
+      driver_phone: vehicle?.driver_phone ?? null,
+      driver_changed: false,
     };
   });
+
+  // Overlay today's substitute driver on the affected buses.
+  const vehicleIds = [...new Set(rows.map((r) => r._vehicleId).filter(Boolean))] as string[];
+  if (vehicleIds.length > 0) {
+    const { data: changes } = await db
+      .from('bus_driver_changes')
+      .select('vehicle_id, driver_name, driver_phone')
+      .in('vehicle_id', vehicleIds)
+      .eq('role', 'DRIVER')
+      .eq('effective_date', todayIST());
+    const byVehicle = new Map((changes ?? []).map((c) => [c.vehicle_id as string, c]));
+    for (const r of rows) {
+      const c = r._vehicleId ? byVehicle.get(r._vehicleId) : undefined;
+      if (c) {
+        r.driver_name = (c.driver_name as string) ?? r.driver_name;
+        r.driver_phone = (c.driver_phone as string) ?? null;
+        r.driver_changed = true;
+      }
+    }
+  }
+  return rows.map(({ _vehicleId, ...r }) => { void _vehicleId; return r; });
+}
+
+// Lightweight helpers for the student home, which only needs a few recent rows
+// and per-status counts — not the full booking history + driver overlay.
+export interface RecentBooking {
+  id: string;
+  status: string;
+  routeName: string;
+  created_at: string;
+}
+export async function listRecentBookings(
+  db: SupabaseClient,
+  limit = 8,
+): Promise<RecentBooking[]> {
+  const { data } = await db
+    .from('bookings')
+    .select('id, status, created_at, routes(name)')
+    // "Recent trips" shows only rides that exist or may happen — never
+    // cancelled or rejected ones.
+    .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data ?? []).map((b) => {
+    const r = b.routes as { name: string } | { name: string }[] | null;
+    const route = Array.isArray(r) ? r[0] : r;
+    return {
+      id: b.id as string,
+      status: b.status as string,
+      created_at: b.created_at as string,
+      routeName: route?.name ?? 'Route',
+    };
+  });
+}
+
+/** Per-status booking counts for the signed-in student (SQL GROUP BY via RPC). */
+export async function myBookingStatusCounts(
+  db: SupabaseClient,
+): Promise<Record<string, number>> {
+  const { data } = await db.rpc('my_booking_status_counts');
+  return (data ?? {}) as Record<string, number>;
 }

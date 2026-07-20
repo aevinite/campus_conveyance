@@ -2,7 +2,7 @@
 import { useRef, useState, useTransition } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Bus, IdCard, Pencil, Phone, User, X } from 'lucide-react';
+import { Bus, IdCard, Pencil, Phone, ShieldCheck, User, X } from 'lucide-react';
 import { updateBusAction, type FormState } from '@/features/agency/actions';
 import { uploadVehiclePhoto, validatePhoto } from '@/features/agency/photo-upload';
 import { BusPhotosField, type PhotoItem } from '@/components/bus-photos-field';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import { FormStatus } from '@/components/form-status';
+import { DriverChangePanel } from './driver-change-panel';
 
 // Editing keeps at least one photo (for the cover); the full 5-photo rule only
 // applies when ADDING a bus, so legacy buses with fewer photos stay editable.
@@ -55,11 +56,16 @@ function EditField({
 
 export function EditableBusCard({
   bus,
-  drivers = [],
+  substituteDrivers = [],
 }: {
   bus: BusFull;
-  drivers?: { id: string; name: string }[];
+  substituteDrivers?: { id: string; name: string; phone: string | null }[];
 }) {
+  // The permanent-driver dropdown = unassigned drivers + this bus's CURRENT one
+  // (kept selectable). We reconstruct the current option from the bus itself
+  // instead of receiving the whole agency roster as a prop on every card.
+  const currentDriver =
+    bus.driver_id ? [{ id: bus.driver_id, name: bus.driver_name ?? bus.driver_email ?? 'Driver' }] : [];
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [state, setState] = useState<FormState>({});
@@ -192,7 +198,48 @@ export function EditableBusCard({
                   <Phone className="size-3.5" /> {bus.driver_phone}
                 </span>
               )}
+              {bus.driver_verified && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                  <ShieldCheck className="size-3" /> Verified
+                </span>
+              )}
             </div>
+            {(bus.driver_license_no ||
+              bus.driver_govt_id ||
+              bus.driver_blood_group ||
+              bus.driver_alt_phone ||
+              bus.driver_dob ||
+              bus.driver_address ||
+              bus.driver_experience_years != null) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-xs text-muted-foreground">
+                {bus.driver_license_no && <span>Licence: {bus.driver_license_no}</span>}
+                {bus.driver_govt_id && <span>ID: {bus.driver_govt_id}</span>}
+                {bus.driver_blood_group && <span>Blood group: {bus.driver_blood_group}</span>}
+                {bus.driver_experience_years != null && <span>{bus.driver_experience_years} yrs experience</span>}
+                {bus.driver_alt_phone && <span>Alt: {bus.driver_alt_phone}</span>}
+                {bus.driver_dob && <span>DOB: {bus.driver_dob}</span>}
+                {bus.driver_address && <span>{bus.driver_address}</span>}
+              </div>
+            )}
+            {bus.conductor_name && (
+              <div className="pt-1.5 text-sm">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Conductor: </span>
+                <span className="font-medium">{bus.conductor_name}</span>
+                {bus.conductor_phone && <span className="text-muted-foreground"> · {bus.conductor_phone}</span>}
+                {bus.conductor_verified && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                    <ShieldCheck className="size-3" /> Verified
+                  </span>
+                )}
+                {(bus.conductor_govt_id || bus.conductor_blood_group || bus.conductor_alt_phone) && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5 text-xs text-muted-foreground">
+                    {bus.conductor_govt_id && <span>ID: {bus.conductor_govt_id}</span>}
+                    {bus.conductor_blood_group && <span>Blood group: {bus.conductor_blood_group}</span>}
+                    {bus.conductor_alt_phone && <span>Alt: {bus.conductor_alt_phone}</span>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
@@ -200,6 +247,26 @@ export function EditableBusCard({
             Edit
           </Button>
         </div>
+        <DriverChangePanel
+          busId={bus.id}
+          role="DRIVER"
+          todayId={bus.today_driver_id}
+          todayName={bus.today_driver_name}
+          todayPhone={bus.today_driver_phone}
+          todayReason={bus.today_driver_reason}
+          regularName={bus.driver_name}
+          drivers={substituteDrivers}
+        />
+        <DriverChangePanel
+          busId={bus.id}
+          role="CONDUCTOR"
+          todayId={bus.today_conductor_id}
+          todayName={bus.today_conductor_name}
+          todayPhone={bus.today_conductor_phone}
+          todayReason={bus.today_conductor_reason}
+          regularName={bus.conductor_name}
+          drivers={substituteDrivers}
+        />
       </div>
     );
   }
@@ -258,14 +325,23 @@ export function EditableBusCard({
             <EditField name="driverName" label="Driver name" required defaultValue={bus.driver_name} />
             <EditField name="driverPhone" label="Driver phone number" type="tel" required defaultValue={bus.driver_phone} />
             <EditField name="driverLicenseNo" label="Driving licence number" required defaultValue={bus.driver_license_no} />
+            <EditField name="driverGovtId" label="Aadhaar / ID card number (optional)" defaultValue={bus.driver_govt_id} />
+            <EditField name="driverAltPhone" label="Alternate / emergency contact (optional)" type="tel" defaultValue={bus.driver_alt_phone} />
             <EditField name="driverExperienceYears" label="Experience (years, optional)" type="number" min={0} defaultValue={bus.driver_experience_years} />
+            <EditField name="driverDob" label="Date of birth (optional)" type="date" defaultValue={bus.driver_dob} />
+            <EditField name="driverBloodGroup" label="Blood group (optional)" defaultValue={bus.driver_blood_group} />
             <EditField name="driverEmail" label="Driver email (optional)" type="email" defaultValue={bus.driver_email} />
+            <EditField name="driverAddress" label="Residential address (optional)" defaultValue={bus.driver_address} />
           </div>
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-input px-3 py-2.5 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <input type="checkbox" name="driverVerified" defaultChecked={bus.driver_verified} className="size-4 accent-primary" />
+            <span>Background / police verification completed for this driver</span>
+          </label>
           <div className="space-y-1.5">
             <Label htmlFor={`driverPhoto-${bus.id}`}>Driver photo (leave empty to keep current)</Label>
             <input ref={driverPhotoRef} id={`driverPhoto-${bus.id}`} name="driverPhoto" type="file" accept="image/*" className={fileCls} />
           </div>
-          {drivers.length > 0 && (
+          {(substituteDrivers.length > 0 || currentDriver.length > 0) && (
             <div className="space-y-1.5">
               <Label htmlFor={`driverId-${bus.id}`}>Driver login account (optional)</Label>
               <SelectMenu
@@ -273,9 +349,12 @@ export function EditableBusCard({
                 name="driverId"
                 defaultValue={bus.driver_id ?? ''}
                 placeholder="Not assigned"
+                // Only UNASSIGNED drivers (+ this bus's current one) — a driver
+                // can be the permanent driver of a single bus, so don't offer one
+                // already driving another. (Server also enforces this.)
                 options={[
                   { value: '', label: 'Not assigned' },
-                  ...drivers.map((dr) => ({ value: dr.id, label: dr.name })),
+                  ...[...substituteDrivers, ...currentDriver].map((dr) => ({ value: dr.id, label: dr.name })),
                 ]}
               />
               <p className="text-xs text-muted-foreground">
@@ -283,6 +362,23 @@ export function EditableBusCard({
               </p>
             </div>
           )}
+        </div>
+
+        <div className="space-y-3 border-t border-border pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Conductor details (optional)</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <EditField name="conductorName" label="Conductor name" defaultValue={bus.conductor_name} />
+            <EditField name="conductorPhone" label="Conductor phone number" type="tel" defaultValue={bus.conductor_phone} />
+            <EditField name="conductorGovtId" label="Aadhaar / ID card number" defaultValue={bus.conductor_govt_id} />
+            <EditField name="conductorAltPhone" label="Alternate / emergency contact" type="tel" defaultValue={bus.conductor_alt_phone} />
+            <EditField name="conductorDob" label="Date of birth" type="date" defaultValue={bus.conductor_dob} />
+            <EditField name="conductorBloodGroup" label="Blood group" defaultValue={bus.conductor_blood_group} />
+            <EditField name="conductorAddress" label="Residential address" defaultValue={bus.conductor_address} />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-input px-3 py-2.5 text-sm transition-colors hover:bg-muted/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+            <input type="checkbox" name="conductorVerified" defaultChecked={bus.conductor_verified} className="size-4 accent-primary" />
+            <span>Background / police verification completed for this conductor</span>
+          </label>
         </div>
 
         <FormStatus error={state.error} message={state.message} />

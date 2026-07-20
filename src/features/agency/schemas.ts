@@ -84,6 +84,22 @@ export const busSchema = z.object({
     (v) => (v === '' || v == null ? undefined : v),
     z.coerce.number().int().min(0).optional(),
   ),
+  // Extra safety/identity details so parents can trust who's driving. All optional.
+  driverGovtId: z.string().optional(), // Aadhaar / government ID card number
+  driverAddress: z.string().optional(),
+  driverAltPhone: z.string().optional(),
+  driverDob: z.union([z.string(), z.literal('')]).optional(), // YYYY-MM-DD
+  driverBloodGroup: z.string().optional(),
+  driverVerified: z.union([z.literal('on'), z.literal('')]).optional(), // checkbox
+  // Conductor — the second bus staff member. Same trust details, no licence.
+  conductorName: z.string().optional(),
+  conductorPhone: z.string().optional(),
+  conductorGovtId: z.string().optional(),
+  conductorAddress: z.string().optional(),
+  conductorAltPhone: z.string().optional(),
+  conductorDob: z.union([z.string(), z.literal('')]).optional(),
+  conductorBloodGroup: z.string().optional(),
+  conductorVerified: z.union([z.literal('on'), z.literal('')]).optional(),
   // Optional: link this bus to a driver login account (from the agency's drivers).
   driverId: z.union([z.string().uuid(), z.literal('')]).optional(),
 });
@@ -110,21 +126,46 @@ export const routeEditSchema = z.object({
   departureTime,
 });
 
+// Substitute driver for a bus for TODAY (regular driver didn't turn up). Must be
+// one of the agency's own registered, unassigned drivers — chosen by id, not typed.
+export const busDriverChangeSchema = z.object({
+  driverId: z.string().uuid('Select a registered driver.'),
+  reason: z.string().optional(),
+  role: z.enum(['DRIVER', 'CONDUCTOR']).default('DRIVER'),
+});
+
+// Full driver KYC/safety profile — shared by create + edit so the roster carries
+// every detail parents/students may want (Aadhaar, address, blood group, …).
+const driverProfileFields = {
+  phone: z.string().optional(),
+  licenseNo: z.string().optional(),
+  aadhaarNo: z.string().optional(),
+  address: z.string().optional(),
+  bloodGroup: z.string().optional(),
+  dob: z.union([z.string(), z.literal('')]).optional(),
+  altPhone: z.string().optional(),
+};
+
 // The agency creates a driver's login account (drivers can't self-register).
+// On creation everything is compulsory EXCEPT date of birth and blood group.
 export const driverSchema = z.object({
   name: z.string().min(2, 'Enter the driver’s name.'),
   email: z.string().email('Enter a valid email for the driver.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
-  phone: z.string().optional(),
-  licenseNo: z.string().optional(),
+  phone: z.string().min(6, 'Enter the driver’s phone number.'),
+  licenseNo: z.string().min(1, 'Enter the driving licence number.'),
+  aadhaarNo: z.string().min(1, 'Enter the Aadhaar / ID card number.'),
+  altPhone: z.string().min(6, 'Enter an alternate / emergency contact number.'),
+  address: z.string().min(1, 'Enter the home address.'),
+  dob: z.union([z.string(), z.literal('')]).optional(),
+  bloodGroup: z.string().optional(),
 });
 
 // Editing a driver. Password is optional (blank = keep current).
 export const driverEditSchema = z.object({
   name: z.string().min(2, 'Enter the driver’s name.'),
   email: z.string().email('Enter a valid email for the driver.'),
-  phone: z.string().optional(),
-  licenseNo: z.string().optional(),
+  ...driverProfileFields,
   password: z.union([z.string().min(8, 'New password must be at least 8 characters.'), z.literal('')]).optional(),
   isActive: z.enum(['true', 'false']),
 });

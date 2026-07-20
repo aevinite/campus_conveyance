@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { reserveSchema, cancelSchema, paySchema, studentDetailsSchema } from './schemas';
 import { reserveSeat, cancelBooking, saveStudentDetails, payBooking } from './services';
+import { sendBookingConfirmedEmail } from './confirmation-email';
 import { toErrorResponse } from '@/lib/errors/app-error';
 
 export type ReserveState = {
@@ -67,6 +68,11 @@ export async function payBookingAction(
   const db = await createClient();
   try {
     const status = await payBooking(db, parsed.data.bookingId);
+    if (status === 'CONFIRMED') {
+      // Booking-confirmed email to the student's signup address — best-effort
+      // (logged inside), the confirmed seat never depends on SMTP.
+      await sendBookingConfirmedEmail(parsed.data.bookingId, parsed.data.method);
+    }
     revalidatePath('/student/bookings');
     revalidatePath('/student');
     // Refresh the route detail page too (its seat count + resume-payment panel

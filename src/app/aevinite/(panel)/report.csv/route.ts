@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     return Response.redirect(new URL('/aevinite/login', request.url), 303);
   }
 
-  const report = await getAdminReport(db);
+  const report = await getAdminReport();
   const rupees = (cents: number) => ((cents || 0) / 100).toFixed(2);
 
   // RFC-4180 escaping: quote fields with comma/quote/newline; double any quotes.

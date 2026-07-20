@@ -5,6 +5,8 @@ import { isAccountDeactivated } from '@/features/auth/account-status';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { UserMenu } from '@/components/user-menu';
+import { NotificationBell } from '@/components/notification-bell';
+import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
 
 export default async function DashboardLayout({
   children,
@@ -21,12 +23,17 @@ export default async function DashboardLayout({
     redirect('/login');
   }
   const role = sessionRole ?? 'STUDENT';
+  const [notifications, unread] = await Promise.all([
+    listNotifications(db),
+    unreadNotificationCount(db),
+  ]);
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="sticky top-0 z-20 border-b border-border bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <Logo href="/student" />
           <div className="flex items-center gap-2.5">
+            <NotificationBell items={notifications} unread={unread} />
             <ThemeToggle />
             <UserMenu name={fullName ?? ''} email={email ?? ''} role={role} />
           </div>

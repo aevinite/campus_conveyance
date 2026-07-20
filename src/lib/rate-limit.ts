@@ -35,13 +35,15 @@ export async function rateLimit(
     const admin = createAdminClient();
     const key = subject.trim().toLowerCase();
     const since = new Date(Date.now() - windowSeconds * 1000).toISOString();
-    // Prune anything older than the window for this key (keeps the table small).
-    await admin.from(TABLE).delete().eq('scope', scope).eq('subject', key).lt('created_at', since);
+    // Count only events inside the window (no per-call prune — the
+    // 'rate-limit-cleanup' cron sweeps stale rows every 15 min, migration 0054).
+    // Dropping the DELETE halves the round-trips on this hot pre-send path.
     const { data, error } = await admin
       .from(TABLE)
       .select('created_at')
       .eq('scope', scope)
       .eq('subject', key)
+      .gte('created_at', since)
       .order('created_at', { ascending: true });
     if (error) return 0; // fail open
     if ((data?.length ?? 0) >= max) {
@@ -69,12 +71,13 @@ export async function otpLockRemaining(email: string): Promise<number> {
     const admin = createAdminClient();
     const key = email.trim().toLowerCase();
     const since = new Date(Date.now() - OTP_WINDOW_SECONDS * 1000).toISOString();
-    await admin.from(TABLE).delete().eq('scope', OTP_SCOPE).eq('subject', key).lt('created_at', since);
+    // Window-filtered count; the cron prunes stale rows (no per-call DELETE).
     const { data, error } = await admin
       .from(TABLE)
       .select('created_at')
       .eq('scope', OTP_SCOPE)
       .eq('subject', key)
+      .gte('created_at', since)
       .order('created_at', { ascending: true });
     if (error) return 0;
     if ((data?.length ?? 0) >= OTP_MAX_FAILURES) {

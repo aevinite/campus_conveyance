@@ -1,14 +1,13 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { notFound, redirect } from 'next/navigation';
-import { Bus, CheckCircle2, Clock3, IdCard, Phone, User } from 'lucide-react';
+import { Bus, CheckCircle2, Clock3, IdCard, Phone, ShieldCheck, User } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import {
   getRouteWithStops,
   getAvailability,
-  getMyActiveBookingForRoute,
-  expireStaleHolds,
+  getMyActiveBooking,
 } from '@/features/booking/repository';
 import { getStudentDetails } from '@/features/booking/services';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -24,6 +23,14 @@ const inr = (cents: number | null) =>
     ? null
     : `₹${Math.round(cents / 100).toLocaleString('en-IN')}`;
 
+// Show only the last 4 digits of a government/ID card number to riders — enough
+// to recognise it's on file without exposing the full sensitive number.
+function maskId(id: string): string {
+  const digits = id.replace(/\s+/g, '');
+  if (digits.length <= 4) return digits;
+  return `•••• ${digits.slice(-4)}`;
+}
+
 export default async function RouteDetailPage({
   params,
 }: {
@@ -33,12 +40,18 @@ export default async function RouteDetailPage({
   const { id } = await params;
   const db = await createClient();
 
-  // Release lapsed unpaid holds first so the seat count below is honest.
-  await expireStaleHolds(db);
+  // Lapsed holds are swept by pg_cron (migration 0052); reserve_seat also expires
+  // them inline, so the seat count here is honest at reservation time.
 
-  const [data, details] = await Promise.all([
+  // One batch: route+stops, the student's details, seat availability, and their
+  // single active booking (one bus at a time — on this route it resumes/reports,
+  // on another it locks booking here). All key only off id/the caller, so fetch
+  // together rather than in two sequential batches.
+  const [data, details, availability, currentBooking] = await Promise.all([
     getRouteWithStops(db, id),
     getStudentDetails(db),
+    getAvailability(db, id),
+    getMyActiveBooking(db),
   ]);
   if (!data) notFound();
 
@@ -50,11 +63,8 @@ export default async function RouteDetailPage({
   if (!detailsComplete) {
     redirect(`/student/details?next=${encodeURIComponent(`/student/routes/${id}`)}`);
   }
-
-  const [availability, activeBooking] = await Promise.all([
-    getAvailability(db, id),
-    getMyActiveBookingForRoute(db, id),
-  ]);
+  const activeBooking = currentBooking?.routeId === id ? currentBooking : null;
+  const otherBooking = currentBooking && currentBooking.routeId !== id ? currentBooking : null;
   const soldOut = availability.available <= 0;
   // A zero-capacity route isn't sold out — it's not bookable at all (a waitlist
   // entry here could never be promoted). Kept distinct from soldOut so the panel
@@ -75,7 +85,9 @@ export default async function RouteDetailPage({
         <div>
         <h1 className="text-2xl font-semibold">{data.route.name}</h1>
         <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
-          {soldOut ? (
+          {notBookable ? (
+            <span className="text-warning">Not accepting bookings</span>
+          ) : soldOut ? (
             <span className="text-warning">Full — {availability.total} seats taken</span>
           ) : (
             <span className="text-success">
@@ -94,10 +106,10 @@ export default async function RouteDetailPage({
       <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
         {/* Left: bus/driver + route map & stops */}
         <div className="space-y-6 lg:col-span-2">
-      {v && (v.bus_number || v.image_url || v.driver_name) && (
+      {v && (v.bus_number || v.image_url || v.driver_name || v.conductor_name || data.conductorChange) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Your bus &amp; driver</CardTitle>
+            <CardTitle className="text-base">Your bus, driver &amp; conductor</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Bus photo gallery */}
@@ -135,13 +147,13 @@ export default async function RouteDetailPage({
                 )}
               </div>
 
-              {/* Driver */}
-              {v.driver_name && (
+              {/* Driver — shows today's substitute if the agency changed it. */}
+              {(v.driver_name || data.driverChange) && (
                 <div className="flex gap-4">
-                  {v.driver_photo_url ? (
+                  {!data.driverChange && v.driver_photo_url ? (
                     <Image
                       src={v.driver_photo_url}
-                      alt={v.driver_name}
+                      alt={v.driver_name ?? 'Driver'}
                       width={192}
                       height={192}
                       unoptimized
@@ -154,17 +166,129 @@ export default async function RouteDetailPage({
                   )}
                   <div className="space-y-1 text-sm">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Driver</p>
-                    <p className="text-base font-medium">{v.driver_name}</p>
-                    {v.driver_phone && (
-                      <p className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <Phone className="size-3.5" /> {v.driver_phone}
-                      </p>
+                    {data.driverChange ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                          <Clock3 className="size-3.5" /> Driver changed for today
+                        </span>
+                        <p className="text-base font-medium">{data.driverChange.name}</p>
+                        {data.driverChange.phone && (
+                          <p className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <Phone className="size-3.5" /> {data.driverChange.phone}
+                          </p>
+                        )}
+                        {data.driverChange.govtId && (
+                          <p className="text-muted-foreground">ID card: {maskId(data.driverChange.govtId)}</p>
+                        )}
+                        {data.driverChange.bloodGroup && (
+                          <p className="text-muted-foreground">Blood group: {data.driverChange.bloodGroup}</p>
+                        )}
+                        {data.driverChange.altPhone && (
+                          <p className="text-muted-foreground">Emergency contact: {data.driverChange.altPhone}</p>
+                        )}
+                        {data.driverChange.reason && (
+                          <p className="text-muted-foreground">{data.driverChange.reason}</p>
+                        )}
+                        {v.driver_name && (
+                          <p className="text-xs text-muted-foreground/80">Regular driver: {v.driver_name}</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-base font-medium">{v.driver_name}</p>
+                          {v.driver_verified && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                              <ShieldCheck className="size-3" /> Verified driver
+                            </span>
+                          )}
+                        </div>
+                        {v.driver_phone && (
+                          <p className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <Phone className="size-3.5" /> {v.driver_phone}
+                          </p>
+                        )}
+                        {v.driver_license_no && (
+                          <p className="text-muted-foreground">Licence: {v.driver_license_no}</p>
+                        )}
+                        {v.driver_govt_id && (
+                          <p className="text-muted-foreground">ID card: {maskId(v.driver_govt_id)}</p>
+                        )}
+                        {v.driver_blood_group && (
+                          <p className="text-muted-foreground">Blood group: {v.driver_blood_group}</p>
+                        )}
+                        {v.driver_experience_years != null && (
+                          <p className="text-muted-foreground">{v.driver_experience_years} yrs experience</p>
+                        )}
+                        {v.driver_alt_phone && (
+                          <p className="text-muted-foreground">Emergency contact: {v.driver_alt_phone}</p>
+                        )}
+                      </>
                     )}
-                    {v.driver_license_no && (
-                      <p className="text-muted-foreground">Licence: {v.driver_license_no}</p>
-                    )}
-                    {v.driver_experience_years != null && (
-                      <p className="text-muted-foreground">{v.driver_experience_years} yrs experience</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Conductor — shows today's substitute if the agency changed it. */}
+              {(v.conductor_name || data.conductorChange) && (
+                <div className="flex gap-4">
+                  <span className="grid size-24 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground sm:size-28">
+                    <User className="size-10" />
+                  </span>
+                  <div className="space-y-1 text-sm">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Conductor</p>
+                    {data.conductorChange ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                          <Clock3 className="size-3" /> Conductor changed for today
+                        </span>
+                        <p className="text-base font-medium">{data.conductorChange.name}</p>
+                        {data.conductorChange.phone && (
+                          <p className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <Phone className="size-3.5" /> {data.conductorChange.phone}
+                          </p>
+                        )}
+                        {data.conductorChange.govtId && (
+                          <p className="text-muted-foreground">ID card: {maskId(data.conductorChange.govtId)}</p>
+                        )}
+                        {data.conductorChange.bloodGroup && (
+                          <p className="text-muted-foreground">Blood group: {data.conductorChange.bloodGroup}</p>
+                        )}
+                        {data.conductorChange.altPhone && (
+                          <p className="text-muted-foreground">Emergency contact: {data.conductorChange.altPhone}</p>
+                        )}
+                        {data.conductorChange.reason && (
+                          <p className="text-muted-foreground">{data.conductorChange.reason}</p>
+                        )}
+                        {v.conductor_name && (
+                          <p className="text-xs text-muted-foreground/80">Regular conductor: {v.conductor_name}</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-base font-medium">{v.conductor_name}</p>
+                          {v.conductor_verified && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                              <ShieldCheck className="size-3" /> Verified
+                            </span>
+                          )}
+                        </div>
+                        {v.conductor_phone && (
+                          <p className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            <Phone className="size-3.5" /> {v.conductor_phone}
+                          </p>
+                        )}
+                        {v.conductor_govt_id && (
+                          <p className="text-muted-foreground">ID card: {maskId(v.conductor_govt_id)}</p>
+                        )}
+                        {v.conductor_blood_group && (
+                          <p className="text-muted-foreground">Blood group: {v.conductor_blood_group}</p>
+                        )}
+                        {v.conductor_alt_phone && (
+                          <p className="text-muted-foreground">Emergency contact: {v.conductor_alt_phone}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -189,6 +313,10 @@ export default async function RouteDetailPage({
                 description: s.description,
                 address: s.address,
               }))}
+              // Live tracking only for a student who actually has a seat on this
+              // route (PENDING hold or CONFIRMED) — a WAITLISTED rider has no seat
+              // and isn't on the bus, so they don't get the live map.
+              liveRouteId={activeBooking && activeBooking.status !== 'WAITLISTED' ? id : undefined}
             />
           )}
           {data.stops.length === 0 ? (
@@ -264,6 +392,7 @@ export default async function RouteDetailPage({
                         }).format(new Date(activeBooking.expires_at))
                       : null
                   }
+                  payByIso={activeBooking.expires_at}
                 />
               ) : activeBooking &&
                 activeBooking.status === 'PENDING' &&
@@ -290,9 +419,33 @@ export default async function RouteDetailPage({
                   <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-2.5 text-sm">
                     <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
                     <span>
-                      You already have an active booking on this route
-                      {activeBooking.status === 'WAITLISTED' ? ' (waitlisted)' : ''} — each
-                      student can hold one seat per route.
+                      This is your active booking
+                      {activeBooking.status === 'WAITLISTED' ? ' (waitlisted)' : ''} — you can
+                      book one bus at a time.
+                    </span>
+                  </div>
+                  <Link
+                    href="/student/bookings"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
+                  >
+                    Manage it in My bookings →
+                  </Link>
+                </div>
+              ) : otherBooking ? (
+                // The one-bus-at-a-time rule: an active booking on ANOTHER
+                // route locks booking here (browsing is always allowed).
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
+                    <Clock3 className="mt-0.5 size-4 shrink-0 text-warning" />
+                    <span>
+                      You already have an active booking
+                      {otherBooking.routeName ? (
+                        <>
+                          {' '}on <b>{otherBooking.routeName}</b>
+                        </>
+                      ) : null}
+                      {' '}— you can book only one bus at a time. Cancel it or wait
+                      until it ends to book this one.
                     </span>
                   </div>
                   <Link

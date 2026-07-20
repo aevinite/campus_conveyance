@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
+import { ParentAccessCard } from './parent-access-card';
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'long' }) : '—';
@@ -113,6 +114,20 @@ export default async function StudentProfilePage() {
               </div>
             ))}
           </dl>
+        </CardContent>
+      </Card>
+
+      {/* Parent access */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Parent access</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Let a parent follow your trips by linking their account with a
+            one-time code.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <ParentAccessCard />
         </CardContent>
       </Card>
 

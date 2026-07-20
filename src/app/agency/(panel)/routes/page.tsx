@@ -1,14 +1,31 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { getMyAgency, listMyRoutesFull } from '@/features/agency/repository';
+import { getMyAgency, listMyRoutesFull, countMyRoutesFull } from '@/features/agency/repository';
 import { buttonVariants } from '@/components/ui/button';
+import { Pager, pageParams } from '@/components/pager';
 import { EditableRouteCard } from './editable-route-card';
 
-export default async function AgencyRoutesPage() {
+const PAGE_SIZE = 10;
+
+export default async function AgencyRoutesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
   const agency = await getMyAgency(db);
-  const routes = agency ? await listMyRoutesFull(db, agency.id) : [];
+  const [routes, total] = agency
+    ? await Promise.all([
+        listMyRoutesFull(db, agency.id, { limit: PAGE_SIZE, offset }),
+        countMyRoutesFull(db, agency.id),
+      ])
+    : [[], 0];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/agency/routes?page=${totalPages}`);
 
   return (
     <section className="space-y-5">
@@ -34,6 +51,7 @@ export default async function AgencyRoutesPage() {
           {routes.map((r) => (
             <EditableRouteCard key={r.id} route={r} />
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/agency/routes" />
         </div>
       )}
     </section>

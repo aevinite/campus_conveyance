@@ -30,11 +30,15 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function AgencyAccountPage() {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
+  // getUser() and the agency profile are independent — read them in parallel
+  // rather than one after the other.
+  const [
+    {
+      data: { user },
+    },
+    agency,
+  ] = await Promise.all([db.auth.getUser(), getMyAgencyProfile(db)]);
 
-  const agency = await getMyAgencyProfile(db);
   const [profileRes, services, requests, institutions] = await Promise.all([
     user
       ? db.from('profiles').select('full_name, phone, created_at, updated_at').eq('id', user.id).single()

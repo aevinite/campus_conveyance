@@ -1,10 +1,14 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
-import { listMyBookings, expireStaleHolds, type BookingRow } from '@/features/booking/repository';
+import { listMyBookings, countMyBookings, type BookingRow } from '@/features/booking/repository';
 import { Card, CardContent } from '@/components/ui/card';
+import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
+
+const PAGE_SIZE = 10;
 
 // IST — the payment deadline is rendered server-side; without an explicit zone
 // it would show the server's timezone (UTC on most hosts), off by 5.5 hours.
@@ -142,12 +146,24 @@ function statusPill(b: BookingRow) {
   );
 }
 
-export default async function BookingsPage() {
+export default async function BookingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireRole('STUDENT');
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
-  // Sweep lapsed payment windows first so this list never shows a dead hold.
-  await expireStaleHolds(db);
-  const bookings = await listMyBookings(db);
+  // Lapsed holds are swept by the pg_cron 'expire-stale-holds' job (migration
+  // 0052), not per request, so this page no longer issues a table UPDATE on load.
+  // Paginated so the timeline doesn't fetch the student's entire history at once.
+  const [bookings, total] = await Promise.all([
+    listMyBookings(db, { limit: PAGE_SIZE, offset }),
+    countMyBookings(db),
+  ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/student/bookings?page=${totalPages}`);
 
   return (
     <section className="max-w-2xl space-y-4">
@@ -163,8 +179,13 @@ export default async function BookingsPage() {
         <div className="space-y-3">
           {bookings.map((b) => {
             const steps = timelineFor(b);
+            // Holds now expire via pg_cron, not per request, so between lapse and
+            // the next sweep a booking can still read PENDING+approved+unpaid.
+            // Treat a passed expires_at as expired here so we don't show a live
+            // "Pay now" button that would just fail.
+            const windowOpen = !b.expires_at || new Date(b.expires_at).getTime() > Date.now();
             const payNow =
-              b.status === 'PENDING' && b.approved_at && !b.is_paid && b.routeId;
+              b.status === 'PENDING' && b.approved_at && !b.is_paid && b.routeId && windowOpen;
             return (
               <Card key={b.id}>
                 <CardContent className="space-y-4 py-4">
@@ -184,6 +205,21 @@ export default async function BookingsPage() {
                       <CancelBookingButton bookingId={b.id} paid={b.is_paid} />
                     )}
                   </div>
+
+                  {(b.status === 'CONFIRMED' || b.status === 'PENDING') && b.driver_name && (
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                      {b.bus_number && <span>Bus {b.bus_number}</span>}
+                      <span>
+                        Driver: {b.driver_name}
+                        {b.driver_phone ? ` (${b.driver_phone})` : ''}
+                      </span>
+                      {b.driver_changed && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                          Driver changed for today
+                        </span>
+                      )}
+                    </p>
+                  )}
 
                   {/* Lifecycle timeline */}
                   <ol className="space-y-0 text-sm">
@@ -219,6 +255,7 @@ export default async function BookingsPage() {
               </Card>
             );
           })}
+          <Pager page={page} totalPages={totalPages} basePath="/student/bookings" />
         </div>
       )}
     </section>

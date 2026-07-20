@@ -24,7 +24,7 @@ export default async function DriverBusesPage() {
       ) : (
         <div className="space-y-4">
           {buses.map((b) => (
-            <Card key={b.vehicle_id}>
+            <Card key={`${b.vehicle_id}:${b.route_id ?? 'none'}`}>
               <CardContent className="flex flex-wrap gap-4 py-5">
                 {b.image_url ? (
                   <Image

@@ -1,17 +1,27 @@
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { listColleges } from '@/features/admin/repository';
+import { listColleges, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { deleteCollegeAction, toggleCollegeAction } from '@/features/admin/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { SubmitButton } from '@/components/submit-button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { Pager, pageParams } from '@/components/pager';
 import { cn } from '@/lib/utils';
 
-export default async function ManageCollegePage() {
+export default async function ManageCollegePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const colleges = await listColleges(db);
+  const { rows: colleges, total } = await listColleges(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/colleges?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -87,6 +97,7 @@ export default async function ManageCollegePage() {
           ))}
         </div>
       )}
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/colleges" />
     </section>
   );
 }

@@ -46,8 +46,10 @@ export async function submitContactAction(input: {
 
   try {
     await sendContactInquiryEmail({ name, email, phone, organization, message });
-  } catch {
-    // Best-effort: the inquiry is already saved for the admin.
+  } catch (e) {
+    // Best-effort: the inquiry is already saved for the admin — but log the
+    // mail failure, otherwise a misconfigured CONTACT_INBOX/SMTP is invisible.
+    console.error('Contact inquiry email failed to send:', e);
   }
   return { ok: true };
 }

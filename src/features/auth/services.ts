@@ -1,22 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { RegisterInput, LoginInput } from './schemas';
+import type { LoginInput } from './schemas';
 import { AuthError } from '@/lib/errors/app-error';
-
-export async function registerUser(
-  db: SupabaseClient,
-  input: RegisterInput,
-  redirectTo: string,
-) {
-  const { error } = await db.auth.signUp({
-    email: input.email,
-    password: input.password,
-    options: {
-      emailRedirectTo: redirectTo,
-      data: { full_name: input.fullName, role: input.role },
-    },
-  });
-  if (error) throw new AuthError(error.message);
-}
 
 export async function loginUser(db: SupabaseClient, input: LoginInput) {
   const { error } = await db.auth.signInWithPassword(input);
@@ -36,18 +20,23 @@ export async function isEmailTakenByActiveAccount(
   admin: SupabaseClient,
   email: string,
 ): Promise<boolean> {
-  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const existing = data?.users.find(
-    (u) => (u.email ?? '').toLowerCase() === email.toLowerCase(),
-  );
-  if (!existing) return false;
-  if (!existing.email_confirmed_at) return false; // never-confirmed leftover → not a live account
+  const clean = email.trim();
+  // Look the email up DIRECTLY on profiles via the indexed generated lower(email)
+  // column (migration 0060) instead of enumerating auth users —
+  // listUsers({perPage:1000}) only reads page 1, so past 1000 users this check
+  // went blind and let duplicate signups through. Equality on email_lower is an
+  // index probe, not the old case-insensitive ilike seq scan.
   const { data: profile } = await admin
     .from('profiles')
-    .select('is_deleted')
-    .eq('id', existing.id)
+    .select('id, is_deleted')
+    .eq('email_lower', clean.toLowerCase())
+    .limit(1)
     .maybeSingle();
-  if ((profile as { is_deleted?: boolean } | null)?.is_deleted === true) return false; // soft-deleted → not live
+  if (!profile) return false; // no account holds this email
+  if ((profile as { is_deleted?: boolean }).is_deleted === true) return false; // soft-deleted → not live
+  // Confirmed? profiles.id === auth.users.id (FK, on delete cascade).
+  const { data: userRes } = await admin.auth.admin.getUserById((profile as { id: string }).id);
+  if (!userRes?.user?.email_confirmed_at) return false; // never-confirmed leftover → not live
   return true; // confirmed and not deleted → genuinely taken
 }
 
@@ -67,35 +56,36 @@ export async function ensureEmailFreeForSignup(
   admin: SupabaseClient,
   email: string,
 ): Promise<{ error?: string }> {
-  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const existing = data?.users.find(
-    (u) => (u.email ?? '').toLowerCase() === email.toLowerCase(),
-  );
-  if (!existing) return {};
-
-  // Is the matching account still active, or was it "deleted"? The admin panels
-  // soft-delete via profiles.is_deleted rather than removing the auth user, so
-  // check that flag before deciding the email is genuinely taken.
+  const clean = email.trim();
+  // Direct indexed lookup on profiles.email_lower (see isEmailTakenByActiveAccount)
+  // — not a paged enumeration that goes blind past 1000 auth users (which silently
+  // broke re-signup) and not a case-insensitive ilike seq scan.
   const { data: profile } = await admin
     .from('profiles')
-    .select('is_deleted')
-    .eq('id', existing.id)
+    .select('id, is_deleted')
+    .eq('email_lower', clean.toLowerCase())
+    .limit(1)
     .maybeSingle();
-  const softDeleted = profile?.is_deleted === true;
 
-  if (existing.email_confirmed_at && !softDeleted) {
-    return { error: 'This email is already registered. Please sign in instead.' };
+  if (profile) {
+    const id = (profile as { id: string }).id;
+    const softDeleted = (profile as { is_deleted?: boolean }).is_deleted === true;
+    const { data: userRes } = await admin.auth.admin.getUserById(id);
+    const confirmed = Boolean(userRes?.user?.email_confirmed_at);
+    if (confirmed && !softDeleted) {
+      return { error: 'This email is already registered. Please sign in instead.' };
+    }
+    // Never-confirmed leftover OR a soft-deleted account → remove the auth user
+    // (cascades to its profile) so the email is available again.
+    await admin.auth.admin.deleteUser(id);
   }
 
-  // Never-confirmed leftover OR a soft-deleted account → remove the auth user
-  // (cascades to its profile) so the email is available again. Also drop any
-  // orphaned agency row that was detached (owner set to null) by a prior delete,
+  // Drop any orphaned agency row detached (owner set to null) by a prior delete,
   // so an AGENCY re-signup doesn't leave a duplicate PENDING row behind.
-  await admin.auth.admin.deleteUser(existing.id);
   await admin
     .from('agencies')
     .delete()
-    .ilike('email', email)
+    .eq('email_lower', clean.toLowerCase()) // indexed generated column (migration 0063)
     .is('owner_profile_id', null);
   return {};
 }

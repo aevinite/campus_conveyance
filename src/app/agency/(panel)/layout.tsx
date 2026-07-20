@@ -16,6 +16,7 @@ const ITEMS: SidebarItem[] = [
   { label: 'Add Route', href: '/agency/add-route', icon: 'MapPlus' },
   { label: 'Manage Routes', href: '/agency/routes', icon: 'Route' },
   { label: 'Manage Drivers', href: '/agency/drivers', icon: 'IdCard' },
+  { label: 'Deleted Drivers', href: '/agency/deleted-drivers', icon: 'Trash2' },
   { label: 'Profile', href: '/agency/account', icon: 'UserCircle' },
   { label: 'Settings', href: '/agency/settings', icon: 'Settings' },
 ];

@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import type { Stop } from '@/features/booking/repository';
+import { PaymentCountdown } from './payment-countdown';
 
 // The auto-approval runs server-side inside reserve_seat (seat availability,
 // pickup validity and campus eligibility are all checked there). This is the
@@ -80,6 +81,7 @@ export function ReserveForm({
   resumeBookingId,
   resumePickupName,
   payBy,
+  payByIso,
 }: {
   routeId: string;
   routeName: string;
@@ -93,8 +95,17 @@ export function ReserveForm({
    *  here) so the confirmation receipt can still show the Pickup line. */
   resumePickupName?: string | null;
   payBy?: string | null;
+  /** ISO payment deadline for a resumed booking, for the live countdown. */
+  payByIso?: string | null;
 }) {
-  const [phase, setPhase] = useState<Phase>(resumeBookingId ? 'payment' : 'reserve');
+  // Pre-guard the resume-payment panel: if the window already lapsed at render,
+  // open straight on 'expired' rather than briefly showing pay buttons that the
+  // server would reject (the countdown would flip it a second later anyway).
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (!resumeBookingId) return 'reserve';
+    if (payByIso && new Date(payByIso).getTime() <= Date.now()) return 'expired';
+    return 'payment';
+  });
   const [bookingId, setBookingId] = useState(resumeBookingId ?? '');
   const [payByAt, setPayByAt] = useState<string | null>(null); // ISO deadline from reserve
   const [busy, setBusy] = useState(false); // reserve in-flight
@@ -113,6 +124,9 @@ export function ReserveForm({
   }, [phase]);
 
   const payByLabel = fmtIST(payByAt) ?? payBy ?? null;
+  // ISO deadline for the live countdown: from a fresh reserve, else the resumed
+  // booking's deadline passed by the server.
+  const deadlineIso = payByAt ?? payByIso ?? null;
   // Fall back to the resumed booking's pickup (pickupId is empty on resume).
   const pickupName = stops.find((s) => s.id === pickupId)?.name ?? resumePickupName ?? null;
   const methodLabel = METHODS.find((m) => m.value === method)?.label ?? null;
@@ -207,6 +221,7 @@ export function ReserveForm({
           Pay {payByLabel ? `before ${payByLabel}` : 'within 20 minutes'} to confirm your seat —
           unpaid bookings are released after the window.
         </p>
+        <PaymentCountdown expiresAt={deadlineIso} onExpire={() => setPhase('expired')} />
 
         {/* Big, prominent amount */}
         <div className="mt-5 rounded-2xl border border-primary/30 bg-primary/[0.06] p-6 text-center">
@@ -390,6 +405,9 @@ export function ReserveForm({
             your seat.
           </p>
         </div>
+        {/* Countdown here too, so it keeps ticking when the payment modal is
+            dismissed and flips the panel to 'expired' on its own. */}
+        <PaymentCountdown expiresAt={deadlineIso} onExpire={() => setPhase('expired')} />
         <Button className="w-full" onClick={() => setPayDismissed(false)}>
           Pay now
         </Button>

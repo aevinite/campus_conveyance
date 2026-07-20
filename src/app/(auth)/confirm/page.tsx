@@ -55,6 +55,15 @@ export default function ConfirmPage() {
         const role =
           roleFromClaims(session.user.app_metadata) ??
           roleFromClaims(session.user.user_metadata);
+        // A freshly-confirmed agency is still PENDING admin approval — the
+        // signup flow parks them on /agency/login?pending=1, so match that
+        // instead of dropping them into the panel. Tear the session down first
+        // so they aren't stranded logged-in on a login page.
+        if (role === 'AGENCY') {
+          await supabase.auth.signOut();
+          window.location.replace('/agency/login?pending=1');
+          return;
+        }
         // Full navigation (not router.push) so the server re-reads the auth
         // cookies just written and renders the protected dashboard.
         window.location.replace(dashboardFor(role));

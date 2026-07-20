@@ -24,6 +24,9 @@ export interface ChildBookingRow {
   bus_number: string | null;
   driver_name: string | null;
   driver_phone: string | null;
+  /** True when today's driver is a substitute (the agency changed it). */
+  driver_changed: boolean;
+  route_id: string | null;
 }
 
 /** The signed-in parent's linked children (via security-definer RPC). */

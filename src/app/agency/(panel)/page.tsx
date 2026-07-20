@@ -10,7 +10,7 @@ export default async function AgencyDashboard() {
   const db = await createClient();
   const agency = await getMyAgency(db);
   const report = agency
-    ? await getAgencyReport(db, agency.id)
+    ? await getAgencyReport(agency.id)
     : {
         counts: { services: 0, buses: 0, routes: 0, pending: 0 },
         fleet: { buses: 0, vans: 0 },
@@ -28,7 +28,7 @@ export default async function AgencyDashboard() {
     );
 
   const cards = [
-    { label: 'Buses', value: counts.buses, href: '/agency/buses' },
+    { label: 'Buses & vans', value: counts.buses, href: '/agency/buses' },
     { label: 'Routes', value: counts.routes, href: '/agency/routes' },
     { label: 'Active students', value: studentsCount, href: '/agency/students' },
     { label: 'Pending bookings', value: counts.pending, href: '/agency/bookings' },

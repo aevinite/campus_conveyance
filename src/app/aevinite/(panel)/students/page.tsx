@@ -1,12 +1,22 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listStudents } from '@/features/admin/repository';
+import { listStudents, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { deleteStudentAction } from '@/features/admin/actions';
 import { DataTable } from '@/components/data-table';
 import { ConfirmSubmit } from '@/components/confirm-submit';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AdminStudentsPage() {
+export default async function AdminStudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const students = await listStudents(db);
+  const { rows: students, total } = await listStudents(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/students?page=${totalPages}`);
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Manage Students</h1>
@@ -29,6 +39,7 @@ export default async function AdminStudentsPage() {
         ])}
         empty="No students."
       />
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/students" />
     </section>
   );
 }

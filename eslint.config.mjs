@@ -24,6 +24,10 @@ const eslintConfig = defineConfig([
       // These are not runtime bugs; disable until/unless we adopt the compiler.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
+      // Same family: `purity` flags impure calls in render (e.g. Date.now()),
+      // which async SERVER components legitimately do — reading the clock in a
+      // server render is correct, not a compiler hazard.
+      "react-hooks/purity": "off",
     },
   },
 ]);

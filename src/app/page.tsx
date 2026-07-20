@@ -61,8 +61,8 @@ const roles = [
 ];
 
 // Live stats band — values come from the database via /api/public-stats and
-// refresh automatically (poll + on tab focus), so a newly-added provider,
-// user, or institution is reflected without a manual reload.
+// refresh on a 2-minute poll, so a newly-added provider, user, or institution
+// is reflected without a manual reload.
 type StatKey = 'providers' | 'users' | 'colleges' | 'schools';
 const STAT_ITEMS: { key: StatKey; label: string }[] = [
   { key: 'providers', label: 'Service providers' },
@@ -167,13 +167,16 @@ export default function Home() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Live database counts for the stats band: fetch on mount, poll every 20s,
-  // and refetch whenever the tab regains focus so the numbers stay current.
+  // Database counts for the stats band. The endpoint is cached 60s (browser +
+  // server via Cache-Control/revalidate), so we DON'T force `no-store` — the
+  // poll is mostly served from the browser cache. A single 2-minute poll is
+  // plenty for a marketing band; there's no separate focus/visibility refetch
+  // because it would just re-read the same cached response (redundant).
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const res = await fetch('/api/public-stats', { cache: 'no-store' });
+        const res = await fetch('/api/public-stats');
         if (!res.ok) return;
         const data = (await res.json()) as Record<StatKey, number>;
         if (active) setCounts(data);
@@ -182,17 +185,10 @@ export default function Home() {
       }
     };
     load();
-    const interval = setInterval(load, 20000);
-    const onFocus = () => {
-      if (document.visibilityState === 'visible') load();
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
+    const interval = setInterval(load, 120000);
     return () => {
       active = false;
       clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
     };
   }, []);
 

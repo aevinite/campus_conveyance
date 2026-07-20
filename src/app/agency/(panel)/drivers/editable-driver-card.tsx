@@ -2,7 +2,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IdCard, Mail, Pencil, Phone, User, X } from 'lucide-react';
-import { updateDriverAction, type FormState } from '@/features/agency/actions';
+import { updateDriverAction, softDeleteDriverAction, type FormState } from '@/features/agency/actions';
 import type { DriverRow } from '@/features/agency/repository';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { PasswordInput } from '@/components/auth/password-input';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import { FormStatus } from '@/components/form-status';
+import { ConfirmDeleteButton } from './confirm-delete-button';
 
 function EditField({
   name,
@@ -83,11 +84,35 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
                 <IdCard className="size-3.5" /> {driver.license_no || 'No licence'}
               </span>
             </div>
+            {(driver.aadhaar_no ||
+              driver.blood_group ||
+              driver.alt_phone ||
+              driver.dob ||
+              driver.address) && (
+              <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-0.5 text-xs text-muted-foreground">
+                {driver.aadhaar_no && <span>ID: {driver.aadhaar_no}</span>}
+                {driver.blood_group && <span>Blood group: {driver.blood_group}</span>}
+                {driver.alt_phone && <span>Alt: {driver.alt_phone}</span>}
+                {driver.dob && <span>DOB: {driver.dob}</span>}
+                {driver.address && <span>{driver.address}</span>}
+              </div>
+            )}
           </div>
         </div>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
-          <Pencil className="size-3.5" /> Edit
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+            <Pencil className="size-3.5" /> Edit
+          </Button>
+          <ConfirmDeleteButton
+            action={softDeleteDriverAction}
+            driverId={driver.driver_id}
+            trigger="Delete"
+            title="Delete this driver?"
+            message={`${driver.name || 'This driver'} will move to Deleted Drivers and be unassigned from any bus. You can restore them later.`}
+            confirmLabel="Delete driver"
+            pendingText="Deleting…"
+          />
+        </div>
       </div>
     );
   }
@@ -107,6 +132,11 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
           <EditField name="phone" label="Phone" type="tel" defaultValue={driver.phone} />
           <EditField name="email" label="Login email" type="email" required defaultValue={driver.email} />
           <EditField name="licenseNo" label="Licence number" defaultValue={driver.license_no} />
+          <EditField name="aadhaarNo" label="Aadhaar / ID card number" defaultValue={driver.aadhaar_no} />
+          <EditField name="altPhone" label="Alternate / emergency contact" type="tel" defaultValue={driver.alt_phone} />
+          <EditField name="dob" label="Date of birth" type="date" defaultValue={driver.dob} />
+          <EditField name="bloodGroup" label="Blood group" defaultValue={driver.blood_group} />
+          <EditField name="address" label="Home address" defaultValue={driver.address} />
           <div className="space-y-1.5">
             <Label htmlFor={`pw-${driver.driver_id}`}>New password (optional)</Label>
             <PasswordInput id={`pw-${driver.driver_id}`} name="password" minLength={8} autoComplete="new-password" />

@@ -8,9 +8,11 @@ import { Armchair } from 'lucide-react';
  */
 export function SeatMap({ total, reserved }: { total: number; reserved: number }) {
   if (total <= 0) return null;
-  const seats = Math.min(total, 120); // sanity cap at 120 (buses max out at 100 seats)
+  const seats = Math.min(total, 120); // GRID sanity cap (buses max out at 100 seats)
   const booked = Math.min(Math.max(reserved, 0), seats);
-  const available = seats - booked;
+  // The label reports the TRUE totals (matching the page header) even if the
+  // decorative grid is capped — so the two counts never disagree.
+  const trueAvailable = Math.max(total - Math.max(reserved, 0), 0);
 
   // Chunk into rows of 4 (2 left + aisle + 2 right); the back row keeps the
   // remainder, mimicking a real bus.
@@ -41,8 +43,8 @@ export function SeatMap({ total, reserved }: { total: number; reserved: number }
       <div className="flex items-center justify-between text-sm">
         <p className="font-medium">
           Seats{' '}
-          <span className={available > 0 ? 'text-success' : 'text-warning'}>
-            — {available} of {seats} left
+          <span className={trueAvailable > 0 ? 'text-success' : 'text-warning'}>
+            — {trueAvailable} of {total} left
           </span>
         </p>
       </div>

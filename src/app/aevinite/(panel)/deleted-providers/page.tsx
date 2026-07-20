@@ -1,13 +1,23 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listDeletedAgencies } from '@/features/admin/repository';
+import { listDeletedAgencies, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { restoreAgencyAction, permanentlyDeleteAgencyAction } from '@/features/admin/actions';
 import { DataTable } from '@/components/data-table';
 import { SubmitButton } from '@/components/submit-button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AdminDeletedProvidersPage() {
+export default async function AdminDeletedProvidersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
-  const agencies = await listDeletedAgencies(db);
+  const { rows: agencies, total } = await listDeletedAgencies(db, { limit: ADMIN_PAGE_SIZE, offset });
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/deleted-providers?page=${totalPages}`);
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-semibold">Deleted Service Providers</h1>
@@ -37,6 +47,7 @@ export default async function AdminDeletedProvidersPage() {
         ])}
         empty="No deleted service providers."
       />
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/deleted-providers" />
     </section>
   );
 }

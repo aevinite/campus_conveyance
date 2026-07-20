@@ -11,13 +11,92 @@ export interface Institution {
   image_url: string | null;
   is_verified: boolean;
 }
+/** Full active list — used by the agency service-area picker (a one-off form,
+ *  not the student catalog). The student catalog uses searchInstitutions. */
 export async function listInstitutions(db: SupabaseClient): Promise<Institution[]> {
   const { data, error } = await db
     .from('institutions')
     .select('id, name, kind, description, image_url, is_verified')
     .eq('is_active', true)
+    .eq('is_deleted', false)
     .order('name');
   if (error) throw error;
+  return (data ?? []) as Institution[];
+}
+
+export type KindFilter = Kind | 'ALL';
+export interface InstitutionQuery {
+  query?: string;
+  kind?: KindFilter;
+  sort?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/** The student catalog: filtered + sorted + paginated in the DB, so the browser
+ *  gets one page instead of every campus (payload/work no longer ∝ campus count). */
+export async function searchInstitutions(
+  db: SupabaseClient,
+  opts: InstitutionQuery,
+): Promise<Institution[]> {
+  let q = db
+    .from('institutions')
+    .select('id, name, kind, description, image_url, is_verified')
+    .eq('is_active', true)
+    .eq('is_deleted', false);
+  if (opts.kind && opts.kind !== 'ALL') q = q.eq('kind', opts.kind);
+  const search = opts.query?.trim();
+  if (search) q = q.ilike('name', `%${search}%`);
+  q = q.order('name', { ascending: opts.sort !== 'desc' });
+  if (opts.limit != null) {
+    const off = opts.offset ?? 0;
+    q = q.range(off, off + opts.limit - 1);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as Institution[];
+}
+
+/** Total institutions matching the same filters — for the catalog pager. */
+export async function countInstitutions(
+  db: SupabaseClient,
+  opts: Pick<InstitutionQuery, 'query' | 'kind'>,
+): Promise<number> {
+  let q = db
+    .from('institutions')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .eq('is_deleted', false);
+  if (opts.kind && opts.kind !== 'ALL') q = q.eq('kind', opts.kind);
+  const search = opts.query?.trim();
+  if (search) q = q.ilike('name', `%${search}%`);
+  const { count } = await q;
+  return count ?? 0;
+}
+
+/** Active school/college counts (head counts — no full list load). */
+export async function institutionKindCounts(
+  db: SupabaseClient,
+): Promise<{ schools: number; colleges: number }> {
+  const [schools, colleges] = await Promise.all([
+    db.from('institutions').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('is_deleted', false).eq('kind', 'SCHOOL'),
+    db.from('institutions').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('is_deleted', false).eq('kind', 'COLLEGE'),
+  ]);
+  return { schools: schools.count ?? 0, colleges: colleges.count ?? 0 };
+}
+
+/** A few institutions for the home "Explore campuses" strip — not the full list. */
+export async function listFeaturedInstitutions(
+  db: SupabaseClient,
+  limit = 3,
+): Promise<Institution[]> {
+  const { data } = await db
+    .from('institutions')
+    .select('id, name, kind, description, image_url, is_verified')
+    .eq('is_active', true)
+    .eq('is_deleted', false)
+    .order('name')
+    .limit(limit);
   return (data ?? []) as Institution[];
 }
 
@@ -32,6 +111,7 @@ export async function getInstitution(
     .select('id, name, kind, description, image_url, is_verified')
     .eq('id', id)
     .eq('is_active', true)
+    .eq('is_deleted', false)
     .maybeSingle();
   return (data as Institution) ?? null;
 }
@@ -55,51 +135,61 @@ export interface CampusRoute {
  * both vehicle types — the single list the student picks a ride from (replaces
  * the old type-tab → agency → route drill-down).
  */
+export interface CampusRouteQuery {
+  query?: string;
+  vehicleType?: VehicleType;
+  limit?: number;
+  offset?: number;
+}
+
 export async function listInstitutionRoutes(
   db: SupabaseClient,
   institutionId: string,
+  opts: CampusRouteQuery = {},
 ): Promise<CampusRoute[]> {
-  const { data, error } = await db
-    .from('routes')
-    .select(
-      `id, name, vehicle_type, price_cents, departure_time,
-       agencies(name, status, is_deleted),
-       vehicles(bus_number, is_ac),
-       route_assignments(seat_allocations(total_seats, reserved_seats))`,
-    )
-    .eq('institution_id', institutionId)
-    .eq('is_active', true)
-    .order('departure_time', { ascending: true, nullsFirst: false });
+  // The agency-visibility filter, seat roll-up, name/agency search, vehicle-type
+  // filter and pagination all happen in SQL (migrations 0062/0068), so the campus
+  // page fetches ONE page server-side — no fetch-everything-then-filter-in-JS.
+  const { data, error } = await db.rpc('institution_routes', {
+    p_institution_id: institutionId,
+    p_query: opts.query?.trim() || null,
+    p_vehicle_type: opts.vehicleType ?? null,
+    p_limit: opts.limit ?? null,
+    p_offset: opts.offset ?? 0,
+  });
   if (error) throw error;
-
-  type AgencyRef = { name: string; status: string; is_deleted: boolean };
-  type VehicleRef = { bus_number: string | null; is_ac: boolean | null };
-  type AssignRef = {
-    seat_allocations: { total_seats: number; reserved_seats: number }[] | null;
+  type Row = {
+    id: string; name: string; vehicle_type: string | null;
+    agency_name: string | null; bus_number: string | null; is_ac: boolean | null;
+    departure_time: string | null; price_cents: number | null;
+    total: number | null; available: number | null;
   };
-  const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    vehicleType: (r.vehicle_type as VehicleType) ?? 'BUS',
+    agencyName: r.agency_name ?? null,
+    busNumber: r.bus_number ?? null,
+    isAc: r.is_ac ?? null,
+    departureTime: r.departure_time ?? null,
+    price_cents: r.price_cents ?? null,
+    total: r.total ?? 0,
+    available: r.available ?? 0,
+  }));
+}
 
-  const rows: CampusRoute[] = [];
-  for (const r of data ?? []) {
-    const agency = one(r.agencies as AgencyRef | AgencyRef[] | null);
-    // Routes of suspended/soft-deleted agencies are not bookable.
-    if (agency && (agency.status !== 'APPROVED' || agency.is_deleted)) continue;
-    const vehicle = one(r.vehicles as VehicleRef | VehicleRef[] | null);
-    const alloc = (r.route_assignments as AssignRef[] | null)?.[0]?.seat_allocations?.[0];
-    const total = alloc?.total_seats ?? 0;
-    const reserved = alloc?.reserved_seats ?? 0;
-    rows.push({
-      id: r.id as string,
-      name: r.name as string,
-      vehicleType: (r.vehicle_type as VehicleType) ?? 'BUS',
-      agencyName: agency?.name ?? null,
-      busNumber: vehicle?.bus_number ?? null,
-      isAc: vehicle?.is_ac ?? null,
-      departureTime: (r.departure_time as string) ?? null,
-      price_cents: (r.price_cents as number) ?? null,
-      total,
-      available: Math.max(total - reserved, 0),
-    });
-  }
-  return rows;
+/** Total routes serving a campus matching the same search/type filters — the
+ *  campus-detail pager total. */
+export async function countInstitutionRoutes(
+  db: SupabaseClient,
+  institutionId: string,
+  opts: Pick<CampusRouteQuery, 'query' | 'vehicleType'> = {},
+): Promise<number> {
+  const { data, error } = await db.rpc('institution_routes_count', {
+    p_institution_id: institutionId,
+    p_query: opts.query?.trim() || null,
+    p_vehicle_type: opts.vehicleType ?? null,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }

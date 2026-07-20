@@ -20,7 +20,7 @@ export default function DriverLoginPage() {
       submitLabel="Login"
       footer={
         <p className="text-center text-sm">
-          <Link href="/forgot" className="font-medium text-primary transition-colors hover:text-primary/70">
+          <Link href="/forgot?back=/driver/login" className="font-medium text-primary transition-colors hover:text-primary/70">
             Forgot password?
           </Link>
         </p>

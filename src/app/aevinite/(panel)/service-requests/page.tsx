@@ -1,5 +1,6 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { listServiceRequests } from '@/features/admin/repository';
+import { listServiceRequests, countServiceRequests } from '@/features/admin/repository';
 import {
   approveServiceRequestAction,
   rejectServiceRequestAction,
@@ -7,10 +8,24 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AdminServiceRequestsPage() {
+const PAGE_SIZE = 15;
+
+export default async function AdminServiceRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
-  const requests = await listServiceRequests(db);
+  const [requests, total] = await Promise.all([
+    listServiceRequests(db, { limit: PAGE_SIZE, offset }),
+    countServiceRequests(db),
+  ]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total > 0 && page > totalPages) redirect(`/aevinite/service-requests?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -60,6 +75,7 @@ export default async function AdminServiceRequestsPage() {
               </CardContent>
             </Card>
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/aevinite/service-requests" />
         </div>
       )}
     </section>

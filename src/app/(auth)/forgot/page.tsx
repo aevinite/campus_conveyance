@@ -1,57 +1,15 @@
-'use client';
-import { useActionState, useEffect } from 'react';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import { forgotAction, type AuthState } from '@/features/auth/actions';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { ForgotForm } from './forgot-form';
 
-export default function ForgotPage() {
-  const [state, action, pending] = useActionState<AuthState, FormData>(
-    forgotAction,
-    {},
-  );
+// Which login sent the user here — whitelisted so `?back=` can't be used as an
+// open redirect. Defaults to the student login.
+const ALLOWED_BACK = new Set(['/login', '/driver/login', '/aevinite/login']);
 
-  // Show the outcome as a popup toast: an error (e.g. "This email is not
-  // registered.") or the success confirmation. Runs once per submission.
-  useEffect(() => {
-    if (state.error) toast.error(state.error);
-    else if (state.message) toast.success(state.message);
-  }, [state]);
-
-  return (
-    <Card className="w-full max-w-sm shadow-lg">
-      <CardHeader>
-        <CardTitle className="text-xl">Reset your password</CardTitle>
-        <CardDescription>
-          Enter your email and we&apos;ll send you a reset link.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action={action} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="off" required />
-          </div>
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? 'Sending…' : 'Send reset link'}
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            Remembered it?{' '}
-            <Link href="/login" className="font-medium text-primary transition-colors hover:text-primary/70">
-              Back to sign in
-            </Link>
-          </p>
-        </form>
-      </CardContent>
-    </Card>
-  );
+export default async function ForgotPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ back?: string }>;
+}) {
+  const { back } = await searchParams;
+  const backHref = back && ALLOWED_BACK.has(back) ? back : '/login';
+  return <ForgotForm back={backHref} />;
 }

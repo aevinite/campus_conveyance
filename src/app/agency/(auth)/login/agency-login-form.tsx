@@ -28,12 +28,20 @@ export function AgencyLoginForm({ pending }: { pending: boolean }) {
       }
       backHref="/"
       footer={
-        <Link
-          href="/agency/register"
-          className="block rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
-        >
-          Apply as agency
-        </Link>
+        <div className="space-y-3">
+          <Link
+            href="/agency/forgot"
+            className="block text-center text-sm font-medium text-primary transition-colors hover:text-primary/70"
+          >
+            Forgot password?
+          </Link>
+          <Link
+            href="/agency/register"
+            className="block rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+          >
+            Apply as agency
+          </Link>
+        </div>
       }
     />
   );

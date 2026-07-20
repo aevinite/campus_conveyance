@@ -1,22 +1,40 @@
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getMyAgency, listMyBookings } from '@/features/agency/repository';
+import { getMyAgency, listMyBookings, countMyBookings } from '@/features/agency/repository';
 import { confirmBookingAction, rejectBookingAction } from '@/features/agency/actions';
 import { SubmitButton } from '@/components/submit-button';
 import { BookingCard } from '../booking-card';
+import { Pager } from '@/components/pager';
+
+const PAGE_SIZE = 20;
 
 export default async function AgencyManageBookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string; page?: string }>;
 }) {
-  const { notice } = await searchParams;
+  const { notice, page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
   const db = await createClient();
-  // Cancel approved requests whose 20-minute payment window lapsed, so they
-  // don't linger here as "awaiting payment".
-  await db.rpc('expire_stale_holds');
+  // Lapsed payment windows are cancelled by the pg_cron 'expire-stale-holds' job
+  // (migration 0052), not per request.
   const agency = await getMyAgency(db);
-  const bookings = agency ? await listMyBookings(db, agency.id) : [];
-  const pending = bookings.filter((b) => b.status === 'PENDING');
+  // Filter to PENDING + paginate in the DB — don't pull the whole history and
+  // filter in JS.
+  const [pending, total] = agency
+    ? await Promise.all([
+        listMyBookings(db, agency.id, {
+          status: 'PENDING',
+          limit: PAGE_SIZE,
+          offset: (page - 1) * PAGE_SIZE,
+        }),
+        countMyBookings(db, agency.id, 'PENDING'),
+      ])
+    : [[], 0];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Don't strand on an out-of-range page after approving/rejecting the last
+  // pending request on the final page.
+  if (total > 0 && page > totalPages) redirect(`/agency/bookings?page=${totalPages}`);
 
   return (
     <section className="space-y-4">
@@ -85,6 +103,7 @@ export default async function AgencyManageBookingsPage({
               }
             />
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/agency/bookings" />
         </div>
       )}
     </section>

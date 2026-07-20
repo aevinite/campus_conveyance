@@ -1,7 +1,8 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Search, ArrowRight, Bus, Truck, Clock, IdCard } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { Search, ArrowRight, ArrowLeft, Bus, Truck, Clock, IdCard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { CampusRoute, VehicleType } from '@/features/catalog/repository';
 
@@ -47,30 +48,56 @@ function seatsPill(r: CampusRoute) {
   );
 }
 
-export function RoutesExplorer({ routes }: { routes: CampusRoute[] }) {
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('ALL');
+// Server-paginated + searched (migration 0068). This component only drives
+// navigation (search / type / page live in the URL) and renders one page.
+export function RoutesExplorer({
+  routes,
+  query,
+  vehicleType,
+  page,
+  totalPages,
+}: {
+  routes: CampusRoute[];
+  query: string;
+  vehicleType: Filter;
+  page: number;
+  totalPages: number;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [text, setText] = useState(query);
+  const [isPending, startTransition] = useTransition();
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return routes
-      .filter((r) => filter === 'ALL' || r.vehicleType === filter)
-      .filter(
-        (r) =>
-          !q ||
-          r.name.toLowerCase().includes(q) ||
-          (r.agencyName ?? '').toLowerCase().includes(q),
-      );
-  }, [routes, query, filter]);
+  const urlFor = (next: Partial<{ q: string; type: Filter; page: number }>) => {
+    const q = next.q ?? query;
+    const t = next.type ?? vehicleType;
+    const p = next.page ?? 1;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (t !== 'ALL') params.set('type', t);
+    if (p > 1) params.set('page', String(p));
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  };
+  const go = (next: Parameters<typeof urlFor>[0]) =>
+    startTransition(() => router.replace(urlFor(next)));
+
+  useEffect(() => setText(query), [query]);
+  useEffect(() => {
+    if (text.trim() === query) return;
+    const h = setTimeout(() => go({ q: text.trim(), page: 1 }), 300);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 transition-opacity ${isPending ? 'opacity-60' : ''}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
             placeholder="Search routes or agencies…"
             className="pl-9"
           />
@@ -79,9 +106,9 @@ export function RoutesExplorer({ routes }: { routes: CampusRoute[] }) {
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => setFilter(t.key)}
+              onClick={() => go({ type: t.key, page: 1 })}
               className={`rounded-md px-3 py-1 text-sm transition-colors ${
-                filter === t.key
+                vehicleType === t.key
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -92,15 +119,15 @@ export function RoutesExplorer({ routes }: { routes: CampusRoute[] }) {
         </div>
       </div>
 
-      {shown.length === 0 ? (
+      {routes.length === 0 ? (
         <p className="py-8 text-center text-muted-foreground">
-          {routes.length === 0
-            ? 'No rides serve this campus yet — check back soon.'
-            : 'No rides match your search.'}
+          {query || vehicleType !== 'ALL'
+            ? 'No rides match your search.'
+            : 'No rides serve this campus yet — check back soon.'}
         </p>
       ) : (
         <div className="space-y-3">
-          {shown.map((r) => {
+          {routes.map((r) => {
             const fare = inr(r.price_cents);
             const time = fmtTime(r.departureTime);
             const Icon = r.vehicleType === 'VAN' ? Truck : Bus;
@@ -149,6 +176,34 @@ export function RoutesExplorer({ routes }: { routes: CampusRoute[] }) {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          {page > 1 ? (
+            <Link
+              href={urlFor({ page: page - 1 })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              <ArrowLeft className="size-4" /> Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          {page < totalPages ? (
+            <Link
+              href={urlFor({ page: page + 1 })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Next <ArrowRight className="size-4" />
+            </Link>
+          ) : (
+            <span />
+          )}
         </div>
       )}
     </div>
