@@ -13,12 +13,19 @@ export function ParentAccessCard() {
     createParentCodeAction,
     {},
   );
-  // Ticks once a second so the countdown stays live.
+  // Tick once a second ONLY while a code is counting down — no code (or an
+  // expired one) means no reason to keep an interval running forever.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    if (!state.expiresAt) return;
+    const deadline = new Date(state.expiresAt).getTime();
+    const t = setInterval(() => {
+      const n = Date.now();
+      setNow(n);
+      if (n >= deadline) clearInterval(t); // self-stop once it lapses
+    }, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [state.expiresAt]);
 
   const expiresAt = state.expiresAt ? new Date(state.expiresAt).getTime() : null;
   const secondsLeft = expiresAt ? Math.max(0, Math.floor((expiresAt - now) / 1000)) : 0;

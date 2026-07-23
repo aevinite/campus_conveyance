@@ -40,7 +40,7 @@ export default function AgencyForgotPage() {
           <ArrowLeft className="size-4" />
           Back
         </Link>
-        <CardTitle className="text-xl">Reset provider password</CardTitle>
+        <CardTitle className="text-2xl">Reset provider password</CardTitle>
         <CardDescription>
           Enter your provider email and we&apos;ll send you a link to set a new password.
         </CardDescription>

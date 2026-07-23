@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { setDriverOnlineAction } from '@/features/driver/actions';
 import { cn } from '@/lib/utils';
+import { formatTime } from '@/lib/format-date';
 
 // Fire-and-forget GPS ping via a light API route (not a server action — this
 // runs every ~9s while online). Silently ignores transient failures.
@@ -191,7 +192,7 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
           <p className="text-xs text-muted-foreground">
             {online
               ? lastFix
-                ? `Location updated at ${new Date(lastFix).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}`
+                ? `Location updated at ${formatTime(lastFix)}`
                 : 'Getting your location…'
               : 'Go online when your trip starts so riders can track the bus.'}
           </p>

@@ -22,8 +22,9 @@ export default async function AgencySettingsPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account preferences.</p>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Preferences</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Settings</h1>
+        <p className="mt-1 text-muted-foreground">Manage your account preferences.</p>
       </div>
 
       {/* Appearance */}
@@ -35,7 +36,7 @@ export default async function AgencySettingsPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border p-4">
             <div>
               <p className="font-medium">Theme</p>
               <p className="text-sm text-muted-foreground">Toggle light / dark mode.</p>
@@ -77,7 +78,7 @@ export default async function AgencySettingsPage() {
         </CardHeader>
         <CardContent>
           <form action={logoutAction}>
-            <SubmitButton variant="outline" pendingText="Logging out…">
+            <SubmitButton variant="outline" className="w-full sm:w-auto" pendingText="Logging out…">
               Log out
             </SubmitButton>
           </form>

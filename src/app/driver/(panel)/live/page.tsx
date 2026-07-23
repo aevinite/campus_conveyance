@@ -1,3 +1,4 @@
+import { Navigation } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listDriverBuses } from '@/features/driver/repository';
 import { DriverLiveMap, type SimpleStop } from '@/components/driver-live-map';
@@ -23,8 +24,11 @@ export default async function DriverLivePage() {
 
   return (
     <section className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Live map</h1>
+      <div className="space-y-1">
+        <p className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wider text-primary uppercase">
+          <Navigation className="size-3.5" /> Navigation
+        </p>
+        <h1 className="text-2xl font-heading font-bold tracking-tight sm:text-3xl">Live map</h1>
         <p className="text-muted-foreground">
           Your position updates as you drive. Go online (toggle above) so students
           and parents can follow the bus in real time.

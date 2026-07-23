@@ -17,6 +17,7 @@ import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/re
 import { institutionKindCounts, listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
 
 const STATUS_META: Record<
   string,
@@ -54,12 +55,6 @@ const STATUS_META: Record<
   },
 };
 
-const dateFmt = new Intl.DateTimeFormat('en-US', {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-});
-const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
 const STEPS = [
   {
@@ -70,7 +65,7 @@ const STEPS = [
   {
     icon: Bus,
     title: 'Pick your bus',
-    body: 'One list of every ride — compare fares, timings and live seats.',
+    body: 'One list of every route — compare fares, timings and live seats.',
   },
   {
     icon: Ticket,
@@ -122,28 +117,28 @@ export default async function StudentHome() {
         <div aria-hidden className="pointer-events-none absolute -right-10 -bottom-16 -z-10 opacity-[0.07]">
           <Bus className="size-64" />
         </div>
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Sparkles className="size-4 text-primary" />
-          {dateFmt.format(new Date())}
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary shadow-xs">
+          <Sparkles className="size-3.5" />
+          <span className="tnum">{formatWeekdayDate(new Date())}</span>
         </div>
-        <h1 className="mt-3 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
-          Welcome back, <span className="text-primary">{name}</span>.
+        <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
+          Welcome back, <span className="text-gradient">{name}</span>.
         </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          Browse your campus, choose a bus or van from a trusted agency, and
-          reserve your seat in seconds.
+          Browse your campus, choose a bus or van from a verified agency, and
+          reserve your seat for the daily route to class.
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Link
             href="/student/schools"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
           >
             <Search className="size-4" />
             Browse campuses
           </Link>
           <Link
             href="/student/bookings"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-background/60 px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background/60 px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-secondary"
           >
             <Ticket className="size-4" />
             My bookings
@@ -165,13 +160,13 @@ export default async function StudentHome() {
               <p className="mt-0.5 truncate text-lg font-semibold">{nextTrip.routeName}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                     (STATUS_META[nextTrip.status] ?? STATUS_META.PENDING).pill
                   }`}
                 >
                   {(STATUS_META[nextTrip.status] ?? STATUS_META.PENDING).label}
                 </span>
-                <span>Booked {shortDate.format(new Date(nextTrip.created_at))}</span>
+                <span>Booked {formatShortDate(nextTrip.created_at)}</span>
               </p>
             </div>
           </div>
@@ -208,7 +203,7 @@ export default async function StudentHome() {
 
           <Link
             href="/student/bookings"
-            className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:shadow-sm"
+            className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
           >
             <span className="grid size-11 place-items-center rounded-xl bg-secondary text-foreground">
               <Ticket className="size-6" />
@@ -227,7 +222,7 @@ export default async function StudentHome() {
           <div className="rounded-2xl border border-border bg-card p-6 shadow-xs sm:col-span-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Booking overview</h2>
-              <span className="text-sm text-muted-foreground">{totalBookings} total</span>
+              <span className="text-sm text-muted-foreground"><span className="tnum font-semibold text-foreground">{totalBookings}</span> total</span>
             </div>
             {totalBookings === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">
@@ -251,7 +246,7 @@ export default async function StudentHome() {
                       <li key={b.status} className="flex items-center gap-2">
                         <span className={`size-2.5 shrink-0 rounded-full ${meta.dot}`} />
                         <span className="text-sm">
-                          <span className="font-semibold">{b.count}</span>{' '}
+                          <span className="tnum font-semibold">{b.count}</span>{' '}
                           <span className="text-muted-foreground">{meta.label}</span>
                         </span>
                       </li>
@@ -266,7 +261,7 @@ export default async function StudentHome() {
         {/* Recent trips */}
         <div className="rounded-2xl border border-border bg-card p-6 shadow-xs lg:col-span-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Recent trips</h2>
+            <h2 className="text-lg font-semibold">Recent bookings</h2>
             {recent.length > 0 && (
               <Link
                 href="/student/bookings"
@@ -283,7 +278,7 @@ export default async function StudentHome() {
                 <Ticket className="size-5" />
               </span>
               <p className="text-sm text-muted-foreground">
-                No trips yet — book your first seat.
+                No bookings yet — reserve your first seat.
               </p>
               <Link
                 href="/student/schools"
@@ -307,11 +302,11 @@ export default async function StudentHome() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{b.routeName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {shortDate.format(new Date(b.created_at))}
+                          {formatShortDate(b.created_at)}
                         </p>
                       </div>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${meta.pill}`}>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.pill}`}>
                       {meta.label}
                     </span>
                   </li>
@@ -329,7 +324,8 @@ export default async function StudentHome() {
             <div>
               <h2 className="text-xl font-semibold">Explore campuses</h2>
               <p className="text-sm text-muted-foreground">
-                {schoolsCount} school{schoolsCount === 1 ? '' : 's'} · {collegesCount} college
+                <span className="tnum">{schoolsCount}</span> school{schoolsCount === 1 ? '' : 's'} ·{' '}
+                <span className="tnum">{collegesCount}</span> college
                 {collegesCount === 1 ? '' : 's'} available to book.
               </p>
             </div>
@@ -346,7 +342,7 @@ export default async function StudentHome() {
               <Link
                 key={i.id}
                 href={`/student/schools/${i.id}`}
-                className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-sm"
+                className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
               >
                 <div
                   className="relative flex h-24 items-end px-5"
@@ -426,7 +422,7 @@ export default async function StudentHome() {
           </div>
         </div>
         <div className="flex items-start gap-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--brand-cyan)]/12 text-[color:var(--brand-cyan)]">
             <LifeBuoy className="size-6" />
           </span>
           <div>

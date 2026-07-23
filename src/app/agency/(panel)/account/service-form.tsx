@@ -73,7 +73,7 @@ export function ServiceForm({
         </p>
       </div>
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         {pending ? 'Submitting…' : 'Submit request'}
       </Button>
     </form>

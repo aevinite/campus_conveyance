@@ -31,19 +31,19 @@ function fmtTime(t: string | null): string | null {
 
 function seatsPill(r: CampusRoute) {
   if (r.total === 0)
-    return <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">Seats not set</span>;
+    return <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">Seats not set</span>;
   if (r.available === 0)
-    return <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning">Full — waitlist open</span>;
+    return <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">Full — waitlist open</span>;
   const low = r.available <= 5;
   return (
     <span
-      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
         low
           ? 'border-warning/30 bg-warning/10 text-warning'
           : 'border-success/30 bg-success/10 text-success'
       }`}
     >
-      {r.available} of {r.total} seats left
+      <span className="tnum">{r.available}</span> of <span className="tnum">{r.total}</span> seats left
     </span>
   );
 }
@@ -82,6 +82,8 @@ export function RoutesExplorer({
   const go = (next: Parameters<typeof urlFor>[0]) =>
     startTransition(() => router.replace(urlFor(next)));
 
+  // Sync the local search box when the URL-driven query changes — intentional.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setText(query), [query]);
   useEffect(() => {
     if (text.trim() === query) return;
@@ -120,11 +122,17 @@ export function RoutesExplorer({
       </div>
 
       {routes.length === 0 ? (
-        <p className="py-8 text-center text-muted-foreground">
-          {query || vehicleType !== 'ALL'
-            ? 'No rides match your search.'
-            : 'No rides serve this campus yet — check back soon.'}
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Bus className="size-6" />
+          </span>
+          <p className="font-semibold">No rides found</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            {query || vehicleType !== 'ALL'
+              ? 'No rides match your search — try a different name or clear the filters.'
+              : 'No rides serve this campus yet — check back soon.'}
+          </p>
+        </div>
       ) : (
         <div className="space-y-3">
           {routes.map((r) => {
@@ -135,7 +143,7 @@ export function RoutesExplorer({
               <Link
                 key={r.id}
                 href={`/student/routes/${r.id}`}
-                className="group flex items-center gap-4 rounded-2xl border border-border bg-card/60 p-4 transition-all hover:-translate-y-0.5 hover:bg-card hover:shadow-sm sm:p-5"
+                className="group flex items-center gap-4 rounded-2xl border border-border bg-card/60 p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-md sm:p-5"
               >
                 <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                   <Icon className="size-6" />
@@ -167,7 +175,7 @@ export function RoutesExplorer({
                 </div>
 
                 <div className="shrink-0 text-right">
-                  {fare && <p className="text-lg font-bold">{fare}</p>}
+                  {fare && <p className="tnum text-lg font-bold">{fare}</p>}
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
                     {r.total > 0 && r.available === 0 ? 'Waitlist' : 'View & book'}
                     <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -192,7 +200,8 @@ export function RoutesExplorer({
             <span />
           )}
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            Page <span className="tnum font-semibold text-foreground">{page}</span> of{' '}
+            <span className="tnum">{totalPages}</span>
           </span>
           {page < totalPages ? (
             <Link

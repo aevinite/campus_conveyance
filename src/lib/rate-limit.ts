@@ -21,88 +21,96 @@ export async function getClientIp(): Promise<string> {
 }
 
 /**
- * Count events for (scope, subject) inside the last `windowSeconds`. If already
- * at/over `max`, returns the seconds to wait; otherwise records one event and
- * returns 0 (allowed). Stale rows for the key are pruned on the way in.
+ * Atomic sliding-window limiter for (scope, subject). Returns the seconds to
+ * wait if already at/over `max` in the last `windowSeconds`, else records one
+ * event and returns 0 (allowed). The count + conditional insert happen in ONE
+ * round-trip via the rate_limit_hit RPC (migration 0073), serialized per key by
+ * an advisory lock — no count-then-insert TOCTOU.
+ *
+ * On a store error the default is FAIL-OPEN (return 0) so a limiter outage can't
+ * take down real signups/resets. Pass `{ failClosed: true }` for callers where an
+ * uncapped burst is the worse outcome (the geocoding upstream caps: a
+ * rate_limit_events outage must NOT uncork Nominatim/Photon and get the IP
+ * banned) — those get a positive back-off instead.
  */
 export async function rateLimit(
   scope: string,
   subject: string,
   max: number,
   windowSeconds: number,
+  opts?: { failClosed?: boolean },
 ): Promise<number> {
+  const onError = () => (opts?.failClosed ? Math.max(1, windowSeconds) : 0);
   try {
     const admin = createAdminClient();
     const key = subject.trim().toLowerCase();
-    const since = new Date(Date.now() - windowSeconds * 1000).toISOString();
-    // Count only events inside the window (no per-call prune — the
-    // 'rate-limit-cleanup' cron sweeps stale rows every 15 min, migration 0054).
-    // Dropping the DELETE halves the round-trips on this hot pre-send path.
-    const { data, error } = await admin
-      .from(TABLE)
-      .select('created_at')
-      .eq('scope', scope)
-      .eq('subject', key)
-      .gte('created_at', since)
-      .order('created_at', { ascending: true });
-    if (error) return 0; // fail open
-    if ((data?.length ?? 0) >= max) {
-      const oldest = new Date(data![0]!.created_at as string).getTime();
-      return Math.max(1, Math.ceil((oldest + windowSeconds * 1000 - Date.now()) / 1000));
-    }
-    await admin.from(TABLE).insert({ scope, subject: key });
-    return 0;
+    const { data, error } = await admin.rpc('rate_limit_hit', {
+      p_scope: scope,
+      p_subject: key,
+      p_max: max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) return onError();
+    return typeof data === 'number' ? data : 0;
   } catch {
-    return 0; // fail open
+    return onError();
   }
 }
 
 // ── OTP brute-force lockout ──────────────────────────────────────────────────
-// Wrong-code guesses are counted per email (NOT per token, so requesting fresh
-// codes can't reset the counter). After OTP_MAX_FAILURES within OTP_WINDOW the
-// address is locked; a correct code clears the counter.
+// Attempts are counted per email (NOT per token, so requesting fresh codes can't
+// reset the counter). After OTP_MAX_FAILURES within OTP_WINDOW the address is
+// locked; a correct code clears the counter. Counting is ATOMIC — it routes
+// through rateLimit()/rate_limit_hit (advisory-locked count+insert), so N
+// concurrent guesses can't all slip under the cap (the old SELECT-then-INSERT
+// had a TOCTOU that let more than OTP_MAX_FAILURES through at once).
 const OTP_MAX_FAILURES = 5;
 const OTP_WINDOW_SECONDS = 15 * 60;
 const OTP_SCOPE = 'otp:fail';
 
-/** Seconds until the OTP lock lifts for this email, or 0 if not locked. */
-export async function otpLockRemaining(email: string): Promise<number> {
-  try {
-    const admin = createAdminClient();
-    const key = email.trim().toLowerCase();
-    const since = new Date(Date.now() - OTP_WINDOW_SECONDS * 1000).toISOString();
-    // Window-filtered count; the cron prunes stale rows (no per-call DELETE).
-    const { data, error } = await admin
-      .from(TABLE)
-      .select('created_at')
-      .eq('scope', OTP_SCOPE)
-      .eq('subject', key)
-      .gte('created_at', since)
-      .order('created_at', { ascending: true });
-    if (error) return 0;
-    if ((data?.length ?? 0) >= OTP_MAX_FAILURES) {
-      const oldest = new Date(data![0]!.created_at as string).getTime();
-      return Math.max(1, Math.ceil((oldest + OTP_WINDOW_SECONDS * 1000 - Date.now()) / 1000));
-    }
-    return 0;
-  } catch {
-    return 0;
-  }
-}
-
-export async function recordOtpFailure(email: string): Promise<void> {
-  try {
-    const admin = createAdminClient();
-    await admin.from(TABLE).insert({ scope: OTP_SCOPE, subject: email.trim().toLowerCase() });
-  } catch {
-    /* best effort */
-  }
+/**
+ * Atomically reserve one OTP attempt. Returns seconds-to-wait if the address is
+ * already locked (attempt NOT consumed), else 0 (attempt recorded). Call this
+ * BEFORE checking the code; clear on a correct code.
+ */
+export async function registerOtpAttempt(email: string): Promise<number> {
+  // failClosed: a limiter/store outage must LOCK (not silently disable the OTP
+  // guess-lockout while auth stays up).
+  return rateLimit(OTP_SCOPE, email, OTP_MAX_FAILURES, OTP_WINDOW_SECONDS, { failClosed: true });
 }
 
 export async function clearOtpFailures(email: string): Promise<void> {
   try {
     const admin = createAdminClient();
     await admin.from(TABLE).delete().eq('scope', OTP_SCOPE).eq('subject', email.trim().toLowerCase());
+  } catch {
+    /* best effort */
+  }
+}
+
+// ── Password-login brute-force lockout ───────────────────────────────────────
+// App-level throttle on failed password logins for the shared login flow (all
+// four login routes go through signInAndRoute). Keyed per (email|IP) so an
+// attacker pounding one account from one host locks THAT combination — it can't
+// be abused to lock a victim out of their own IP. A correct login clears it.
+const LOGIN_MAX_FAILURES = 10;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
+const LOGIN_SCOPE = 'login:fail';
+
+/**
+ * Atomically reserve one login attempt (per email|IP). Returns seconds-to-wait
+ * if already locked (not consumed), else 0 (recorded). Atomic via rate_limit_hit
+ * — no SELECT-then-INSERT TOCTOU. Clear on a successful login.
+ */
+export async function registerLoginAttempt(subject: string): Promise<number> {
+  // failClosed: a store outage should lock, not unlock, the brute-force guard.
+  return rateLimit(LOGIN_SCOPE, subject, LOGIN_MAX_FAILURES, LOGIN_WINDOW_SECONDS, { failClosed: true });
+}
+
+export async function clearLoginFailures(subject: string): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    await admin.from(TABLE).delete().eq('scope', LOGIN_SCOPE).eq('subject', subject.trim().toLowerCase());
   } catch {
     /* best effort */
   }

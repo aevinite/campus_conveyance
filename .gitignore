@@ -1,15 +1,24 @@
+# Dependencies
 node_modules/
+
+# Next.js build output
 .next/
+out/
+build/
+tsconfig.tsbuildinfo
+
+# Env files — never commit secrets; keep the example template.
 .env*
 !.env.example
-npm-debug.log*
+
 # Local dev/server logs — runtime artifacts, never committed.
 *.log
-_dev.log
-_serverstart.log
+
+# OS / editor / tooling
 .DS_Store
 .pdfpages/
 .maintenance.json
-# Local tooling / build artifacts — not project code.
 .claude/
-tsconfig.tsbuildinfo
+
+# Vercel
+.vercel

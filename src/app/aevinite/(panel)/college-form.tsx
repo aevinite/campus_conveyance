@@ -6,10 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
+import { Textarea } from '@/components/ui/textarea';
 import { FormStatus } from '@/components/form-status';
-
-const fieldCls =
-  'flex w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-2xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 dark:bg-input/30';
 
 export interface CollegeDefaults {
   id?: string;
@@ -33,7 +31,7 @@ export function CollegeForm({
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
   return (
-    <form action={formAction} className="max-w-md space-y-4">
+    <form action={formAction} className="max-w-xl space-y-5">
       {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
       <div className="space-y-1.5">
         <Label htmlFor="name">College / School name</Label>
@@ -67,15 +65,9 @@ export function CollegeForm({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="description">Description</Label>
-        <textarea
-          id="description"
-          name="description"
-          rows={3}
-          defaultValue={defaults.description ?? ''}
-          className={`${fieldCls} py-2`}
-        />
+        <Textarea id="description" name="description" rows={3} defaultValue={defaults.description ?? ''} />
       </div>
-      <label className="flex items-start gap-3 rounded-lg border border-input p-3">
+      <label className="flex items-start gap-3 rounded-xl border border-input p-3.5 transition-colors hover:border-primary/40">
         <input
           type="checkbox"
           name="verified"
@@ -93,7 +85,7 @@ export function CollegeForm({
         </span>
       </label>
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         {pending ? 'Saving…' : submitLabel}
       </Button>
     </form>

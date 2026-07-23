@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import type * as LeafletNS from 'leaflet';
 import {
@@ -8,8 +8,10 @@ import {
   busDivIcon,
   haversineMeters,
   toKmh,
+  DEFAULT_MAP_CENTER,
   type LatLng,
 } from '@/lib/bus-marker';
+import { escapeHtml } from '@/lib/escape-html';
 
 export interface MapStop {
   name: string;
@@ -17,12 +19,6 @@ export interface MapStop {
   lng: number | null;
   description?: string | null;
   address?: string | null;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
-  );
 }
 
 // Clean, professional light basemap (CARTO Positron) — always light, no key.
@@ -87,6 +83,15 @@ export default function RouteStopsMap({
   const animCancel = useRef<(() => void) | null>(null);
   const [live, setLive] = useState<LiveState | null>(null);
 
+  // Rebuild the Leaflet map only when the stops' CONTENT changes, not when the
+  // parent hands us a fresh array reference (parent/page.tsx passes `?? []`).
+  // Keying the init effect on a stable signature avoids a needless teardown that
+  // would drop the live bus marker / flicker the map.
+  const stopsSig = useMemo(
+    () => stops.map((s) => `${s.name}|${s.lat}|${s.lng}`).join('~'),
+    [stops],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -99,6 +104,7 @@ export default function RouteStopsMap({
       );
       const m = L.map(containerRef.current, { attributionControl: false, scrollWheelZoom: false });
       mapRef.current = m;
+      centeredOnBus.current = false; // fresh map — allow the next fix to recenter
       L.tileLayer(TILE_URL, { subdomains: 'abcd', maxZoom: 20 }).addTo(m);
       pts.forEach((s, i) => {
         const desc = s.description?.trim();
@@ -111,7 +117,7 @@ export default function RouteStopsMap({
           `</div>`;
         L.marker([s.lat, s.lng], { icon: numberedPin(L, i + 1) })
           .addTo(m)
-          .bindTooltip(`${i + 1}. ${s.name}`, { direction: 'top' })
+          .bindTooltip(`${i + 1}. ${escapeHtml(s.name)}`, { direction: 'top' })
           .bindPopup(popup);
       });
       if (pts.length === 1) {
@@ -119,7 +125,7 @@ export default function RouteStopsMap({
       } else if (pts.length > 1) {
         m.fitBounds(L.latLngBounds(pts.map((s) => [s.lat, s.lng] as [number, number])).pad(0.3));
       } else {
-        m.setView([23.0225, 72.5714], 11);
+        m.setView(DEFAULT_MAP_CENTER, 11);
       }
       setTimeout(() => m.invalidateSize(), 0);
     })();
@@ -130,7 +136,9 @@ export default function RouteStopsMap({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [stops]);
+    // Keyed on the content signature, not the array identity (see stopsSig).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopsSig]);
 
   // Poll the live bus position and reflect it with a moving, rotating marker that
   // shows speed + current area. The poll PAUSES while the tab is hidden
@@ -141,12 +149,34 @@ export default function RouteStopsMap({
     if (!liveRouteId) return;
     let stopped = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    // Skip a tick while the previous /api/bus-location request is still in
+    // flight. Without this, a response that stalls >LIVE_POLL_MS lets the next
+    // tick start and the two can resolve out of order — each overwrites
+    // prevBusPos/prevBusTime, producing negative dt, a garbage bearing and a
+    // backwards marker animation.
+    let inFlight = false;
+    // Tolerate a single stale/`live:false` poll before tearing the marker down —
+    // a lone blip (e.g. a GPS write crossing the 2-min freshness boundary) would
+    // otherwise remove + re-center the bus and flicker on the very next poll.
+    let missedPolls = 0;
+    const STALE_MISSES = 2;
+    // Abort any in-flight polls on unmount / route change so they don't resolve
+    // against a torn-down map (the `stopped` flag guards state, but the requests
+    // themselves would otherwise still complete).
+    const ac = new AbortController();
+    // Monotonic guard: only the latest fetchArea may write the label, so a slow
+    // older response can't clobber a newer area.
+    let areaSeq = 0;
 
     async function fetchArea(p: LatLng) {
+      const seq = ++areaSeq;
       try {
-        const r = await fetch(`/api/reverse-geocode?lat=${p[0]}&lng=${p[1]}`, { cache: 'no-store' });
+        const r = await fetch(`/api/reverse-geocode?lat=${p[0]}&lng=${p[1]}`, {
+          cache: 'no-store',
+          signal: ac.signal,
+        });
         const j = (await r.json()) as { area: string | null };
-        if (stopped) return;
+        if (stopped || seq !== areaSeq) return; // superseded by a newer request
         areaRef.current = j.area ?? areaRef.current;
         setLive((prev) => (prev ? { ...prev, area: areaRef.current } : prev));
       } catch {
@@ -155,13 +185,27 @@ export default function RouteStopsMap({
     }
 
     async function tick() {
+      // Skip until the async Leaflet import + map init finished — otherwise the
+      // first tick fetches a fix we can't render yet (wasted poll). Self-resumes.
+      if (!leafletRef.current || !mapRef.current) return;
+      if (inFlight) return; // don't overlap with a still-pending poll
+      inFlight = true;
       try {
-        const res = await fetch(`/api/bus-location?routeId=${liveRouteId}`, { cache: 'no-store' });
+        const res = await fetch(`/api/bus-location?routeId=${liveRouteId}`, {
+          cache: 'no-store',
+          signal: ac.signal,
+        });
+        // A 429 (per-caller cap) or any non-OK response returns {live:false} but
+        // is NOT a "bus offline" signal — bail without touching missedPolls so a
+        // transient cap breach (parent tracking several routes + tab churn) can't
+        // remove a marker for a bus that's actually still streaming.
+        if (!res.ok) return;
         const data = (await res.json()) as LiveResponse;
         if (stopped) return;
         const L = leafletRef.current;
         const m = mapRef.current;
         if (data.live && data.lat != null && data.lng != null && L && m) {
+          missedPolls = 0; // fresh fix — reset the tolerance counter
           const pos: LatLng = [data.lat, data.lng];
           const now = Date.now();
           if (!busMarkerRef.current) {
@@ -214,7 +258,9 @@ export default function RouteStopsMap({
             prevBusPos.current = pos;
             prevBusTime.current = now;
           }
-        } else {
+        } else if (++missedPolls >= STALE_MISSES) {
+          // Genuinely not live (driver offline / fix gone stale) — remove after a
+          // couple of consecutive misses, not a single blip.
           animCancel.current?.();
           if (busMarkerRef.current && m) {
             m.removeLayer(busMarkerRef.current);
@@ -228,6 +274,8 @@ export default function RouteStopsMap({
         }
       } catch {
         // Transient network error — try again on the next tick.
+      } finally {
+        inFlight = false;
       }
     }
 
@@ -252,6 +300,7 @@ export default function RouteStopsMap({
     return () => {
       stopped = true;
       stop();
+      ac.abort();
       animCancel.current?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };

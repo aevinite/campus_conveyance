@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { establishSessionFromUrl } from '@/features/auth/recovery-session';
 
 type LinkStatus = 'loading' | 'ready' | 'invalid';
 
@@ -37,24 +38,7 @@ export default function ResetPage() {
     );
     (async () => {
       try {
-        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        const accessToken = hash.get('access_token');
-        const refreshToken = hash.get('refresh_token');
-        const code = new URL(window.location.href).searchParams.get('code');
-
-        if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-        } else {
-          const { data } = await supabase.auth.getSession();
-          if (!data.session) throw new Error('missing recovery session');
-        }
+        await establishSessionFromUrl(supabase);
         // Strip the token from the address bar so it can't be reused/leaked.
         window.history.replaceState(null, '', '/reset');
         setStatus('ready');
@@ -67,7 +51,7 @@ export default function ResetPage() {
   return (
     <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Choose a new password</CardTitle>
+        <CardTitle className="text-2xl">Choose a new password</CardTitle>
         <CardDescription>
           {status === 'invalid'
             ? 'This reset link is invalid or has expired.'

@@ -228,7 +228,7 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
       </p>
       <p style="color:#aaa;font-size:12px;margin-top:22px">
         The driver or bus may occasionally change for a day — the app always
-        shows the latest details. Have a safe trip!
+        shows the latest details. Have a safe ride!
       </p>
     </div>`;
 
@@ -240,7 +240,7 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
     text:
       `Your seat is confirmed!\n\n` +
       `Payment received — your bus seat is booked.\n\n${tableText}\n\n` +
-      `View my booking: ${site}/student/bookings\n\nHave a safe trip!`,
+      `View my booking: ${site}/student/bookings\n\nHave a safe ride!`,
     html,
   });
 }

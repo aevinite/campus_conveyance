@@ -23,8 +23,8 @@ export default function RegisterPage() {
   return (
     <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Create your account</CardTitle>
-        <CardDescription>Book seats and track rides in minutes.</CardDescription>
+        <CardTitle className="text-2xl">Create your account</CardTitle>
+        <CardDescription>Reserve your seat and track your daily ride to campus.</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action} className="space-y-4">

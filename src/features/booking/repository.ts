@@ -108,7 +108,7 @@ export async function getMyActiveBooking(
   if (!userId) return null;
   // One round-trip: resolve the caller's student row via an inner embed instead
   // of a separate students lookup, then the active booking, in a single query.
-  const { data } = await db
+  const { data, error } = await db
     .from('bookings')
     .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, routes(id, name), students!inner(profile_id)')
     .eq('students.profile_id', userId)
@@ -118,6 +118,9 @@ export async function getMyActiveBooking(
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  // Surface a real query failure instead of swallowing it — returning null here
+  // would falsely report "no active booking" and could invite a second booking.
+  if (error) throw error;
   if (!data) return null;
   // A PENDING hold whose payment window has lapsed is effectively dead: the row
   // is swept by the pg_cron job and by reserve_seat's own internal sweep, but
@@ -246,33 +249,39 @@ export async function getAvailability(
   db: SupabaseClient,
   routeId: string,
 ): Promise<Availability> {
-  const { data: alloc } = await db
+  const { data: alloc, error: allocErr } = await db
     .from('seat_allocations')
     .select('id, total_seats, route_assignments!inner(route_id)')
     .eq('route_assignments.route_id', routeId)
     .limit(1)
     .maybeSingle();
+  if (allocErr) throw allocErr; // don't mask a transient error as "not bookable"
   const total = (alloc?.total_seats as number) ?? 0;
   if (!alloc) return { total: 0, reserved: 0, available: 0 };
   // Count active bookings LIVE (same PENDING/CONFIRMED count reserve_seat uses
   // under the allocation lock), rather than the trigger-maintained
   // reserved_seats — so the displayed seats can't drift from the actual reserve
   // outcome if that trigger ever lags. Backed by idx_bookings_alloc_status.
-  const { count } = await db
+  const { count, error } = await db
     .from('bookings')
     .select('id', { count: 'exact', head: true })
     .eq('seat_allocation_id', (alloc as { id: string }).id)
     .in('status', ['PENDING', 'CONFIRMED']);
+  // On a count error, fail SAFE: show the route as full rather than open, so we
+  // never advertise a possibly sold-out route as available (reserve_seat still
+  // enforces capacity, but the UI shouldn't invite a booking that will bounce).
+  if (error) return { total, reserved: total, available: 0 };
   const reserved = count ?? 0;
   return { total, reserved, available: Math.max(total - reserved, 0) };
 }
 
 /** Count of the student's own non-cancelled bookings, for My Bookings paging. */
 export async function countMyBookings(db: SupabaseClient): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('bookings')
     .select('id', { count: 'exact', head: true })
     .neq('status', 'CANCELLED');
+  if (error) throw error;
   return count ?? 0;
 }
 
@@ -326,12 +335,15 @@ export async function listMyBookings(
   // Overlay today's substitute driver on the affected buses.
   const vehicleIds = [...new Set(rows.map((r) => r._vehicleId).filter(Boolean))] as string[];
   if (vehicleIds.length > 0) {
-    const { data: changes } = await db
+    const { data: changes, error: chErr } = await db
       .from('bus_driver_changes')
       .select('vehicle_id, driver_name, driver_phone')
       .in('vehicle_id', vehicleIds)
       .eq('role', 'DRIVER')
       .eq('effective_date', todayIST());
+    // Surface the error — masking it would show the PERMANENT driver instead of
+    // today's substitute (wrong person to riders/parents).
+    if (chErr) throw chErr;
     const byVehicle = new Map((changes ?? []).map((c) => [c.vehicle_id as string, c]));
     for (const r of rows) {
       const c = r._vehicleId ? byVehicle.get(r._vehicleId) : undefined;
@@ -357,7 +369,7 @@ export async function listRecentBookings(
   db: SupabaseClient,
   limit = 8,
 ): Promise<RecentBooking[]> {
-  const { data } = await db
+  const { data, error } = await db
     .from('bookings')
     .select('id, status, created_at, routes(name)')
     // "Recent trips" shows only rides that exist or may happen — never
@@ -365,6 +377,7 @@ export async function listRecentBookings(
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (error) throw error; // don't mask a transient failure as "no recent trips"
   return (data ?? []).map((b) => {
     const r = b.routes as { name: string } | { name: string }[] | null;
     const route = Array.isArray(r) ? r[0] : r;
@@ -381,6 +394,7 @@ export async function listRecentBookings(
 export async function myBookingStatusCounts(
   db: SupabaseClient,
 ): Promise<Record<string, number>> {
-  const { data } = await db.rpc('my_booking_status_counts');
+  const { data, error } = await db.rpc('my_booking_status_counts');
+  if (error) throw error;
   return (data ?? {}) as Record<string, number>;
 }

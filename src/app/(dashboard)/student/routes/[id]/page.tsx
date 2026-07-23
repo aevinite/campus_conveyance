@@ -16,6 +16,7 @@ import { ReserveForm } from './reserve-form';
 import { SeatMap } from './seat-map';
 import RouteStopsMap from './route-stops-map';
 import BusGallery from './bus-gallery';
+import { formatTime } from '@/lib/format-date';
 
 // 0 means the agency never set a price — treat it like "not set".
 const inr = (cents: number | null) =>
@@ -83,20 +84,24 @@ export default async function RouteDetailPage({
         </Link>
         <BookingSteps active={3} />
         <div>
-        <h1 className="text-2xl font-semibold">{data.route.name}</h1>
-        <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+          Step 3 · Reserve &amp; pay
+        </p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{data.route.name}</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           {notBookable ? (
-            <span className="text-warning">Not accepting bookings</span>
+            <span className="font-medium text-warning">Not accepting bookings</span>
           ) : soldOut ? (
-            <span className="text-warning">Full — {availability.total} seats taken</span>
+            <span className="font-medium text-warning">Full — <span className="tnum">{availability.total}</span> seats taken</span>
           ) : (
-            <span className="text-success">
-              {availability.available} of {availability.total} seats available
+            <span className="font-medium text-success">
+              <span className="tnum">{availability.available}</span> of{' '}
+              <span className="tnum">{availability.total}</span> seats available
             </span>
           )}
           {fare && (
             <span>
-              Fare: <span className="font-semibold text-foreground">{fare}</span>
+              Fare: <span className="tnum font-semibold text-foreground">{fare}</span>
             </span>
           )}
         </p>
@@ -379,19 +384,7 @@ export default async function RouteDetailPage({
                   resumePickupName={
                     data.stops.find((s) => s.id === activeBooking.pickup_stop_id)?.name ?? null
                   }
-                  payBy={
-                    activeBooking.expires_at
-                      ? new Intl.DateTimeFormat('en-IN', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          // Format in IST — without an explicit zone this renders
-                          // in the SERVER's timezone (UTC on most hosts), showing
-                          // Indian students a deadline 5.5 hours off for a 20-min
-                          // window.
-                          timeZone: 'Asia/Kolkata',
-                        }).format(new Date(activeBooking.expires_at))
-                      : null
-                  }
+                  payBy={activeBooking.expires_at ? formatTime(activeBooking.expires_at) : null}
                   payByIso={activeBooking.expires_at}
                 />
               ) : activeBooking &&

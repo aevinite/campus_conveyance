@@ -10,6 +10,7 @@ import { PasswordInput } from '@/components/auth/password-input';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import { FormStatus } from '@/components/form-status';
+import { formatDateMedium } from '@/lib/format-date';
 import { ConfirmDeleteButton } from './confirm-delete-button';
 
 function EditField({
@@ -47,6 +48,8 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
 
   useEffect(() => {
     if (state.message) {
+      // Reacting to a completed useActionState result — intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditing(false);
       router.refresh();
     }
@@ -55,7 +58,7 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
 
   if (!editing) {
     return (
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card/50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card/50 p-4 shadow-xs transition-colors hover:border-primary/30">
         <div className="flex min-w-0 gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
             <User className="size-5" />
@@ -93,14 +96,14 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
                 {driver.aadhaar_no && <span>ID: {driver.aadhaar_no}</span>}
                 {driver.blood_group && <span>Blood group: {driver.blood_group}</span>}
                 {driver.alt_phone && <span>Alt: {driver.alt_phone}</span>}
-                {driver.dob && <span>DOB: {driver.dob}</span>}
+                {driver.dob && <span>DOB: {formatDateMedium(driver.dob)}</span>}
                 {driver.address && <span>{driver.address}</span>}
               </div>
             )}
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" aria-expanded={editing} onClick={() => setEditing(true)}>
             <Pencil className="size-3.5" /> Edit
           </Button>
           <ConfirmDeleteButton
@@ -156,11 +159,17 @@ export function EditableDriverCard({ driver }: { driver: DriverRow }) {
           </div>
         </div>
         <FormStatus error={state.error} message={state.message} />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={pending}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="submit" disabled={pending} className="w-full sm:w-auto">
             {pending ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => setEditing(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            className="w-full sm:w-auto"
+            onClick={() => setEditing(false)}
+          >
             Cancel
           </Button>
         </div>

@@ -1,5 +1,5 @@
 'use client';
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { UserCog, RotateCcw } from 'lucide-react';
@@ -37,12 +37,15 @@ export function DriverChangePanel({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const regionId = useId();
   const [changeState, changeAction] = useActionState<FormState, FormData>(changeBusDriverAction, {});
   const [revertState, revertAction] = useActionState<FormState, FormData>(revertBusDriverAction, {});
 
   useEffect(() => {
     if (changeState.message) {
       toast.success(changeState.message);
+      // Reacting to a completed useActionState result — intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(false);
       router.refresh();
     } else if (changeState.error) {
@@ -76,7 +79,7 @@ export function DriverChangePanel({
           </p>
           {todayReason && <p className="text-xs text-muted-foreground">Reason: {todayReason}</p>}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+            <Button type="button" variant="outline" size="sm" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen((v) => !v)}>
               {open ? 'Cancel' : `Edit today’s ${noun}`}
             </Button>
             <form action={revertAction}>
@@ -93,14 +96,15 @@ export function DriverChangePanel({
           <p className="text-sm text-muted-foreground">
             Regular {noun}{regularName ? `: ${regularName}` : ''} is on duty today.
           </p>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen((v) => !v)}>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen((v) => !v)}>
             <UserCog className="size-3.5" /> {open ? 'Cancel' : `Change ${noun} for today`}
           </Button>
         </div>
       )}
 
-      {open &&
-        (drivers.length === 0 ? (
+      {open && (
+        <div id={regionId}>
+        {drivers.length === 0 ? (
           <div className="mt-3 space-y-2 border-t border-border pt-3 text-sm text-muted-foreground">
             <p>
               No unassigned staff available. A substitute must be one of your registered drivers who
@@ -146,7 +150,9 @@ export function DriverChangePanel({
               <SubmitButton size="sm" pendingText="Saving…">Save today’s {noun}</SubmitButton>
             </div>
           </form>
-        ))}
+        )}
+        </div>
+      )}
     </div>
   );
 }

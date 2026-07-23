@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { UserMinus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listDeletedStudents, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { restoreStudentAction, permanentlyDeleteStudentAction } from '@/features/admin/actions';
@@ -22,7 +23,14 @@ export default async function AdminDeletedStudentsPage({
   if (total > 0 && page > totalPages) redirect(`/aevinite/deleted-students?page=${totalPages}`);
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Deleted Students</h1>
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <UserMinus className="size-3.5" />
+          Recovery
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Deleted Students</h1>
+        <p className="text-muted-foreground">Restore a student, or remove them for good.</p>
+      </div>
       <DataTable
         headers={['Name', 'Email', 'Phone', 'Action']}
         rows={students.map((s) => [

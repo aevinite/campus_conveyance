@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Building } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listDeletedAgencies, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { restoreAgencyAction, permanentlyDeleteAgencyAction } from '@/features/admin/actions';
@@ -20,7 +21,14 @@ export default async function AdminDeletedProvidersPage({
   if (total > 0 && page > totalPages) redirect(`/aevinite/deleted-providers?page=${totalPages}`);
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Deleted Service Providers</h1>
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Building className="size-3.5" />
+          Recovery
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Deleted Service Providers</h1>
+        <p className="text-muted-foreground">Restore a provider, or remove it for good.</p>
+      </div>
       <DataTable
         headers={['Company', 'Email', 'Phone', 'Action']}
         rows={agencies.map((a) => [

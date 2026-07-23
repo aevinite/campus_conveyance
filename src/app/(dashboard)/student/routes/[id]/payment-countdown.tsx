@@ -30,6 +30,8 @@ export function PaymentCountdown({
 
   useEffect(() => {
     if (!expiresAt) return;
+    // Seed the countdown from the new expiry when it changes — intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLeft(secondsLeft(expiresAt));
     const id = setInterval(() => {
       const s = secondsLeft(expiresAt);

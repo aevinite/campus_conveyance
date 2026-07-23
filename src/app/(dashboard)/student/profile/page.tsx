@@ -6,11 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { ParentAccessCard } from './parent-access-card';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
-const fmtDate = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'long' }) : '—';
-const fmtDateTime = (v?: string | null) =>
-  v ? new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+const fmtDate = (v?: string | null) => formatDate(v);
+const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function StudentProfilePage() {
   await requireRole('STUDENT');
@@ -64,8 +63,8 @@ export default async function StudentProfilePage() {
           <ArrowLeft className="size-4" />
           Back to dashboard
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold">Profile &amp; settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Profile &amp; settings</h1>
+        <p className="mt-1 text-muted-foreground">
           Manage your account details, contact info, and password.
         </p>
       </div>
@@ -110,7 +109,7 @@ export default async function StudentProfilePage() {
                   <d.icon className="size-4" />
                   {d.label}
                 </dt>
-                <dd className="truncate text-right text-sm font-medium">{d.value}</dd>
+                <dd className="tnum truncate text-right text-sm font-medium">{d.value}</dd>
               </div>
             ))}
           </dl>
@@ -122,8 +121,8 @@ export default async function StudentProfilePage() {
         <CardHeader>
           <CardTitle>Parent access</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Let a parent follow your trips by linking their account with a
-            one-time code.
+            Let a parent follow your daily commute by linking their account with
+            a one-time code.
           </p>
         </CardHeader>
         <CardContent>

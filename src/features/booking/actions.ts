@@ -1,5 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { reserveSchema, cancelSchema, paySchema, studentDetailsSchema } from './schemas';
 import { reserveSeat, cancelBooking, saveStudentDetails, payBooking } from './services';
@@ -27,6 +28,7 @@ export async function reserveSeatAction(
   try {
     const result = await reserveSeat(db, parsed.data);
     revalidatePath('/student/bookings');
+    revalidatePath('/student'); // home "recent trips" strip
     revalidatePath(`/student/routes/${parsed.data.routeId}`);
     return {
       status: result.status,
@@ -69,9 +71,12 @@ export async function payBookingAction(
   try {
     const status = await payBooking(db, parsed.data.bookingId);
     if (status === 'CONFIRMED') {
-      // Booking-confirmed email to the student's signup address — best-effort
-      // (logged inside), the confirmed seat never depends on SMTP.
-      await sendBookingConfirmedEmail(parsed.data.bookingId, parsed.data.method);
+      // Booking-confirmed email — best-effort (logged inside) and the confirmed
+      // seat never depends on SMTP. Send it AFTER the response so a slow Gmail
+      // connection can't stall the "payment confirmed" reply. `after()` keeps the
+      // serverless function alive for it (a bare un-awaited promise would be cut
+      // off when the response ends).
+      after(() => sendBookingConfirmedEmail(parsed.data.bookingId, parsed.data.method));
     }
     revalidatePath('/student/bookings');
     revalidatePath('/student');

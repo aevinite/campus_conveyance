@@ -60,7 +60,7 @@ export function DriverForm() {
         driver is on their bus.
       </p>
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         {pending ? 'Creating…' : 'Create driver account'}
       </Button>
     </form>

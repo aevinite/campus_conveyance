@@ -11,11 +11,10 @@ import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { AgencyProfileForm } from './agency-profile-form';
 import { ServiceForm } from './service-form';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
-const fmtDate = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'long' }) : '—';
-const fmtDateTime = (v?: string | null) =>
-  v ? new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+const fmtDate = (v?: string | null) => formatDate(v);
+const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: 'border-warning/40 bg-warning/10 text-warning',
@@ -79,18 +78,19 @@ export default async function AgencyAccountPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Profile</h1>
-        <p className="text-muted-foreground">
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Account</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Profile</h1>
+        <p className="mt-1 text-muted-foreground">
           Your account, the details from your application, and your service areas — all editable here.
         </p>
       </div>
 
-      <div className="flex items-center gap-4 rounded-xl border border-border bg-card/40 p-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary">
+      <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-5">
+        <span className="brand-gradient flex size-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-primary-foreground shadow-sm">
           {initials}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-lg font-medium">{display}</p>
+          <p className="truncate text-lg font-semibold">{display}</p>
           <p className="truncate text-sm text-muted-foreground">{email} · Service Provider</p>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default async function AgencyAccountPage() {
         </Card>
 
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Your live services</h2>
+          <h2 className="text-lg font-heading font-semibold tracking-tight">Your live services</h2>
           <DataTable
             headers={['Service', 'Type', 'School / College']}
             rows={services.map((s) => [s.name, s.vehicle_type, s.institutionName])}
@@ -229,7 +229,7 @@ function RequestRow({
   };
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/40 p-3 transition-colors hover:border-primary/30">
       <div className="min-w-0">
         <p className="truncate font-medium">
           {r.name} · {r.vehicle_type === 'VAN' ? 'Van' : 'Bus'}

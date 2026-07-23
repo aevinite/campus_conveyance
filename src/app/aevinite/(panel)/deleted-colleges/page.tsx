@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listDeletedColleges, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { restoreCollegeAction, permanentlyDeleteCollegeAction } from '@/features/admin/actions';
@@ -20,7 +21,14 @@ export default async function AdminDeletedCollegesPage({
   if (total > 0 && page > totalPages) redirect(`/aevinite/deleted-colleges?page=${totalPages}`);
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Deleted Colleges</h1>
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Trash2 className="size-3.5" />
+          Recovery
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Deleted Colleges</h1>
+        <p className="text-muted-foreground">Restore a college, or remove it for good.</p>
+      </div>
       <DataTable
         headers={['Name', 'Type', 'City', 'Action']}
         rows={colleges.map((c) => [

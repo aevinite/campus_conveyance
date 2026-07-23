@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -12,10 +13,8 @@ const ROLE_LABEL: Record<string, string> = {
   AGENCY: 'Agency',
 };
 
-const fmtDate = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'long' }) : '—';
-const fmtDateTime = (v?: string | null) =>
-  v ? new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+const fmtDate = (v?: string | null) => formatDate(v);
+const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function AdminProfilePage() {
   const db = await createClient();
@@ -53,16 +52,17 @@ export default async function AdminProfilePage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Profile</h1>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Account</span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Profile</h1>
         <p className="text-muted-foreground">Your account details, information, and password.</p>
       </div>
 
-      <div className="flex items-center gap-4 rounded-xl border border-border bg-card/40 p-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary">
+      <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-xs sm:p-5">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary ring-2 ring-primary/20">
           {initials}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-lg font-medium">{display}</p>
+          <p className="truncate text-lg font-semibold">{display}</p>
           <p className="truncate text-sm text-muted-foreground">
             {email} · {role}
           </p>
@@ -71,7 +71,7 @@ export default async function AdminProfilePage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Edit profile */}
-        <Card className="h-fit">
+        <Card className="h-fit rounded-2xl">
           <CardHeader>
             <CardTitle>Edit profile</CardTitle>
             <p className="text-sm text-muted-foreground">Update your name and phone number.</p>
@@ -82,7 +82,7 @@ export default async function AdminProfilePage() {
         </Card>
 
         {/* Change password */}
-        <Card className="h-fit">
+        <Card className="h-fit rounded-2xl">
           <CardHeader>
             <CardTitle>Change password</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -96,7 +96,7 @@ export default async function AdminProfilePage() {
       </div>
 
       {/* Account information (read-only) */}
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Account information</CardTitle>
         </CardHeader>

@@ -9,8 +9,10 @@ import {
   busDivIcon,
   haversineMeters,
   toKmh,
+  DEFAULT_MAP_CENTER,
   type LatLng,
 } from '@/lib/bus-marker';
+import { escapeHtml } from '@/lib/escape-html';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 // Below this, treat the fix as jitter (bus stationary) — don't rotate or speed.
@@ -32,6 +34,7 @@ export interface SimpleStop {
 export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
+  const leafletRef = useRef<typeof import('leaflet') | null>(null);
   const markerRef = useRef<LeafletNS.Marker | null>(null);
   const animCancel = useRef<(() => void) | null>(null);
   const prevPos = useRef<LatLng | null>(null);
@@ -52,14 +55,20 @@ export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Abort in-flight area lookups on unmount so they don't resolve late.
+    const ac = new AbortController();
+    // Only the latest fetchArea may write the label (drop stale late responses).
+    let areaSeq = 0;
 
     async function fetchArea(p: LatLng) {
+      const seq = ++areaSeq;
       try {
         const r = await fetch(`/api/reverse-geocode?lat=${p[0]}&lng=${p[1]}`, {
           cache: 'no-store',
+          signal: ac.signal,
         });
         const j = (await r.json()) as { area: string | null };
-        if (cancelled) return;
+        if (cancelled || seq !== areaSeq) return;
         areaRef.current = j.area ?? areaRef.current;
         setReadout((prev) => ({ ...prev, area: areaRef.current }));
       } catch {
@@ -67,9 +76,102 @@ export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
       }
     }
 
+    function onPosition(p: GeolocationPosition) {
+      const L = leafletRef.current;
+      const m = mapRef.current;
+      if (cancelled || !L || !m) return;
+      const pos: LatLng = [p.coords.latitude, p.coords.longitude];
+      const now = Date.now();
+      let heading =
+        p.coords.heading != null && !Number.isNaN(p.coords.heading)
+          ? p.coords.heading
+          : headingRef.current;
+      let speed = toKmh(p.coords.speed); // native km/h, or null
+
+      if (markerRef.current) {
+        const prev = prevPos.current!;
+        const dist = haversineMeters(prev, pos);
+        const dt = (now - prevTime.current) / 1000;
+        if (dist >= MOVE_MIN_M) {
+          if (p.coords.heading == null || Number.isNaN(p.coords.heading)) {
+            heading = bearingDeg(prev, pos);
+          }
+          if (speed == null && dt > 0) speed = (dist / dt) * 3.6;
+          animCancel.current?.();
+          animCancel.current = animateMarkerTo(
+            markerRef.current,
+            pos,
+            Math.min(Math.max(dt * 1000, 500), 4000),
+          );
+        } else {
+          speed = 0;
+          markerRef.current.setLatLng(pos);
+        }
+        headingRef.current = heading;
+        markerRef.current.setIcon(busDivIcon(L, heading));
+      } else {
+        markerRef.current = L.marker(pos, {
+          icon: busDivIcon(L, heading),
+          zIndexOffset: 1000,
+        }).addTo(m);
+        headingRef.current = heading;
+        lastAreaPos.current = pos;
+        m.setView(pos, 16);
+        void fetchArea(pos);
+      }
+
+      // Auto-follow (navigation view).
+      m.panTo(pos, { animate: true, duration: 0.5 });
+      if (
+        !lastAreaPos.current ||
+        haversineMeters(lastAreaPos.current, pos) >= AREA_MIN_M
+      ) {
+        lastAreaPos.current = pos;
+        void fetchArea(pos);
+      }
+      prevPos.current = pos;
+      prevTime.current = now;
+      setStatus('live');
+      setReadout({
+        speedKmh: speed,
+        area: areaRef.current,
+        stopped: !speed || speed < 3,
+      });
+    }
+
+    function startWatch() {
+      if (watchId.current != null) return;
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        setStatus('error');
+        return;
+      }
+      watchId.current = navigator.geolocation.watchPosition(
+        onPosition,
+        (err) => {
+          if (cancelled) return;
+          setStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'error');
+        },
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
+      );
+    }
+    function stopWatch() {
+      if (watchId.current != null && typeof navigator !== 'undefined') {
+        navigator.geolocation.clearWatch(watchId.current);
+        watchId.current = null;
+      }
+    }
+    // Pause GPS + area lookups while the tab is hidden — this map is DISPLAY
+    // only (the driver-tracker in the layout keeps sending the real position),
+    // so a backgrounded tab shouldn't keep draining the phone's GPS/battery.
+    function onVisibility() {
+      if (document.hidden) stopWatch();
+      else startWatch();
+    }
+
     (async () => {
       const L = (await import('leaflet')).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
+      leafletRef.current = L;
       const m = L.map(containerRef.current, { attributionControl: false });
       mapRef.current = m;
       L.tileLayer(TILE_URL, { subdomains: 'abcd', maxZoom: 20 }).addTo(m);
@@ -83,89 +185,20 @@ export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
           fillOpacity: 1,
         })
           .addTo(m)
-          .bindTooltip(s.name, { direction: 'top' }),
+          .bindTooltip(escapeHtml(s.name), { direction: 'top' }),
       );
-      m.setView(stops[0] ? [stops[0].lat, stops[0].lng] : [23.0225, 72.5714], 13);
+      m.setView(stops[0] ? [stops[0].lat, stops[0].lng] : DEFAULT_MAP_CENTER, 13);
       setTimeout(() => m.invalidateSize(), 0);
 
-      if (typeof navigator === 'undefined' || !navigator.geolocation) {
-        setStatus('error');
-        return;
-      }
-      watchId.current = navigator.geolocation.watchPosition(
-        (p) => {
-          if (cancelled || !mapRef.current) return;
-          const pos: LatLng = [p.coords.latitude, p.coords.longitude];
-          const now = Date.now();
-          let heading =
-            p.coords.heading != null && !Number.isNaN(p.coords.heading)
-              ? p.coords.heading
-              : headingRef.current;
-          let speed = toKmh(p.coords.speed); // native km/h, or null
-
-          if (markerRef.current) {
-            const prev = prevPos.current!;
-            const dist = haversineMeters(prev, pos);
-            const dt = (now - prevTime.current) / 1000;
-            if (dist >= MOVE_MIN_M) {
-              if (p.coords.heading == null || Number.isNaN(p.coords.heading)) {
-                heading = bearingDeg(prev, pos);
-              }
-              if (speed == null && dt > 0) speed = (dist / dt) * 3.6;
-              animCancel.current?.();
-              animCancel.current = animateMarkerTo(
-                markerRef.current,
-                pos,
-                Math.min(Math.max(dt * 1000, 500), 4000),
-              );
-            } else {
-              speed = 0;
-              markerRef.current.setLatLng(pos);
-            }
-            headingRef.current = heading;
-            markerRef.current.setIcon(busDivIcon(L, heading));
-          } else {
-            markerRef.current = L.marker(pos, {
-              icon: busDivIcon(L, heading),
-              zIndexOffset: 1000,
-            }).addTo(m);
-            headingRef.current = heading;
-            lastAreaPos.current = pos;
-            m.setView(pos, 16);
-            void fetchArea(pos);
-          }
-
-          // Auto-follow (navigation view).
-          m.panTo(pos, { animate: true, duration: 0.5 });
-          if (
-            !lastAreaPos.current ||
-            haversineMeters(lastAreaPos.current, pos) >= AREA_MIN_M
-          ) {
-            lastAreaPos.current = pos;
-            void fetchArea(pos);
-          }
-          prevPos.current = pos;
-          prevTime.current = now;
-          setStatus('live');
-          setReadout({
-            speedKmh: speed,
-            area: areaRef.current,
-            stopped: !speed || speed < 3,
-          });
-        },
-        (err) => {
-          if (cancelled) return;
-          setStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'error');
-        },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
-      );
+      if (!document.hidden) startWatch();
+      document.addEventListener('visibilitychange', onVisibility);
     })();
 
     return () => {
       cancelled = true;
-      if (watchId.current != null && typeof navigator !== 'undefined') {
-        navigator.geolocation.clearWatch(watchId.current);
-      }
+      stopWatch();
+      ac.abort();
+      document.removeEventListener('visibilitychange', onVisibility);
       animCancel.current?.();
       markerRef.current = null;
       mapRef.current?.remove();

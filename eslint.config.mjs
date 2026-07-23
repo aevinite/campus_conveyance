@@ -13,23 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
-  {
-    rules: {
-      // eslint-config-next 16 enables the new React-Compiler-oriented
-      // react-hooks rules (eslint-plugin-react-hooks v6). They flag intentional,
-      // runtime-correct patterns we rely on — reacting to a completed
-      // useActionState result with a toast + local state update, and keeping a
-      // "latest value" ref for stable callbacks (e.g. the map click handler,
-      // whose setState runs in an event callback, not synchronously in render).
-      // These are not runtime bugs; disable until/unless we adopt the compiler.
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/refs": "off",
-      // Same family: `purity` flags impure calls in render (e.g. Date.now()),
-      // which async SERVER components legitimately do — reading the clock in a
-      // server render is correct, not a compiler hazard.
-      "react-hooks/purity": "off",
-    },
-  },
 ]);
+// NOTE: eslint-config-next 16 enables the new React-Compiler-oriented react-hooks
+// rules (eslint-plugin-react-hooks v6): set-state-in-effect, refs, purity. A
+// handful of our components use runtime-correct patterns those rules flag
+// (reacting to a completed useActionState result, "latest value" refs for stable
+// callbacks, reading the clock during a server render). Rather than silence the
+// whole category globally, each such site carries a scoped
+// `// eslint-disable-next-line react-hooks/<rule>` with a justification, so the
+// rules stay ENFORCED everywhere else and any new violation is still caught.
 
 export default eslintConfig;

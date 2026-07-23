@@ -66,7 +66,12 @@ export async function payBooking(db: SupabaseClient, bookingId: string): Promise
   // Preserve the SQLSTATE (e.g. P0008 window-expired, P0005 no-longer-payable) so
   // the UI can branch on the code instead of the message text.
   if (error) throw new AppError('BOOKING', error.message, 400, error.code);
-  return (data?.status as string) ?? 'CONFIRMED';
+  // Don't assume success on an empty row — only an explicit status counts. A
+  // null/absent status here would otherwise read as "CONFIRMED" and trigger a
+  // confirmation email for a seat that may not actually be held.
+  const status = data?.status as string | undefined;
+  if (!status) throw new AppError('BOOKING', 'Payment could not be confirmed — please try again.', 400);
+  return status;
 }
 
 export async function reserveSeat(
@@ -80,6 +85,11 @@ export async function reserveSeat(
     p_drop_stop_id: input.dropStopId ? input.dropStopId : null,
   });
   if (error) throw new AppError('BOOKING', error.message);
+  // Guard against an empty RPC result — dereferencing data.id/.status blind would
+  // NPE (or emit an undefined booking) instead of a clear error.
+  if (!data?.id || !data?.status) {
+    throw new AppError('BOOKING', 'Could not reserve the seat — please try again.', 400);
+  }
   return {
     id: data.id as string,
     status: data.status as string,

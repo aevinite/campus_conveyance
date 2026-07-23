@@ -234,8 +234,12 @@ function EmailVerifyField({
   // surface why, without wiping the email they already typed.
   useEffect(() => {
     if (resetSignal > 0) {
+      // Prop-driven reset (parent bumps resetSignal when the proof lapses) —
+      // intentional, not a cascading-render hazard.
+      /* eslint-disable react-hooks/set-state-in-effect */
       resetVerification();
       setErr('Your email verification expired — please verify again before submitting.');
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal]);
@@ -377,6 +381,8 @@ export function AgencyRegisterForm({
   const [resetSignal, setResetSignal] = useState(0);
   useEffect(() => {
     if (state.error && /verify your email/i.test(state.error)) {
+      // Reacting to a completed useActionState error — intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResetSignal((n) => n + 1);
     }
   }, [state]);
@@ -395,7 +401,7 @@ export function AgencyRegisterForm({
           <ArrowLeft className="size-4" />
           Back to login
         </Link>
-        <CardTitle className="text-xl">Apply as a Service Agency</CardTitle>
+        <CardTitle className="text-2xl">Apply as a Service Agency</CardTitle>
         <CardDescription>
           Fill in your business details. An admin reviews and approves your
           application before you can list buses and routes.

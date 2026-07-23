@@ -29,7 +29,10 @@ export default async function AddRoutePage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Add Bus Route</h1>
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Routes</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Add bus route</h1>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Route details</CardTitle>

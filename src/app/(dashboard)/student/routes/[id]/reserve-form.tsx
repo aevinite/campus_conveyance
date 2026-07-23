@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useModalFocusTrap } from '@/lib/use-modal-focus-trap';
+import { formatTime } from '@/lib/format-date';
 import {
   MapPin,
   GraduationCap,
@@ -42,12 +45,7 @@ const CHECKS = ['Seat availability', 'Your pickup stop', 'Campus eligibility'];
 type Phase = 'reserve' | 'approving' | 'payment' | 'done' | 'waitlisted' | 'expired';
 
 function fmtIST(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Intl.DateTimeFormat('en-IN', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(iso));
+  return iso ? formatTime(iso) : null;
 }
 
 function PanelSteps({ active }: { active: 1 | 2 | 3 }) {
@@ -115,6 +113,18 @@ export function ReserveForm({
   const [payDismissed, setPayDismissed] = useState(false);
   const [receiptDismissed, setReceiptDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+
+  // Reset back to a clean request step and pull fresh server data (seat counts)
+  // via a client-side refresh — no full-page reload.
+  function requestAgain() {
+    setBookingId('');
+    setPayByAt(null);
+    setPayDismissed(false);
+    setPickupId(stops[0]?.id ?? ''); // reset pickup too, else the receipt shows a stale one
+    setPhase('reserve');
+    router.refresh();
+  }
 
   // Move from the approving popup to the payment step after the pause.
   useEffect(() => {
@@ -200,7 +210,7 @@ export function ReserveForm({
   );
 
   const paymentModal = phase === 'payment' && !payDismissed && (
-    <Overlay label="Complete payment">
+    <Overlay label="Complete payment" onClose={() => setPayDismissed(true)}>
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-8">
         <div className="flex items-start justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-sm font-medium text-success">
@@ -226,7 +236,7 @@ export function ReserveForm({
         {/* Big, prominent amount */}
         <div className="mt-5 rounded-2xl border border-primary/30 bg-primary/[0.06] p-6 text-center">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Amount payable</p>
-          <p className="mt-1 text-5xl font-extrabold tracking-tight text-primary sm:text-6xl">
+          <p className="tnum mt-1 text-5xl font-extrabold tracking-tight text-primary sm:text-6xl">
             {fare ?? 'Set by agency'}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">{routeName}</p>
@@ -266,7 +276,7 @@ export function ReserveForm({
   );
 
   const receiptModal = phase === 'done' && !receiptDismissed && (
-    <Overlay label="Booking confirmed">
+    <Overlay label="Booking confirmed" onClose={() => setReceiptDismissed(true)}>
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="flex items-start justify-between">
           <span className="grid size-12 place-items-center rounded-2xl bg-success/10 text-success">
@@ -283,7 +293,7 @@ export function ReserveForm({
         </div>
         <h2 className="mt-4 text-xl font-bold">Booking confirmed!</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Payment received — your seat is confirmed. Have a safe trip!
+          Payment received — your seat is confirmed. Have a safe ride!
         </p>
         <dl className="mt-5 space-y-2.5 rounded-xl border border-border bg-muted/30 p-4 text-sm">
           {[
@@ -332,7 +342,7 @@ export function ReserveForm({
         {modals}
         <div className="flex items-start gap-2.5 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5 text-sm text-success">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-          <span>Payment successful — your seat is confirmed. Have a safe trip!</span>
+          <span>Payment successful — your seat is confirmed. Have a safe ride!</span>
         </div>
         <Link
           href="/student/bookings"
@@ -373,7 +383,7 @@ export function ReserveForm({
             it&apos;s still available.
           </span>
         </div>
-        <Button className="w-full" onClick={() => window.location.reload()}>
+        <Button className="w-full" onClick={requestAgain}>
           Request the seat again
         </Button>
       </div>
@@ -405,9 +415,13 @@ export function ReserveForm({
             your seat.
           </p>
         </div>
-        {/* Countdown here too, so it keeps ticking when the payment modal is
-            dismissed and flips the panel to 'expired' on its own. */}
-        <PaymentCountdown expiresAt={deadlineIso} onExpire={() => setPhase('expired')} />
+        {/* Only when the modal is DISMISSED — otherwise the modal's own countdown
+            (paymentModal) is showing, and rendering both spins two intervals that
+            both fire onExpire. This panel one keeps ticking after dismissal and
+            flips to 'expired' on its own. */}
+        {payDismissed && (
+          <PaymentCountdown expiresAt={deadlineIso} onExpire={() => setPhase('expired')} />
+        )}
         <Button className="w-full" onClick={() => setPayDismissed(false)}>
           Pay now
         </Button>
@@ -467,10 +481,29 @@ export function ReserveForm({
   );
 }
 
-function Overlay({ label, children }: { label: string; children: React.ReactNode }) {
+function Overlay({
+  label,
+  onClose,
+  children,
+}: {
+  label: string;
+  /** When provided, Escape and a backdrop click dismiss the dialog. */
+  onClose?: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Shared modal a11y (initial focus, trap, Escape, restore). Overlay is mounted
+  // only while shown, so `open` is always true here.
+  useModalFocusTrap(true, ref, onClose);
+
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/50 p-4 backdrop-blur-xs"
+      ref={ref}
+      tabIndex={-1}
+      onMouseDown={(e) => {
+        if (onClose && e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/50 p-4 backdrop-blur-xs outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={label}

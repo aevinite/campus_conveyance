@@ -7,6 +7,10 @@ import type * as LeafletNS from 'leaflet';
 
 export type LatLng = [number, number];
 
+// Fallback map center when there are no stops/GPS to frame yet (Ahmedabad — the
+// app's primary operating city). Shared so the several maps agree.
+export const DEFAULT_MAP_CENTER: LatLng = [23.0225, 72.5714];
+
 const EARTH_M = 6371000;
 const rad = (d: number) => (d * Math.PI) / 180;
 const deg = (r: number) => (r * 180) / Math.PI;

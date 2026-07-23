@@ -4,10 +4,10 @@ import { redirect } from 'next/navigation';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { registerSchema, loginSchema, forgotSchema, resetSchema, changePasswordSchema, profileSchema } from './schemas';
-import { loginUser, ensureEmailFreeForSignup } from './services';
+import { ensureEmailFreeForSignup, signInAndRoute } from './services';
 import { getSessionClaims } from './session';
 import { isAccountDeactivated } from './account-status';
-import { dashboardFor } from '@/lib/rbac/roles';
+import { loginFor } from '@/lib/rbac/roles';
 import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '@/lib/mailer';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -95,21 +95,9 @@ export async function loginAction(
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: 'Please check the form fields.' };
   const db = await createClient();
-  try {
-    await loginUser(db, parsed.data);
-  } catch (e) {
-    return { error: toErrorResponse(e).message };
-  }
-  const { userId, role } = await getSessionClaims(db);
-  // Block a soft-deleted ("removed") account at the door: its credentials still
-  // work and Supabase happily issues a session, but an admin has revoked it, so
-  // tear the session down and refuse instead of redirecting into a dashboard.
-  if (userId && (await isAccountDeactivated(db, userId, role))) {
-    await db.auth.signOut();
-    return { error: 'This account has been deactivated. Please contact support.' };
-  }
-  revalidatePath('/', 'layout');
-  redirect(dashboardFor(role));
+  // Shared login sequence (auth + soft-delete gate + role redirect) — see
+  // signInAndRoute. Redirects on success; returns a message only on failure.
+  return { error: await signInAndRoute(db, parsed.data) };
 }
 
 export async function logoutAction() {
@@ -135,6 +123,17 @@ export async function forgotAction(
   const email = parsed.data.email.trim().toLowerCase();
   const site = process.env.NEXT_PUBLIC_SITE_URL!;
 
+  // Identical reply for EVERY account-state outcome (not registered, deactivated,
+  // or a real send) — never reveal which, or this endpoint becomes an account
+  // enumeration oracle. Only genuine server-side faults return a different string.
+  const GENERIC = { message: 'If an account exists for that email, a reset link has been sent.' };
+
+  // Rate limit FIRST — before any DB lookup — so the endpoint can't be used to
+  // probe a list of emails unthrottled (per address + per IP). Reset mail on
+  // demand is also an email-bomb / quota-exhaustion vector.
+  const limited = await emailRateLimited('email:reset', email);
+  if (limited) return { error: limited };
+
   // Admin (service-role) client: bypasses RLS so we can look up any account and
   // mint a one-time recovery link.
   const admin = createSbClient(
@@ -143,23 +142,20 @@ export async function forgotAction(
     { auth: { persistSession: false } },
   );
 
-  // 1) Check the database: is this email registered? `profiles.email` is kept in
-  // sync with auth.users by the handle_new_user trigger, so it's the source of
-  // truth for "does this account exist".
+  // Is this email registered? `profiles.email` is kept in sync with auth.users by
+  // the handle_new_user trigger, so it's the source of truth.
   const { data: profile, error: lookupError } = await admin
     .from('profiles')
     .select('id, is_deleted, role')
-    // Indexed equality on the generated lower(email) column (migration 0060) —
-    // `email` is already trimmed + lowercased above. Was a case-insensitive
-    // ilike seq scan on a public, unauthenticated endpoint.
+    // Indexed equality on the generated lower(email) column (migration 0060).
     .eq('email_lower', email)
     .maybeSingle();
   if (lookupError) return { error: 'Something went wrong. Please try again.' };
-  if (!profile) return { error: 'This email is not registered.' };
+  if (!profile) return GENERIC; // don't reveal "not registered"
 
   // Don't let a soft-deleted ("removed") account reset its password and walk back
   // in. Students/parents are flagged on the profile; agencies on the agency row
-  // (the owner's profile is left untouched), so check both.
+  // (the owner's profile is left untouched), so check both. Still reply GENERIC.
   const prof = profile as { id: string; is_deleted: boolean; role: string };
   let deactivated = prof.is_deleted === true;
   if (!deactivated && prof.role === 'AGENCY') {
@@ -170,18 +166,11 @@ export async function forgotAction(
       .maybeSingle();
     deactivated = (agency as { is_deleted?: boolean } | null)?.is_deleted === true;
   }
-  if (deactivated) {
-    return { error: 'This account has been deactivated. Please contact support.' };
-  }
+  if (deactivated) return GENERIC; // don't reveal "deactivated"
 
-  // Rate limit before sending (per address + per IP): reset mail on demand is an
-  // email-bomb / quota-exhaustion vector.
-  const limited = await emailRateLimited('email:reset', email);
-  if (limited) return { error: limited };
-
-  // 2) Registered → generate the recovery link and email it ourselves from Gmail
-  // (Nodemailer) instead of Supabase's rate-limited built-in mailer. The link
-  // lands on /reset, which reads the session from the URL before letting the
+  // Registered + active → generate the recovery link and email it ourselves from
+  // Gmail (Nodemailer) instead of Supabase's rate-limited built-in mailer. The
+  // link lands on /reset, which reads the session from the URL before letting the
   // user set a new password.
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'recovery',
@@ -196,7 +185,7 @@ export async function forgotAction(
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
-  return { message: 'A reset link has been sent to your email.' };
+  return GENERIC;
 }
 
 export async function googleLoginAction() {
@@ -229,6 +218,13 @@ export async function resetAction(
     const { data } = await db.from('profiles').select('role').eq('id', userId).maybeSingle();
     role = (data as { role?: typeof claimRole } | null)?.role ?? undefined;
   }
+  // A soft-deleted (removed) account must not be able to silently rotate its
+  // password from a recovery link — login blocks it afterward anyway, so let it
+  // fail here honestly instead of leaving a usable new credential.
+  if (userId && (await isAccountDeactivated(db, userId, role))) {
+    await db.auth.signOut();
+    return { error: 'This account is no longer active. Please contact support.' };
+  }
   try {
     const { error } = await db.auth.updateUser({ password: parsed.data.password });
     if (error) throw new AuthError(error.message);
@@ -240,15 +236,9 @@ export async function resetAction(
   // logged in is confusing — tear the recovery session down so login is honest
   // and they sign in fresh with the new password.
   await db.auth.signOut();
-  const loginPath =
-    role === 'AGENCY'
-      ? '/agency/login'
-      : role === 'DRIVER'
-        ? '/driver/login'
-        : role === 'SUPER_ADMIN' || role === 'INSTITUTION_ADMIN'
-          ? '/aevinite/login'
-          : '/login';
-  redirect(loginPath);
+  // Canonical per-role login (shared with requireRole's loginPath) so both gates
+  // agree on where each role signs in.
+  redirect(loginFor(role));
 }
 
 // Update the signed-in user's own profile (name + phone). Keeps the JWT's
@@ -267,6 +257,14 @@ export async function updateProfileAction(
     data: { user },
   } = await db.auth.getUser();
   if (!user) return { error: 'You are not signed in.' };
+
+  // A soft-deleted ("removed") account keeps a live cookie — deny self-service
+  // mutations here too, like every other gate does.
+  const { role } = await getSessionClaims(db);
+  if (await isAccountDeactivated(db, user.id, role)) {
+    await db.auth.signOut();
+    return { error: 'This account is no longer active. Please contact support.' };
+  }
 
   const { error } = await db
     .from('profiles')
@@ -297,6 +295,14 @@ export async function changePasswordAction(
     data: { user },
   } = await db.auth.getUser();
   if (!user?.email) return { error: 'You are not signed in.' };
+
+  // Deny a soft-deleted ("removed") account — it must not be able to rotate its
+  // password and walk back in.
+  const { role } = await getSessionClaims(db);
+  if (await isAccountDeactivated(db, user.id, role)) {
+    await db.auth.signOut();
+    return { error: 'This account is no longer active. Please contact support.' };
+  }
 
   // Verify the current password on a throwaway client so we don't disturb the
   // live session cookies while checking credentials.

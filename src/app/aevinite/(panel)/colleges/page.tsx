@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { School } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listColleges, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { deleteCollegeAction, toggleCollegeAction } from '@/features/admin/actions';
@@ -25,18 +26,38 @@ export default async function ManageCollegePage({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Manage College</h1>
-        <Link href="/aevinite/add-college" className={buttonVariants({ size: 'sm' })}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+            <School className="size-3.5" />
+            Institutions
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Manage College</h1>
+        </div>
+        <Link href="/aevinite/add-college" className={cn(buttonVariants({ size: 'sm' }), 'w-full sm:w-auto')}>
           Add College
         </Link>
       </div>
       {colleges.length === 0 ? (
-        <p className="text-muted-foreground">No colleges or schools yet.</p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <School className="size-6" />
+          </span>
+          <div>
+            <p className="font-medium">No colleges or schools yet</p>
+            <p className="text-sm text-muted-foreground">Add one to get started.</p>
+          </div>
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {colleges.map((c) => (
-            <Card key={c.id} className={cn('overflow-hidden', !c.is_active && 'opacity-75')}>
+            <Card
+              key={c.id}
+              className={cn(
+                'overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md',
+                !c.is_active && 'opacity-75',
+              )}
+            >
               {c.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.image_url} alt={c.name} className="h-32 w-full object-cover" />
@@ -50,9 +71,9 @@ export default async function ManageCollegePage({
                     </p>
                     <span
                       className={cn(
-                        'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                        'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold',
                         c.is_active
-                          ? 'bg-success/15 text-success'
+                          ? 'bg-[color:var(--success)]/12 text-success'
                           : 'bg-muted text-muted-foreground',
                       )}
                     >

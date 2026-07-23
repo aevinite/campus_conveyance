@@ -89,7 +89,7 @@ export function LoginCard({
             Back
           </Link>
         )}
-        <CardTitle className="text-xl">{title}</CardTitle>
+        <CardTitle className="text-2xl">{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>

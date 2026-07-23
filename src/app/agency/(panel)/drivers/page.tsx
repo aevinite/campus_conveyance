@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { User } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listMyDriversPage, countMyDrivers } from '@/features/agency/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,8 +32,9 @@ export default async function AgencyDriversPage({
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Drivers</h1>
-        <p className="text-muted-foreground">
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Team</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Drivers</h1>
+        <p className="mt-1 text-muted-foreground">
           Create login accounts for your drivers. Drivers can&apos;t sign up themselves — you set their email
           &amp; password here, then share it so they can log in to the driver panel.
         </p>
@@ -49,11 +51,14 @@ export default async function AgencyDriversPage({
         </Card>
 
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Your drivers</h2>
+          <h2 className="text-lg font-heading font-semibold tracking-tight">Your drivers</h2>
           {drivers.length === 0 ? (
-            <p className="rounded-lg border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-              No drivers yet.
-            </p>
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card/40 p-10 text-center">
+              <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <User className="size-6" />
+              </span>
+              <p className="text-sm text-muted-foreground">No drivers yet.</p>
+            </div>
           ) : (
             <div className="space-y-3">
               {drivers.map((d) => (

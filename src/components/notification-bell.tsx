@@ -13,13 +13,7 @@ import {
 } from '@/features/notifications/actions';
 import type { NotificationRow } from '@/features/notifications/repository';
 import { cn } from '@/lib/utils';
-
-const when = new Intl.DateTimeFormat('en-IN', {
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-});
+import { formatCompactDateTime } from '@/lib/format-date';
 
 /**
  * In-app notification inbox in the dashboard header. Data is fetched server-side
@@ -100,7 +94,7 @@ export function NotificationBell({
                 </span>
                 {n.body && <span className="text-xs text-muted-foreground">{n.body}</span>}
                 <span className="text-[11px] text-muted-foreground">
-                  {when.format(new Date(n.created_at))}
+                  {formatCompactDateTime(n.created_at)}
                 </span>
               </button>
             ))

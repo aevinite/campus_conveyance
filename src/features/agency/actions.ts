@@ -26,12 +26,17 @@ import {
   updateRoute,
   type RouteStopInput,
 } from './services';
-import { loginUser, ensureEmailFreeForSignup, isEmailTakenByActiveAccount } from '@/features/auth/services';
+import {
+  ensureEmailFreeForSignup,
+  isEmailTakenByActiveAccount,
+  signInAndRoute,
+} from '@/features/auth/services';
 import { loginSchema } from '@/features/auth/schemas';
-import { getSessionClaims } from '@/features/auth/session';
-import { isAccountDeactivated } from '@/features/auth/account-status';
-import { dashboardFor } from '@/lib/rbac/roles';
-import { rateLimit, getClientIp, otpLockRemaining, recordOtpFailure, clearOtpFailures } from '@/lib/rate-limit';
+import { rateLimit, getClientIp, registerOtpAttempt, clearOtpFailures } from '@/lib/rate-limit';
+
+// Guard id-shaped form inputs before they reach Postgres so a malformed value is
+// a clean no-op instead of a 22P02 (invalid uuid) crash to the error page.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Shared email-sending caps (per address, and a combined per-IP ceiling across
 // all outbound mail). Small numbers — signups/resets are rare, abuse is not.
@@ -106,17 +111,17 @@ export async function verifyAgencyEmailOtp(
   if (!/^\d{6}$/.test((code ?? '').trim())) return { error: 'Enter the 6-digit code.' };
 
   // Brute-force lockout: the OTP is a stateless HMAC, so without an attempt
-  // counter all 1,000,000 six-digit codes could be guessed. Lock the address
-  // after too many wrong tries (counted per email, so requesting fresh codes
-  // can't reset it) before we even check the code.
-  const lock = await otpLockRemaining(clean);
+  // counter all 1,000,000 six-digit codes could be guessed. Atomically reserve
+  // an attempt (per email, so requesting fresh codes can't reset it) BEFORE
+  // checking the code — the reservation is what bounds concurrent guessing.
+  const lock = await registerOtpAttempt(clean);
   if (lock > 0) {
     return { error: `Too many incorrect attempts. ${retryMessage(lock)}` };
   }
 
   const res = verifyOtpChallenge(clean, code, token);
   if (!res.ok) {
-    await recordOtpFailure(clean);
+    // Attempt already counted atomically above; nothing to record here.
     return { error: 'Incorrect or expired code. Request a new one and try again.' };
   }
   await clearOtpFailures(clean);
@@ -146,6 +151,16 @@ export async function agencyRegisterAction(
   // is enforced server-side too so the check can't be skipped from the client.
   if (!isEmailVerified(d.email, String(formData.get('emailVerifiedToken') ?? ''))) {
     return { error: 'Please verify your email address before submitting.' };
+  }
+  // Rate-limit the submit path too (not just OTP send) — it creates an auth user
+  // + mails a confirmation, so an uncapped loop is an abuse/quota vector.
+  const registerIp = await getClientIp();
+  const registerBusy = 'Too many registration attempts — please try again later.';
+  if (registerIp !== 'unknown' && (await rateLimit('agency-register:ip', registerIp, 5, 60 * 60)) > 0) {
+    return { error: registerBusy };
+  }
+  if ((await rateLimit('agency-register:email', d.email, 3, 60 * 60)) > 0) {
+    return { error: registerBusy };
   }
   const site = process.env.NEXT_PUBLIC_SITE_URL!;
   // All KYC goes into user metadata; the handle_new_user trigger creates the
@@ -206,26 +221,11 @@ export async function agencyLoginAction(
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: 'Please check your email and password.' };
   const db = await createClient();
-  try {
-    await loginUser(db, parsed.data);
-  } catch (e) {
-    return { error: toErrorResponse(e).message };
-  }
-  // Reject a soft-deleted ("removed") account with a clear message, exactly like
-  // the student login does — otherwise a deactivated agency's credentials work,
-  // the role guard bounces them back to /agency/login, and it looks like nothing
-  // happened.
-  const { userId, role } = await getSessionClaims(db);
-  if (userId && (await isAccountDeactivated(db, userId, role))) {
-    await db.auth.signOut();
-    return { error: 'This account has been deactivated. Please contact support.' };
-  }
-  // Route to the dashboard that matches the account's real role — not a
-  // hardcoded /agency. This way any credentials entered on any login page land
-  // on the correct panel (student→/student, agency→/agency, admin→/aevinite),
-  // instead of being sent to /agency and bounced by the role guard.
-  revalidatePath('/', 'layout');
-  redirect(dashboardFor(role));
+  // Same shared login sequence as the student login (auth + soft-delete gate +
+  // redirect to the account's REAL role's dashboard) — see signInAndRoute. Kept
+  // in one place so future login hardening can't land here and be forgotten in
+  // the other login action (or vice-versa).
+  return { error: await signInAndRoute(db, parsed.data) };
 }
 
 /** Resolve the caller's APPROVED agency id or throw. */
@@ -269,6 +269,9 @@ export async function updateAgencyProfileAction(_: FormState, formData: FormData
     return { error: toErrorResponse(e).message };
   }
   revalidatePath('/agency/account');
+  // The agency name shows in the admin report — bust its cache so the edit isn't
+  // ~60s stale there.
+  updateTag('admin-report');
   return { message: 'Business details updated.' };
 }
 
@@ -285,6 +288,21 @@ export async function requestServiceAction(_: FormState, formData: FormData): Pr
   const db = await createClient();
   try {
     const agency = await requireApprovedAgency(db);
+    // Dedup: a pending request for the same college+vehicle type shouldn't be
+    // filed twice (double-submit / re-request), which clutters the admin queue.
+    const { data: existing, error: dupErr } = await db
+      .from('agency_service_requests')
+      .select('id')
+      .eq('agency_id', agency.id)
+      .eq('institution_id', parsed.data.institutionId)
+      .eq('vehicle_type', parsed.data.vehicleType)
+      .eq('status', 'PENDING')
+      .limit(1)
+      .maybeSingle();
+    if (dupErr) throw new AppError('SERVICE', dupErr.message);
+    if (existing) {
+      return { error: 'You already have a pending request for this college and vehicle type.' };
+    }
     const { error } = await db.from('agency_service_requests').insert({
       agency_id: agency.id,
       institution_id: parsed.data.institutionId,
@@ -341,15 +359,29 @@ async function resolveAgencyDriverId(
 ): Promise<string | null> {
   if (!driverId) return null;
   // Targeted owner-checked lookup (migration 0065) — no full-roster fetch.
-  const { data } = await db.rpc('agency_driver', { p_agency_id: agencyId, p_driver_id: driverId });
+  const { data, error } = await db.rpc('agency_driver', { p_agency_id: agencyId, p_driver_id: driverId });
+  // Surface a transient failure instead of masking it as "driver invalid" — that
+  // would silently drop the assignment and save a bus with no driver.
+  if (error) throw new AppError('AGENCY', error.message);
   if (((data ?? []) as unknown[]).length === 0) return null;
   // A driver can be the PERMANENT driver of only one bus. If already assigned to
   // a DIFFERENT vehicle, don't assign here (server backstop; the edit dropdown
   // also filters to unassigned). excludeBusId keeps a bus's own driver on edit.
   let q = db.from('vehicles').select('id').eq('agency_id', agencyId).eq('driver_id', driverId);
   if (excludeBusId) q = q.neq('id', excludeBusId);
-  const { data: taken } = await q.limit(1).maybeSingle();
+  const { data: taken, error: takenErr } = await q.limit(1).maybeSingle();
+  if (takenErr) throw new AppError('AGENCY', takenErr.message);
   return taken ? null : driverId;
+}
+
+/** Map the uq_vehicles_driver unique violation (a driver already on another bus,
+ *  lost the check-then-set race with 0077 as the backstop) to a friendly message
+ *  instead of a raw Postgres constraint error. */
+function driverAssignError(error: { message?: string }): AppError {
+  if (error.message?.includes('uq_vehicles_driver')) {
+    return new AppError('BUS', 'That driver is already assigned to another bus — pick a different driver.');
+  }
+  return new AppError('BUS', error.message ?? 'Could not save the bus.');
 }
 
 export async function addBusAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -402,7 +434,7 @@ export async function addBusAction(_: FormState, formData: FormData): Promise<Fo
       conductor_verified: d.conductorVerified === 'on',
       driver_id: driverId,
     });
-    if (error) throw new AppError('BUS', error.message);
+    if (error) throw driverAssignError(error);
     revalidatePath('/agency/add-bus');
     revalidatePath('/agency/buses');
     revalidatePath('/agency'); updateTag(agencyReportTag(agency.id)); // dashboard fleet tiles
@@ -469,7 +501,7 @@ export async function updateBusAction(_: FormState, formData: FormData): Promise
       .update(patch)
       .eq('id', busId)
       .eq('agency_id', agency.id);
-    if (error) throw new AppError('BUS', error.message);
+    if (error) throw driverAssignError(error);
     revalidatePath('/agency/buses');
     updateTag(agencyReportTag(agency.id)); // fleet split may change (e.g. AC/type edits)
   } catch (e) {
@@ -578,7 +610,7 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
     const agency = await requireApprovedAgency(db);
     // The agency is the service — resolve its own service row for the chosen
     // college (prefer the BUS one) so the route stays linked, no picker needed.
-    const { data: svc } = await db
+    const { data: svc, error: svcErr } = await db
       .from('agency_services')
       .select('id')
       .eq('agency_id', agency.id)
@@ -586,6 +618,9 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
       .order('vehicle_type', { ascending: true }) // 'BUS' before 'VAN'
       .limit(1)
       .maybeSingle();
+    // Surface a lookup failure — otherwise the route is created UNLINKED to its
+    // service (students browsing by service wouldn't see it).
+    if (svcErr) throw new AppError('SERVICE', svcErr.message);
     await addRoute(db, agency.id, parsed.data, (svc as { id: string } | null)?.id ?? null, stops);
     // The bus picker lives on /agency/add-route and hides buses already on a route;
     // revalidate THAT path (not the non-existent /agency/routes/new) so the just-
@@ -614,10 +649,14 @@ export async function updateRouteAction(_: FormState, formData: FormData): Promi
   const db = await createClient();
   try {
     const agency = await requireApprovedAgency(db);
-    const { count } = await db
+    const { count, error: cntErr } = await db
       .from('bookings')
       .select('id', { count: 'exact', head: true })
       .eq('route_id', routeId);
+    // Surface the count error — a null count would treat a route WITH bookings as
+    // having none and (wrongly) let its stops be edited (the RPC re-enforces, so
+    // this is UX, but don't show a misleading form).
+    if (cntErr) throw new AppError('ROUTE', cntErr.message);
     const hasBookings = (count ?? 0) > 0;
 
     let stops: RouteStopInput[] = [];
@@ -679,7 +718,14 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
 
     // The handle_new_user trigger creates the profile (role DRIVER + name + email);
     // set the phone, then link the driver to this agency.
-    await admin.from('profiles').update({ full_name: d.name, phone: d.phone || null }).eq('id', uid);
+    const { error: pErr } = await admin
+      .from('profiles')
+      .update({ full_name: d.name, phone: d.phone || null })
+      .eq('id', uid);
+    if (pErr) {
+      await admin.auth.admin.deleteUser(uid); // roll back so the email is reusable
+      throw new AppError('DRIVER', pErr.message);
+    }
     const { error: dErr } = await admin.from('drivers').insert({
       agency_id: agency.id,
       profile_id: uid,
@@ -742,7 +788,14 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
       const { error: ePw } = await admin.auth.admin.updateUserById(uid, { password: d.password });
       if (ePw) return { error: ePw.message };
     }
-    await admin.from('profiles').update({ full_name: d.name, phone: d.phone || null, email: d.email }).eq('id', uid);
+    const { error: ePr } = await admin
+      .from('profiles')
+      .update({ full_name: d.name, phone: d.phone || null, email: d.email })
+      .eq('id', uid);
+    // If the auth email already changed but the profile write failed, surface it
+    // — otherwise profiles.email/full_name/phone diverge from the login while we
+    // report "Driver updated." (createDriverAction guards this too.)
+    if (ePr) throw new AppError('DRIVER', ePr.message);
     const { error: eDrv } = await admin
       .from('drivers')
       .update({
@@ -768,18 +821,25 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
  *  unassign them from any bus. Reversible via restoreDriverAction. */
 export async function softDeleteDriverAction(formData: FormData): Promise<void> {
   const driverId = String(formData.get('driverId') ?? '');
-  if (!driverId) return;
+  if (!UUID_RE.test(driverId)) return; // malformed id → no-op, not a 22P02 crash
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return;
   const admin = createAdminClient();
-  await admin
+  const { error: eDrv } = await admin
     .from('drivers')
     .update({ is_deleted: true, is_active: false, deleted_at: new Date().toISOString() })
     .eq('id', driverId)
     .eq('agency_id', agency.id);
-  // A removed driver must not stay assigned to a bus.
-  await admin.from('vehicles').update({ driver_id: null }).eq('driver_id', driverId).eq('agency_id', agency.id);
+  if (eDrv) throw new AppError('AGENCY', eDrv.message);
+  // A removed driver must not stay assigned to a bus — surface a failure here too
+  // so we never report success while the driver is still on a vehicle.
+  const { error: eVeh } = await admin
+    .from('vehicles')
+    .update({ driver_id: null })
+    .eq('driver_id', driverId)
+    .eq('agency_id', agency.id);
+  if (eVeh) throw new AppError('AGENCY', eVeh.message);
   revalidatePath('/agency/drivers');
   revalidatePath('/agency/deleted-drivers');
   revalidatePath('/agency/buses');
@@ -788,16 +848,17 @@ export async function softDeleteDriverAction(formData: FormData): Promise<void> 
 /** Restore a soft-deleted driver back to the active roster. */
 export async function restoreDriverAction(formData: FormData): Promise<void> {
   const driverId = String(formData.get('driverId') ?? '');
-  if (!driverId) return;
+  if (!UUID_RE.test(driverId)) return;
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return;
   const admin = createAdminClient();
-  await admin
+  const { error } = await admin
     .from('drivers')
     .update({ is_deleted: false, is_active: true, deleted_at: null })
     .eq('id', driverId)
     .eq('agency_id', agency.id);
+  if (error) throw new AppError('AGENCY', error.message);
   revalidatePath('/agency/drivers');
   revalidatePath('/agency/deleted-drivers');
 }
@@ -806,7 +867,7 @@ export async function restoreDriverAction(formData: FormData): Promise<void> {
  *  row AND their login/auth account. Irreversible. */
 export async function hardDeleteDriverAction(formData: FormData): Promise<void> {
   const driverId = String(formData.get('driverId') ?? '');
-  if (!driverId) return;
+  if (!UUID_RE.test(driverId)) return;
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return;
@@ -821,7 +882,8 @@ export async function hardDeleteDriverAction(formData: FormData): Promise<void> 
   if (!row || (row as { is_deleted: boolean }).is_deleted !== true) return;
   // Remove the driver row first (vehicles.driver_id / bus_driver_changes.driver_id
   // are ON DELETE SET NULL), then delete the login account for good.
-  await admin.from('drivers').delete().eq('id', driverId).eq('agency_id', agency.id);
+  const { error } = await admin.from('drivers').delete().eq('id', driverId).eq('agency_id', agency.id);
+  if (error) throw new AppError('AGENCY', error.message);
   const profileId = (row as { profile_id: string | null }).profile_id;
   if (profileId) await admin.auth.admin.deleteUser(profileId);
   revalidatePath('/agency/deleted-drivers');
@@ -869,26 +931,32 @@ export async function rejectBookingAction(formData: FormData): Promise<void> {
 
 export async function hideStudentAction(formData: FormData): Promise<void> {
   const studentId = String(formData.get('studentId') ?? '');
-  if (!studentId) return;
+  if (!UUID_RE.test(studentId)) return;
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return;
-  // Cancel this student's active bookings with the agency (frees seats), then hide.
-  const { data: rows } = await db
+  // Cancel this student's active bookings with the agency (frees seats) BEFORE
+  // hiding, so we never hide a student while their seats are still held.
+  const { data: rows, error: rowsErr } = await db
     .from('bookings')
     .select('id, route_id, status, routes!inner(agency_id)')
     .eq('student_id', studentId)
     .in('status', ['PENDING', 'CONFIRMED'])
     .eq('routes.agency_id', agency.id);
-  // One-active-booking rule bounds this to ~1, but reject them concurrently
-  // rather than in a serial await loop.
-  await Promise.all(
-    (rows ?? []).map((b) => db.rpc('reject_booking', { p_booking_id: b.id as string })),
-  );
-  await db.from('agency_hidden_students').upsert({
+  // Surface a failure via the panel error boundary — consistent with the driver
+  // void actions (the ?notice pattern was silent: the students page never renders
+  // it). Don't hide the student unless the seats were actually freed.
+  if (rowsErr) throw new AppError('AGENCY', rowsErr.message);
+  // Route through services.rejectBooking, which THROWS on a failed RPC — db.rpc()
+  // resolves with { error } and would NOT reject the Promise.all, so a genuine
+  // cancel failure would otherwise slip through and hide the student with a seat
+  // still reserved.
+  await Promise.all((rows ?? []).map((b) => rejectBooking(db, b.id as string)));
+  const { error: hideErr } = await db.from('agency_hidden_students').upsert({
     agency_id: agency.id,
     student_id: studentId,
   });
+  if (hideErr) throw new AppError('AGENCY', hideErr.message);
   revalidatePath('/agency/students');
   revalidatePath('/agency/deleted-students');
   // Removing a student cancels their bookings (frees seats), so refresh the same
@@ -903,15 +971,16 @@ export async function hideStudentAction(formData: FormData): Promise<void> {
 
 export async function restoreStudentAction(formData: FormData): Promise<void> {
   const studentId = String(formData.get('studentId') ?? '');
-  if (!studentId) return;
+  if (!UUID_RE.test(studentId)) return;
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return;
-  await db
+  const { error } = await db
     .from('agency_hidden_students')
     .delete()
     .eq('agency_id', agency.id)
     .eq('student_id', studentId);
+  if (error) throw new AppError('AGENCY', error.message); // consistent with driver actions
   revalidatePath('/agency/students');
   revalidatePath('/agency/deleted-students');
   updateTag(agencyReportTag(agency.id)); // restored student re-enters the dashboard counts

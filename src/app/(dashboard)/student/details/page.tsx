@@ -24,8 +24,11 @@ export default async function StudentDetailsPage({
   return (
     <section className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Your details</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+          Before you book
+        </p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Your details</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           We need these before you can reserve a seat — the agency uses them to
           confirm and manage your booking.
         </p>

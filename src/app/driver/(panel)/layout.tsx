@@ -1,3 +1,4 @@
+import { ShieldAlert } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getDriverProfile, getDriverStatus, listDriverBuses } from '@/features/driver/repository';
@@ -32,18 +33,23 @@ export default async function DriverPanelLayout({ children }: { children: React.
   // Gate: the account must have an active driver record (created by an agency).
   if (!me || !me.is_active) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-        <div className="max-w-md space-y-4 rounded-2xl border border-border bg-card/60 p-8">
-          <h1 className="text-xl font-semibold">
-            {me && !me.is_active ? 'Account deactivated' : 'Driver account not set up'}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {me && !me.is_active
-              ? 'Your driver account has been deactivated. Please contact your service provider.'
-              : 'Your driver profile isn’t linked to a service provider yet. Please contact the agency that created your account.'}
-          </p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-aurora p-4 text-center sm:p-6">
+        <div className="w-full max-w-md space-y-5 rounded-3xl border border-border bg-card p-6 shadow-lg sm:p-8">
+          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+            <ShieldAlert className="size-7" />
+          </span>
+          <div className="space-y-2">
+            <h1 className="text-xl font-heading font-bold tracking-tight">
+              {me && !me.is_active ? 'Account deactivated' : 'Driver account not set up'}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {me && !me.is_active
+                ? 'Your driver account has been deactivated. Please contact your service provider.'
+                : 'Your driver profile isn’t linked to a service provider yet. Please contact the agency that created your account.'}
+            </p>
+          </div>
           <form action={logoutAction}>
-            <SubmitButton variant="outline" size="sm" pendingText="Logging out…">
+            <SubmitButton variant="outline" size="lg" pendingText="Logging out…" className="w-full">
               Log out
             </SubmitButton>
           </form>

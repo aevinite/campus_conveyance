@@ -2,12 +2,13 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 /**
- * Campus Conveyance brandmark — an open amber ring with a route motif inside
- * (pale stops flanking a blue "you are here" dot). Rendered as inline SVG so it
- * stays crisp at any size; the ring/dot use fixed brand colors while the "G"
- * opening reads the same in light and dark.
+ * Campus Conveyance brandmark — a bold gradient "signal" tile: an open
+ * indigo→cyan ring tracing a route, with a signal-green "you are here" marker
+ * pinned at its centre. Rendered as inline SVG so it stays crisp at any size;
+ * the gradient + marker read the same in light and dark via brand tokens.
  */
 export function BrandMark({ className }: { className?: string }) {
+  const id = 'cc-brand-grad';
   return (
     <svg
       viewBox="0 0 40 40"
@@ -15,26 +16,26 @@ export function BrandMark({ className }: { className?: string }) {
       role="img"
       aria-label="Campus Conveyance"
     >
-      {/* Open ring (gap on the right) */}
+      <defs>
+        <linearGradient id={id} x1="4" y1="6" x2="36" y2="34" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--brand-indigo)" />
+          <stop offset="0.55" stopColor="var(--brand-glow)" />
+          <stop offset="1" stopColor="var(--brand-cyan)" />
+        </linearGradient>
+      </defs>
+      {/* Rounded tile backdrop */}
+      <rect x="2" y="2" width="36" height="36" rx="11" fill={`url(#${id})`} />
+      {/* Open route ring (gap on the lower-right), on the tile */}
       <path
-        d="M 29.19 10.81 A 13 13 0 1 0 29.19 29.19"
+        d="M 27.9 12.9 A 9.6 9.6 0 1 0 29 25.2"
         fill="none"
-        stroke="var(--brand-amber)"
-        strokeWidth="5.4"
+        stroke="white"
+        strokeOpacity="0.92"
+        strokeWidth="3.4"
         strokeLinecap="round"
       />
-      {/* Inward tab at the top of the opening — the "G" cue */}
-      <path
-        d="M 28.4 10.9 L 23.2 10.9"
-        fill="none"
-        stroke="var(--brand-amber)"
-        strokeWidth="5.4"
-        strokeLinecap="round"
-      />
-      {/* Route: pale stop · blue marker · pale stop */}
-      <rect x="8.6" y="18.4" width="5" height="3.2" rx="1.6" fill="var(--brand-pale)" />
-      <circle cx="20" cy="20" r="2.9" fill="var(--brand-blue)" />
-      <rect x="24.4" y="18.4" width="5" height="3.2" rx="1.6" fill="var(--brand-pale)" />
+      {/* Signal-green "you are here" marker at centre */}
+      <circle cx="20" cy="20" r="3.6" fill="var(--brand-green)" stroke="white" strokeWidth="1.6" />
     </svg>
   );
 }
@@ -54,13 +55,13 @@ export function Logo({
       className={cn('group flex items-center gap-2.5', className)}
       aria-label="Campus Conveyance"
     >
-      <BrandMark className="size-9 transition-transform group-hover:-rotate-6" />
+      <BrandMark className="size-9 shadow-sm transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105 rounded-[11px]" />
       {showText && (
         <span className="flex flex-col leading-none">
-          <span className="font-heading text-[17px] font-extrabold tracking-tight text-foreground">
+          <span className="font-heading text-[17px] font-bold tracking-tight text-foreground">
             Campus
           </span>
-          <span className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.16em] text-[color:var(--brand-amber-deep)]">
+          <span className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-indigo-deep)]">
             Conveyance
           </span>
         </span>

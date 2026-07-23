@@ -1,23 +1,26 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Settings } from 'lucide-react';
 import { getMaintenance } from '@/lib/maintenance';
 import { toggleMaintenanceAction } from '@/features/admin/settings-actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
+import { formatDateTime } from '@/lib/format-date';
 
 export default async function AdminSettingsPage() {
   const { enabled, updatedAt } = await getMaintenance();
-  const since = updatedAt
-    ? new Date(updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
-    : null;
+  const since = updatedAt ? formatDateTime(updatedAt) : null;
 
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Settings className="size-3.5" />
+          Platform
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Settings</h1>
         <p className="text-muted-foreground">Platform-wide controls.</p>
       </div>
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Maintenance mode</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -26,10 +29,10 @@ export default async function AdminSettingsPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-muted/30 p-4">
             <div className="flex items-center gap-3">
               <span
-                className={`inline-flex size-2.5 rounded-full ${enabled ? 'bg-warning' : 'bg-success'}`}
+                className={`inline-flex size-2.5 shrink-0 rounded-full ${enabled ? 'bg-warning' : 'bg-success'}`}
               />
               <div>
                 <p className="font-medium">
@@ -46,7 +49,7 @@ export default async function AdminSettingsPage() {
           </div>
 
           {enabled && (
-            <p className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground">
+            <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-[color:var(--warning)]/10 px-3 py-2 text-sm text-foreground">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
               The app is live-blocked right now. Turn maintenance off to restore access for all users.
             </p>
@@ -57,6 +60,7 @@ export default async function AdminSettingsPage() {
             <SubmitButton
               variant={enabled ? 'default' : 'destructive'}
               pendingText={enabled ? 'Turning off…' : 'Turning on…'}
+              className="w-full sm:w-auto"
             >
               {enabled ? 'Turn maintenance OFF' : 'Turn maintenance ON'}
             </SubmitButton>

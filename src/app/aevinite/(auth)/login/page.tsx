@@ -22,7 +22,7 @@ export default function AdminLoginPage() {
   return (
     <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Admin Login</CardTitle>
+        <CardTitle className="text-2xl">Admin Login</CardTitle>
         <CardDescription>Aevinite control panel access.</CardDescription>
       </CardHeader>
       <CardContent>

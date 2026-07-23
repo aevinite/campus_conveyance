@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listOnboardBookings, countOnboardBookings } from '@/features/agency/repository';
 import { hideStudentAction } from '@/features/agency/actions';
@@ -33,7 +34,8 @@ export default async function AgencyStudentsPage({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Manage Students</h1>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Students</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Manage students</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Students you have accepted onto a bus, with every detail they entered while booking. New
           requests appear under <span className="font-medium text-foreground">Manage Booking</span> —
@@ -42,10 +44,17 @@ export default async function AgencyStudentsPage({
       </div>
 
       {onboard.length === 0 ? (
-        <p className="rounded-lg border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-          No students onboard yet. Accept a paid booking request in Manage Booking and the student will
-          appear here.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card/40 p-10 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Users className="size-6" />
+          </span>
+          <div>
+            <p className="font-medium">No students onboard yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Accept a paid booking request in Manage Booking and the student will appear here.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {onboard.map((b) => (

@@ -1,22 +1,15 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle, Ticket, ArrowRight } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listMyBookings, countMyBookings, type BookingRow } from '@/features/booking/repository';
 import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
+import { formatTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 10;
-
-// IST — the payment deadline is rendered server-side; without an explicit zone
-// it would show the server's timezone (UTC on most hosts), off by 5.5 hours.
-const timeFmt = new Intl.DateTimeFormat('en-IN', {
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZone: 'Asia/Kolkata',
-});
 
 const inr = (cents: number | null) =>
   cents == null || cents === 0
@@ -89,7 +82,7 @@ function timelineFor(b: BookingRow): TimelineStep[] {
       {
         state: 'current',
         label: b.expires_at
-          ? `Complete payment before ${timeFmt.format(new Date(b.expires_at))}`
+          ? `Complete payment before ${formatTime(b.expires_at)}`
           : 'Complete payment within 20 minutes',
       },
       { state: 'upcoming', label: 'Booking confirmed' },
@@ -140,7 +133,7 @@ function statusPill(b: BookingRow) {
       : { label: 'Approved — pay now', cls: 'border-primary/30 bg-primary/10 text-primary' };
   const m = map[b.status] ?? pending;
   return (
-    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${m.cls}`}>
+    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>
       {m.label}
     </span>
   );
@@ -166,15 +159,38 @@ export default async function BookingsPage({
   if (total > 0 && page > totalPages) redirect(`/student/bookings?page=${totalPages}`);
 
   return (
-    <section className="max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">My Bookings</h1>
-        <Link href="/student/schools" className="text-sm font-medium text-primary transition-colors hover:text-primary/70">
-          Book a seat
+    <section className="max-w-2xl space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Your rides
+          </p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">My Bookings</h1>
+        </div>
+        <Link
+          href="/student/schools"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/70"
+        >
+          Reserve a seat
+          <ArrowRight className="size-4" />
         </Link>
       </div>
       {bookings.length === 0 ? (
-        <p className="text-muted-foreground">You have no bookings yet.</p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Ticket className="size-6" />
+          </span>
+          <p className="font-semibold">No bookings yet</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            You haven&apos;t reserved a seat yet — pick a campus to book your daily ride.
+          </p>
+          <Link
+            href="/student/schools"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/70"
+          >
+            Browse campuses <ArrowRight className="size-4" />
+          </Link>
+        </div>
       ) : (
         <div className="space-y-3">
           {bookings.map((b) => {
@@ -183,6 +199,9 @@ export default async function BookingsPage({
             // the next sweep a booking can still read PENDING+approved+unpaid.
             // Treat a passed expires_at as expired here so we don't show a live
             // "Pay now" button that would just fail.
+            // Reading the clock during render is correct here (compares an
+            // expiry to "now"); not a compiler purity hazard for this list.
+            // eslint-disable-next-line react-hooks/purity
             const windowOpen = !b.expires_at || new Date(b.expires_at).getTime() > Date.now();
             const payNow =
               b.status === 'PENDING' && b.approved_at && !b.is_paid && b.routeId && windowOpen;
@@ -194,7 +213,7 @@ export default async function BookingsPage({
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
                         {b.routeName}
                         {inr(b.price_cents) && (
-                          <span className="text-sm font-normal text-muted-foreground">
+                          <span className="tnum text-sm font-normal text-muted-foreground">
                             · {inr(b.price_cents)}
                           </span>
                         )}

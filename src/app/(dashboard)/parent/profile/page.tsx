@@ -5,11 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
-const fmtDate = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'long' }) : '—';
-const fmtDateTime = (v?: string | null) =>
-  v ? new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+const fmtDate = (v?: string | null) => formatDate(v);
+const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function ParentProfilePage() {
   await requireRole('PARENT');
@@ -63,8 +62,8 @@ export default async function ParentProfilePage() {
           <ArrowLeft className="size-4" />
           Back to dashboard
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold">Profile &amp; settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Profile &amp; settings</h1>
+        <p className="mt-1 text-muted-foreground">
           Manage your account details, contact info, and password.
         </p>
       </div>
@@ -109,7 +108,7 @@ export default async function ParentProfilePage() {
                   <d.icon className="size-4" />
                   {d.label}
                 </dt>
-                <dd className="truncate text-right text-sm font-medium">{d.value}</dd>
+                <dd className="tnum truncate text-right text-sm font-medium">{d.value}</dd>
               </div>
             ))}
           </dl>

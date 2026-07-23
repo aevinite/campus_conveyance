@@ -35,13 +35,14 @@ export async function getMyAgencyProfile(
 ): Promise<MyAgencyProfile | null> {
   const { userId } = await getSessionClaims(db);
   if (!userId) return null;
-  const { data } = await db
+  const { data, error } = await db
     .from('agencies')
     .select(
       'id, name, email, phone, contact_person, legal_name, registration_no, gst_number, pan_number, registered_address, description, permit_doc_url, fitness_doc_url, status, created_at',
     )
     .eq('owner_profile_id', userId)
     .maybeSingle();
+  if (error) throw error; // don't mask a transient failure as "no agency"
   return (data as MyAgencyProfile) ?? null;
 }
 
@@ -131,11 +132,12 @@ export const getMyAgency = cache(
   async (db: SupabaseClient): Promise<MyAgency | null> => {
     const { userId } = await getSessionClaims(db);
     if (!userId) return null;
-    const { data } = await db
+    const { data, error } = await db
       .from('agencies')
       .select('id, name, status, rejected_reason')
       .eq('owner_profile_id', userId)
       .maybeSingle();
+    if (error) throw error; // don't mask a transient failure as "No agency found"
     return (data as MyAgency) ?? null;
   },
 );
@@ -159,7 +161,8 @@ export async function listMyServiceRequests(
     .from('agency_service_requests')
     .select('id, name, vehicle_type, status, rejected_reason, created_at, institutions(name)')
     .eq('agency_id', agencyId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(1000); // defensive cap (owner-scoped, naturally small)
   if (error) throw error;
   return (data ?? []).map((r) => {
     const inst = r.institutions as { name: string } | { name: string }[] | null;
@@ -183,7 +186,8 @@ export async function listMyServices(
     .from('agency_services')
     .select('id, name, vehicle_type, institution_id, institutions(name)')
     .eq('agency_id', agencyId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(1000); // defensive cap (owner-scoped)
   if (error) throw error;
   return (data ?? []).map((s) => {
     const inst = s.institutions as { name: string } | { name: string }[] | null;
@@ -205,7 +209,8 @@ export async function listMyBuses(
     .from('vehicles')
     .select('id, bus_number, capacity, registration_no, is_ac')
     .eq('agency_id', agencyId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(1000); // defensive cap (owner-scoped fleet)
   if (error) throw error;
   return (data ?? []).map((v) => ({
     id: v.id as string,
@@ -218,10 +223,11 @@ export async function listMyBuses(
 
 /** Full details of every bus the agency has added (for the Manage Buses page). */
 export async function countMyBusesFull(db: SupabaseClient, agencyId: string): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('vehicles')
     .select('id', { count: 'exact', head: true })
     .eq('agency_id', agencyId);
+  if (error) throw error;
   return count ?? 0;
 }
 
@@ -287,11 +293,13 @@ export async function listMyBusesFull(
   // Merge in today's substitutes (per bus, per role).
   const ids = rows.map((r) => r.id);
   if (ids.length > 0) {
-    const { data: changes } = await db
+    const { data: changes, error: chErr } = await db
       .from('bus_driver_changes')
       .select('vehicle_id, role, driver_id, driver_name, driver_phone, reason')
       .in('vehicle_id', ids)
       .eq('effective_date', todayIST());
+    // Surface the error rather than showing the permanent driver over today's sub.
+    if (chErr) throw chErr;
     const byKey = new Map(
       (changes ?? []).map((c) => [`${c.vehicle_id as string}:${c.role as string}`, c]),
     );
@@ -334,10 +342,11 @@ export interface RouteFull {
 }
 
 export async function countMyRoutesFull(db: SupabaseClient, agencyId: string): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('routes')
     .select('id', { count: 'exact', head: true })
     .eq('agency_id', agencyId);
+  if (error) throw error;
   return count ?? 0;
 }
 
@@ -515,7 +524,9 @@ export interface DriverRow {
 // pool), which would otherwise run the agency_drivers RPC twice per render.
 export const listMyDrivers = cache(
   async (db: SupabaseClient, agencyId: string): Promise<DriverRow[]> => {
-    const { data, error } = await db.rpc('agency_drivers', { p_agency_id: agencyId });
+    // Defensive cap — feeds the bus driver dropdown + substitute pool, not a
+    // paged list (an agency's roster is naturally small, but never unbounded).
+    const { data, error } = await db.rpc('agency_drivers', { p_agency_id: agencyId }).limit(1000);
     if (error) throw error;
     return (data ?? []) as DriverRow[];
   },
@@ -572,6 +583,10 @@ export async function listUnassignedDrivers(
     listMyDrivers(db, agencyId),
     db.from('vehicles').select('driver_id').eq('agency_id', agencyId).not('driver_id', 'is', null),
   ]);
+  // Surface a read failure — a null `data` would empty the `assigned` set and let
+  // an already-assigned permanent driver appear in the substitute pool (→ one
+  // person on two buses for the day).
+  if (vehiclesRes.error) throw vehiclesRes.error;
   const assigned = new Set((vehiclesRes.data ?? []).map((v) => v.driver_id as string));
   return drivers
     .filter((d) => d.is_active && !d.is_deleted && !assigned.has(d.driver_id))
@@ -648,7 +663,10 @@ async function cachedAgencyReportAgg(agencyId: string): Promise<AgencyReportAgg>
   const cached = unstable_cache(
     async (): Promise<AgencyReportAgg> => {
       const admin = createAdminClient();
-      const { data } = await admin.rpc('agency_report', { p_agency_id: agencyId });
+      const { data, error } = await admin.rpc('agency_report', { p_agency_id: agencyId });
+      // Throw so a transient failure MISSES the cache — caching {} would pin the
+      // dashboard to all-zeros for 60s after the DB recovers.
+      if (error) throw error;
       return (data ?? {}) as AgencyReportAgg;
     },
     ['agency-report-agg', agencyId],

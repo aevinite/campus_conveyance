@@ -3,7 +3,9 @@ import { requireRole } from '@/features/auth/guard';
 import { ComingSoon } from '@/components/coming-soon';
 
 export default async function InstitutionDashboard() {
-  await requireRole('INSTITUTION_ADMIN');
+  // Institution admins sign in via the admin (aevinite) login — match that here
+  // so a not-signed-in hit isn't bounced to the student /login.
+  await requireRole('INSTITUTION_ADMIN', '/aevinite/login');
   return (
     <ComingSoon
       icon={Building2}

@@ -56,6 +56,7 @@ export function CatalogBrowser({
     startTransition(() => router.replace(urlFor(next)));
 
   // Keep the box in sync if the server query changes (e.g. back/forward).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setText(query), [query]);
 
   // Debounce typing → URL (server refetches the matching page).
@@ -105,14 +106,22 @@ export function CatalogBrowser({
       </div>
 
       {institutions.length === 0 ? (
-        <p className="text-muted-foreground">No campuses match your search.</p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Search className="size-6" />
+          </span>
+          <p className="font-semibold">No campuses found</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            No schools or colleges match your search — try a different name or clear the filters.
+          </p>
+        </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {institutions.map((i) => (
             <Link
               key={i.id}
               href={`/student/schools/${i.id}`}
-              className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:shadow-sm"
+              className="group overflow-hidden rounded-2xl border border-border bg-card shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
             >
               <div
                 className="relative flex h-24 items-end px-5"
@@ -164,7 +173,8 @@ export function CatalogBrowser({
             <span />
           )}
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            Page <span className="tnum font-semibold text-foreground">{page}</span> of{' '}
+            <span className="tnum">{totalPages}</span>
           </span>
           {page < totalPages ? (
             <Link

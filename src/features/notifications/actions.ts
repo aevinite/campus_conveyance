@@ -1,5 +1,6 @@
 'use server';
 import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { AppError, toErrorResponse } from '@/lib/errors/app-error';
 
@@ -20,6 +21,8 @@ export async function markNotificationReadAction(
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
+  // The bell (unread badge + list) is rendered in every dashboard layout header.
+  revalidatePath('/', 'layout');
   return { ok: true };
 }
 
@@ -32,5 +35,6 @@ export async function markAllNotificationsReadAction(): Promise<NotificationActi
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
+  revalidatePath('/', 'layout');
   return { ok: true };
 }

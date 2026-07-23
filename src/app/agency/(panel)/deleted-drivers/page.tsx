@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { IdCard, Mail, Phone, User } from 'lucide-react';
+import { IdCard, Mail, Phone, Trash2, User } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listMyDriversPage, countMyDrivers } from '@/features/agency/repository';
 import { restoreDriverAction, hardDeleteDriverAction } from '@/features/agency/actions';
@@ -30,7 +30,8 @@ export default async function AgencyDeletedDriversPage({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Deleted Drivers</h1>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Team</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Deleted drivers</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Drivers you removed. Restore one to bring it back to Manage Drivers, or delete it permanently —
           permanent deletion also removes the driver&apos;s login account and cannot be undone.
@@ -38,15 +39,18 @@ export default async function AgencyDeletedDriversPage({
       </div>
 
       {deleted.length === 0 ? (
-        <p className="rounded-lg border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-          No deleted drivers.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card/40 p-10 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Trash2 className="size-6" />
+          </span>
+          <p className="text-sm text-muted-foreground">No deleted drivers.</p>
+        </div>
       ) : (
         <div className="space-y-3">
           {deleted.map((d) => (
             <div
               key={d.driver_id}
-              className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card/50 p-4"
+              className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border bg-card/50 p-4 shadow-xs"
             >
               <div className="flex min-w-0 gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">

@@ -1,3 +1,4 @@
+import { Clock3, ShieldAlert } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency } from '@/features/agency/repository';
@@ -35,20 +36,29 @@ export default async function AgencyPanelLayout({
   if (!agency || agency.status !== 'APPROVED') {
     const rejected = agency?.status === 'REJECTED';
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-        <div className="max-w-md space-y-4 rounded-2xl border border-border bg-card/60 p-8">
-          <h1 className="text-xl font-semibold">
-            {rejected ? 'Application rejected' : 'Application under review'}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {rejected
-              ? agency?.rejected_reason
-                ? `Reason: ${agency.rejected_reason}`
-                : 'Your application was not approved. Please contact the platform admin.'
-              : 'Your service-provider application is awaiting admin approval. You’ll be able to add buses and routes once it’s approved.'}
-          </p>
+      <div className="bg-aurora relative flex min-h-screen flex-col items-center justify-center p-4 text-center sm:p-6">
+        <div className="w-full max-w-md space-y-5 rounded-3xl border border-border bg-card p-6 shadow-lg sm:p-8">
+          <span
+            className={`mx-auto grid size-14 place-items-center rounded-2xl ${
+              rejected ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'
+            }`}
+          >
+            {rejected ? <ShieldAlert className="size-7" /> : <Clock3 className="size-7" />}
+          </span>
+          <div className="space-y-2">
+            <h1 className="text-xl font-heading font-bold tracking-tight sm:text-2xl">
+              {rejected ? 'Application rejected' : 'Application under review'}
+            </h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {rejected
+                ? agency?.rejected_reason
+                  ? `Reason: ${agency.rejected_reason}`
+                  : 'Your application was not approved. Please contact the platform admin.'
+                : 'Your service-provider application is awaiting admin approval. You’ll be able to add buses and routes once it’s approved.'}
+            </p>
+          </div>
           <form action={logoutAction}>
-            <SubmitButton variant="outline" size="sm" pendingText="Logging out…">
+            <SubmitButton variant="outline" size="sm" className="w-full sm:w-auto" pendingText="Logging out…">
               Log out
             </SubmitButton>
           </form>

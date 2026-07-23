@@ -1,9 +1,11 @@
 import { redirect } from 'next/navigation';
+import { History } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listAuditLogs, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import { DataTable } from '@/components/data-table';
 import { Pager, pageParams } from '@/components/pager';
 import { cn } from '@/lib/utils';
+import { formatDateTime } from '@/lib/format-date';
 
 // Human-readable label + tone for each logged action code.
 const ACTIONS: Record<string, { label: string; tone: 'good' | 'bad' | 'warn' | 'muted' }> = {
@@ -30,9 +32,9 @@ const ACTIONS: Record<string, { label: string; tone: 'good' | 'bad' | 'warn' | '
 };
 
 const TONE: Record<'good' | 'bad' | 'warn' | 'muted', string> = {
-  good: 'bg-success/15 text-success',
-  bad: 'bg-destructive/15 text-destructive',
-  warn: 'bg-warning/15 text-warning',
+  good: 'bg-[color:var(--success)]/12 text-success',
+  bad: 'bg-destructive/12 text-destructive',
+  warn: 'bg-[color:var(--warning)]/15 text-warning',
   muted: 'bg-muted text-muted-foreground',
 };
 
@@ -51,7 +53,11 @@ export default async function AdminAuditPage({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Activity Log</h1>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <History className="size-3.5" />
+          Audit trail
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Activity Log</h1>
         <p className="text-muted-foreground">
           A record of admin approvals, rejections, deletes and restores. Most recent first.
         </p>
@@ -71,7 +77,7 @@ export default async function AdminAuditPage({
           return [
             <span
               key="a"
-              className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', TONE[meta.tone])}
+              className={cn('inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold', TONE[meta.tone])}
             >
               {meta.label}
             </span>,
@@ -80,7 +86,7 @@ export default async function AdminAuditPage({
               {detail}
             </span>,
             l.actorName || l.actorEmail || '—',
-            new Date(l.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+            formatDateTime(l.created_at),
           ];
         })}
         empty="No admin activity recorded yet."

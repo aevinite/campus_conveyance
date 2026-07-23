@@ -16,7 +16,7 @@ export default function VerifyPage() {
         <div className="mb-2 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
           <MailCheck className="size-6" />
         </div>
-        <CardTitle className="text-xl">Check your email</CardTitle>
+        <CardTitle className="text-2xl">Check your email</CardTitle>
         <CardDescription>
           We sent you a confirmation link. Click it to verify your account, then
           come back and sign in.

@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendContactInquiryEmail } from '@/lib/mailer';
+import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export type ContactState = { ok?: boolean; error?: string };
 
@@ -31,6 +32,21 @@ export async function submitContactAction(input: {
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   }
   const { name, email, phone, organization, message } = parsed.data;
+
+  // This is an anonymous endpoint that sends Gmail/Nodemailer mail per call, so
+  // it must be capped like every other mail path — an uncapped flood exhausts the
+  // shared Gmail quota and breaks signup/reset mail platform-wide. Cap per IP and
+  // per sender email.
+  const ip = await getClientIp();
+  const tooBusy = 'Too many messages just now — please try again in a little while.';
+  // Skip the per-IP cap when the IP is unknown (no x-forwarded-for on a
+  // self-hosted `next start`), else every visitor collapses onto one 'unknown'
+  // bucket and 5 total submissions disable the form for everyone. The per-email
+  // cap still applies. (Mirrors the agency OTP guard.)
+  if (ip !== 'unknown' && (await rateLimit('contact:ip', ip, 5, 60 * 60)) > 0) {
+    return { error: tooBusy };
+  }
+  if ((await rateLimit('contact:email', email, 3, 60 * 60)) > 0) return { error: tooBusy };
 
   const db = createAdminClient();
   const { error } = await db.from('contact_messages').insert({

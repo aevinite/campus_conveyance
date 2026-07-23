@@ -6,10 +6,15 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { toErrorResponse, AppError } from '@/lib/errors/app-error';
 import { collegeSchema, slugify } from './schemas';
 import { agencyProfileSchema } from '@/features/agency/schemas';
+import { agencyReportTag } from '@/features/agency/repository';
 
 export type FormState = { error?: string; message?: string };
 
 type Db = Awaited<ReturnType<typeof createClient>>;
+
+// Guard id-shaped inputs before they reach Postgres — a malformed value would be
+// a 22P02 (invalid uuid) crash to the (unstyled, no try/catch) error page.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Record an admin action in audit_logs (issue 6). Best-effort — a logging
@@ -46,7 +51,7 @@ async function setAgency(db: Db, agencyId: string, patch: Record<string, unknown
 
 export async function approveAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   const { data: claimsData } = await db.auth.getClaims();
   const userId = (claimsData?.claims as { sub?: string } | null)?.sub ?? null;
@@ -64,7 +69,7 @@ export async function approveAgencyAction(formData: FormData): Promise<void> {
 
 export async function rejectAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const reason = String(formData.get('reason') ?? '').trim();
   const db = await createClient();
   await setAgency(db, id, { status: 'REJECTED', rejected_reason: reason || null });
@@ -75,7 +80,7 @@ export async function rejectAgencyAction(formData: FormData): Promise<void> {
 
 export async function deleteAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   await setAgency(db, id, { is_deleted: true, deleted_at: new Date().toISOString() });
   await logAction(db, 'AGENCY_DELETED', 'agency', id);
@@ -87,7 +92,7 @@ export async function deleteAgencyAction(formData: FormData): Promise<void> {
 
 export async function restoreAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   await setAgency(db, id, { is_deleted: false, deleted_at: null });
   await logAction(db, 'AGENCY_RESTORED', 'agency', id);
@@ -106,7 +111,7 @@ export async function restoreAgencyAction(formData: FormData): Promise<void> {
  */
 export async function permanentlyDeleteAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const admin = createAdminClient();
 
   // Grab the owner first so we can also remove their login after the row is gone.
@@ -170,6 +175,12 @@ export async function updateAgencyDetailsAction(_: FormState, formData: FormData
   await logAction(db, 'AGENCY_UPDATED', 'agency', id, { name: d.name });
   revalidatePath('/aevinite/providers');
   revalidatePath(`/aevinite/providers/${id}/edit`);
+  // The name flows into the admin report + CSV and the agency's own dashboard —
+  // bust both caches so they don't show the old name ~60s (mirrors the agency's
+  // own edit).
+  revalidatePath('/aevinite');
+  updateTag('admin-report');
+  updateTag(agencyReportTag(id));
   return { message: 'Provider details updated.' };
 }
 
@@ -181,20 +192,23 @@ async function reviewerId(db: Awaited<ReturnType<typeof createClient>>): Promise
 /** Approve a service-area request: create the live service, then mark it approved. */
 export async function approveServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
 
   // Claim the request ATOMICALLY: flip PENDING→APPROVED in one guarded UPDATE.
   // Whoever wins gets the row back; a second (double-click / concurrent) call
   // matches nothing and bails — so we can't run the insert twice and create a
   // duplicate listing that students would then see twice.
-  const { data: claimed } = await db
+  const { data: claimed, error: claimErr } = await db
     .from('agency_service_requests')
     .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: await reviewerId(db) })
     .eq('id', id)
     .eq('status', 'PENDING')
     .select('id, agency_id, institution_id, vehicle_type, name, description')
     .maybeSingle();
+  // A failed write also yields claimed=null — surface it instead of treating it
+  // as "already claimed" and silently leaving the request PENDING / service dead.
+  if (claimErr) throw new AppError('ADMIN', claimErr.message);
   if (!claimed) return; // already handled by a concurrent approval
 
   // Upsert (not insert) so an existing service for the same
@@ -218,11 +232,14 @@ export async function approveServiceRequestAction(formData: FormData): Promise<v
   // the dashboard) so the change doesn't lag behind the approval.
   revalidatePath('/aevinite/providers');
   revalidatePath('/aevinite'); updateTag('admin-report'); // report tag (future-proof if it aggregates service areas)
+  // The agency's OWN dashboard "services" tile is cached per-agency — bust it too,
+  // else it lags ~60s behind the approval.
+  updateTag(agencyReportTag(claimed.agency_id as string));
 }
 
 export async function rejectServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const reason = String(formData.get('reason') ?? '').trim();
   const db = await createClient();
   const { data: updated, error } = await db
@@ -259,7 +276,7 @@ async function setStudent(db: Db, profileId: string, patch: Record<string, unkno
 
 export async function deleteStudentAction(formData: FormData): Promise<void> {
   const id = String(formData.get('studentId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   await setStudent(db, id, { is_deleted: true, deleted_at: new Date().toISOString() });
   await logAction(db, 'STUDENT_DELETED', 'profile', id);
@@ -270,7 +287,7 @@ export async function deleteStudentAction(formData: FormData): Promise<void> {
 
 export async function restoreStudentAction(formData: FormData): Promise<void> {
   const id = String(formData.get('studentId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   await setStudent(db, id, { is_deleted: false, deleted_at: null });
   await logAction(db, 'STUDENT_RESTORED', 'profile', id);
@@ -287,7 +304,7 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
  */
 export async function permanentlyDeleteStudentAction(formData: FormData): Promise<void> {
   const id = String(formData.get('studentId') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) throw new AppError('ADMIN', error.message);
@@ -357,6 +374,10 @@ export async function updateCollegeAction(_: FormState, formData: FormData): Pro
   }
   await logAction(db, 'COLLEGE_UPDATED', 'institution', id, { name: d.name });
   revalidatePath('/aevinite/colleges');
+  // The college name flows into the admin report. (Per-agency cached reports also
+  // show it but can't be selectively busted here — they self-heal within 60s.)
+  revalidatePath('/aevinite');
+  updateTag('admin-report');
   return { message: 'College updated.' };
 }
 
@@ -369,7 +390,7 @@ export async function updateCollegeAction(_: FormState, formData: FormData): Pro
  */
 export async function deleteCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   const { error } = await db
     .from('institutions')
@@ -384,7 +405,7 @@ export async function deleteCollegeAction(formData: FormData): Promise<void> {
 
 export async function restoreCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const db = await createClient();
   const { error } = await db
     .from('institutions')
@@ -408,7 +429,7 @@ export async function restoreCollegeAction(formData: FormData): Promise<void> {
  */
 export async function permanentlyDeleteCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const admin = createAdminClient();
   const { error } = await admin.from('institutions').delete().eq('id', id);
   if (error) throw new AppError('ADMIN', error.message);
@@ -422,7 +443,7 @@ export async function permanentlyDeleteCollegeAction(formData: FormData): Promis
 // students so they can't browse or apply to it; the admin still sees it here.
 export async function toggleCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
-  if (!id) return;
+  if (!UUID_RE.test(id)) return;
   const active = String(formData.get('active') ?? '') === 'true';
   const db = await createClient();
   const { error } = await db.from('institutions').update({ is_active: active }).eq('id', id);

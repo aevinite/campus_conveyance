@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import { FormStatus } from '@/components/form-status';
+import { formatDateMedium } from '@/lib/format-date';
 import { DriverChangePanel } from './driver-change-panel';
 
 // Editing keeps at least one photo (for the cover); the full 5-photo rule only
@@ -82,6 +83,7 @@ export function EditableBusCard({
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (uploading || pending) return; // re-entry guard (Enter during the upload)
     setState({});
     const form = formRef.current;
     if (!form) return;
@@ -136,7 +138,7 @@ export function EditableBusCard({
   // ---- View mode ----------------------------------------------------------
   if (!editing) {
     return (
-      <div className="rounded-2xl border border-border bg-card/50 p-4">
+      <div className="rounded-2xl border border-border bg-card/50 p-4 shadow-xs transition-colors hover:border-primary/30">
         <div className="flex flex-wrap items-start gap-4">
           {bus.image_url ? (
             <div className="relative h-28 w-40 shrink-0">
@@ -217,7 +219,7 @@ export function EditableBusCard({
                 {bus.driver_blood_group && <span>Blood group: {bus.driver_blood_group}</span>}
                 {bus.driver_experience_years != null && <span>{bus.driver_experience_years} yrs experience</span>}
                 {bus.driver_alt_phone && <span>Alt: {bus.driver_alt_phone}</span>}
-                {bus.driver_dob && <span>DOB: {bus.driver_dob}</span>}
+                {bus.driver_dob && <span>DOB: {formatDateMedium(bus.driver_dob)}</span>}
                 {bus.driver_address && <span>{bus.driver_address}</span>}
               </div>
             )}
@@ -242,7 +244,7 @@ export function EditableBusCard({
             )}
           </div>
 
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" aria-expanded={editing} onClick={() => setEditing(true)}>
             <Pencil className="size-3.5" />
             Edit
           </Button>
@@ -382,11 +384,17 @@ export function EditableBusCard({
         </div>
 
         <FormStatus error={state.error} message={state.message} />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={busy}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="submit" disabled={busy} className="w-full sm:w-auto">
             {uploading ? 'Uploading photos…' : pending ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditing(false); setState({}); }}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            className="w-full sm:w-auto"
+            onClick={() => { setEditing(false); setState({}); }}
+          >
             Cancel
           </Button>
         </div>

@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { Inbox, Building2, Users, School, LayoutDashboard } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminReport, countPendingAgencies } from '@/features/admin/repository';
+import { formatDateTime } from '@/lib/format-date';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
@@ -20,10 +22,10 @@ export default async function AdminDashboard() {
   const { counts, providers, totals, payments } = report;
 
   const cards = [
-    { label: 'Pending requests', value: livePending, href: '/aevinite/requests' },
-    { label: 'Service providers', value: counts.agencies, href: '/aevinite/providers' },
-    { label: 'Students', value: counts.students, href: '/aevinite/students' },
-    { label: 'Colleges & schools', value: counts.colleges, href: '/aevinite/colleges' },
+    { label: 'Pending requests', value: livePending, href: '/aevinite/requests', icon: Inbox },
+    { label: 'Service providers', value: counts.agencies, href: '/aevinite/providers', icon: Building2 },
+    { label: 'Students', value: counts.students, href: '/aevinite/students', icon: Users },
+    { label: 'Colleges & schools', value: counts.colleges, href: '/aevinite/colleges', icon: School },
   ];
 
   const fleetData = providers.map((p) => ({
@@ -34,16 +36,17 @@ export default async function AdminDashboard() {
   const studentData = providers.map((p) => ({ id: p.agencyId, label: p.name, values: { students: p.students } }));
 
   const totalBookings = payments.paidCount + payments.unpaidCount;
-  const generated = new Date(report.generatedAt).toLocaleString('en-IN', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  const generated = formatDateTime(report.generatedAt);
 
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Admin Report &amp; Dashboard</h1>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+            <LayoutDashboard className="size-3.5" />
+            Overview
+          </span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Admin Report &amp; Dashboard</h1>
           <p className="text-muted-foreground">Platform overview across all service providers.</p>
           <p className="print-only mt-1 text-sm text-muted-foreground">Generated {generated}</p>
         </div>
@@ -51,13 +54,18 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Headline counts */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c) => (
           <Link key={c.label} href={c.href} className="print-block">
-            <Card className="transition-colors hover:border-primary/40">
-              <CardContent className="py-6">
-                <p className="text-3xl font-bold text-primary">{c.value}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{c.label}</p>
+            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+              <CardContent className="flex items-center gap-4 py-6">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary sm:size-11">
+                  <c.icon className="size-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="tnum text-2xl font-bold text-gradient sm:text-3xl">{c.value}</p>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">{c.label}</p>
+                </div>
               </CardContent>
             </Card>
           </Link>
@@ -66,7 +74,7 @@ export default async function AdminDashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Fleet per provider */}
-        <Card className="print-block">
+        <Card className="print-block rounded-2xl">
           <CardHeader>
             <CardTitle>Fleet by service provider</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -86,7 +94,7 @@ export default async function AdminDashboard() {
         </Card>
 
         {/* Students per provider */}
-        <Card className="print-block">
+        <Card className="print-block rounded-2xl">
           <CardHeader>
             <CardTitle>Students by service provider</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -104,7 +112,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Payments */}
-      <Card className="print-block">
+      <Card className="print-block rounded-2xl">
         <CardHeader>
           <CardTitle>Payments</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -131,7 +139,7 @@ export default async function AdminDashboard() {
       </Card>
 
       {/* Per-provider detail table (also anchors the printed report) */}
-      <Card className="print-block">
+      <Card className="print-block rounded-2xl">
         <CardHeader>
           <CardTitle>Service provider details</CardTitle>
         </CardHeader>
@@ -153,16 +161,16 @@ export default async function AdminDashboard() {
                   {providers.map((p) => (
                     <tr key={p.agencyId} className="border-b border-border/60">
                       <td className="py-2 pr-4">{p.name}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{p.buses}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{p.vans}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums">{p.students}</td>
+                      <td className="tnum py-2 pr-4 text-right">{p.buses}</td>
+                      <td className="tnum py-2 pr-4 text-right">{p.vans}</td>
+                      <td className="tnum py-2 pr-4 text-right">{p.students}</td>
                     </tr>
                   ))}
                   <tr className="font-semibold">
                     <td className="py-2 pr-4">Total</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{totals.buses}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{totals.vans}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{totals.students}</td>
+                    <td className="tnum py-2 pr-4 text-right">{totals.buses}</td>
+                    <td className="tnum py-2 pr-4 text-right">{totals.vans}</td>
+                    <td className="tnum py-2 pr-4 text-right">{totals.students}</td>
                   </tr>
                 </tbody>
               </table>
@@ -176,8 +184,8 @@ export default async function AdminDashboard() {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-card/40 p-3">
-      <p className="text-2xl font-bold">{value}</p>
+    <div className="rounded-xl border border-border bg-card/40 p-3">
+      <p className="tnum text-2xl font-bold">{value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
       {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </div>

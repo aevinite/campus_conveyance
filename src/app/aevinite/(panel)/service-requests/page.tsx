@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { ClipboardList } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listServiceRequests, countServiceRequests } from '@/features/admin/repository';
 import {
@@ -30,18 +31,27 @@ export default async function AdminServiceRequestsPage({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Service Area Requests</h1>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <ClipboardList className="size-3.5" />
+          Service areas
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Service Area Requests</h1>
         <p className="text-muted-foreground">
           Providers asking to serve a new college/school. Approving creates the live service.
         </p>
       </div>
 
       {requests.length === 0 ? (
-        <p className="text-muted-foreground">No pending service requests.</p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <ClipboardList className="size-6" />
+          </span>
+          <p className="font-medium">No pending service requests</p>
+        </div>
       ) : (
         <div className="space-y-4">
           {requests.map((r) => (
-            <Card key={r.id}>
+            <Card key={r.id} className="rounded-2xl">
               <CardContent className="space-y-4 py-5">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <Detail label="Provider" value={r.agencyName} />
@@ -85,7 +95,7 @@ export default async function AdminServiceRequestsPage({
 function Detail({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm">{value || '—'}</p>
     </div>
   );

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 
 // Multi-photo picker for buses. Holds a mix of already-saved URLs (edit mode) and
@@ -22,6 +22,29 @@ export function BusPhotosField({
   min?: number;
 }) {
   const [err, setErr] = useState<string | null>(null);
+  // Track every blob URL we mint so none leaks. Previously only remove() revoked
+  // them — a form reset/clear (value shrinks without remove) or an unmount left
+  // the URLs allocated for the tab's lifetime.
+  const created = useRef<Set<string>>(new Set());
+
+  // Revoke any minted URL that's no longer in `value` (covers clear/reset), and
+  // revoke everything still outstanding on unmount.
+  useEffect(() => {
+    const live = new Set(value.filter((v) => v.kind === 'file').map((v) => v.preview));
+    for (const url of created.current) {
+      if (!live.has(url)) {
+        URL.revokeObjectURL(url);
+        created.current.delete(url);
+      }
+    }
+  }, [value]);
+  useEffect(() => {
+    const urls = created.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
 
   function add(files: FileList | null) {
     if (!files) return;
@@ -36,14 +59,19 @@ export function BusPhotosField({
         setErr('Each photo must be under 6 MB.');
         continue;
       }
-      next.push({ kind: 'file', file: f, preview: URL.createObjectURL(f) });
+      const preview = URL.createObjectURL(f);
+      created.current.add(preview);
+      next.push({ kind: 'file', file: f, preview });
     }
     onChange(next);
   }
 
   function remove(i: number) {
     const it = value[i];
-    if (it?.kind === 'file') URL.revokeObjectURL(it.preview);
+    if (it?.kind === 'file') {
+      URL.revokeObjectURL(it.preview);
+      created.current.delete(it.preview);
+    }
     onChange(value.filter((_, idx) => idx !== i));
   }
 
@@ -51,11 +79,11 @@ export function BusPhotosField({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {value.map((it, i) => (
           <div
-            key={i}
-            className="group relative aspect-[4/3] overflow-hidden rounded-lg border border-border bg-muted/30"
+            key={photoSrc(it)}
+            className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border bg-muted/30 shadow-xs"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={photoSrc(it)} alt={`Bus photo ${i + 1}`} className="h-full w-full object-cover" />
@@ -74,7 +102,7 @@ export function BusPhotosField({
             </button>
           </div>
         ))}
-        <label className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
+        <label className="flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary">
           <ImagePlus className="size-5" />
           Add photos
           <input

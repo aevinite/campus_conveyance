@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import type * as LeafletNS from 'leaflet';
 import { LocateFixed, MapPin, Search, X } from 'lucide-react';
+import { escapeHtml } from '@/lib/escape-html';
 
 export interface Stop {
   name: string;
@@ -54,8 +55,12 @@ export default function MapStopPicker({
   const layerRef = useRef<LeafletNS.LayerGroup | null>(null);
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
+  // "Latest value" refs so the stable map callbacks below read current props
+  // without re-subscribing — writing them during render is the intended pattern.
+  /* eslint-disable react-hooks/refs */
   valueRef.current = value;
   onChangeRef.current = onChange;
+  /* eslint-enable react-hooks/refs */
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Suggestion[]>([]);
@@ -79,7 +84,7 @@ export default function MapStopPicker({
     valueRef.current.forEach((s, i) => {
       L.marker([s.lat, s.lng], { icon: numberedPin(L, i + 1) })
         .addTo(layer)
-        .bindTooltip(`${i + 1}. ${s.name}`, { direction: 'top' });
+        .bindTooltip(`${i + 1}. ${escapeHtml(s.name)}`, { direction: 'top' });
     });
   }
 
@@ -128,27 +133,38 @@ export default function MapStopPicker({
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
+      // Reset results when the query is cleared — intentional in-effect setState.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setOpen(false);
       return;
     }
     setOpen(true);
+    // Abort a stale in-flight request when the query changes / unmounts, so an
+    // out-of-order response can't clobber newer suggestions (or setState after
+    // unmount).
+    const ac = new AbortController();
     const t = setTimeout(async () => {
       setSearching(true);
       try {
         // Bias to the map's current centre so nearby places rank first.
         const c = mapRef.current?.getCenter();
         const bias = c ? `&lat=${c.lat}&lon=${c.lng}` : '';
-        const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}${bias}`);
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}${bias}`, {
+          signal: ac.signal,
+        });
         const data = (await res.json()) as Suggestion[];
         setResults(Array.isArray(data) ? data : []);
-      } catch {
-        setResults([]);
+      } catch (e) {
+        if ((e as Error)?.name !== 'AbortError') setResults([]);
       } finally {
-        setSearching(false);
+        if (!ac.signal.aborted) setSearching(false);
       }
     }, 350);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
   }, [query]);
 
   function useMyLocation() {

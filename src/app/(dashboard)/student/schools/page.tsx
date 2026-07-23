@@ -43,10 +43,13 @@ export default async function SchoolsPage({
       <div className="space-y-4">
         <BookingSteps active={1} />
         <div>
-          <h1 className="text-2xl font-semibold">Pick your campus</h1>
-          <p className="text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Step 1 · Campus
+          </p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Pick your campus</h1>
+          <p className="mt-1 text-muted-foreground">
             Choose your school or college — you&apos;ll see every bus and van that
-            goes there next.
+            runs there for the daily commute.
           </p>
         </div>
       </div>

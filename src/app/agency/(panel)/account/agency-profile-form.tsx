@@ -124,7 +124,7 @@ export function AgencyProfileForm({
       </div>
 
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto">
         {pending ? 'Saving…' : submitLabel}
       </Button>
     </form>

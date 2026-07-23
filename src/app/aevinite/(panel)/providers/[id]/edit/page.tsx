@@ -6,6 +6,7 @@ import { updateAgencyDetailsAction } from '@/features/admin/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { AgencyProfileForm } from '@/app/agency/(panel)/account/agency-profile-form';
+import { cn } from '@/lib/utils';
 
 export default async function EditProviderPage({
   params,
@@ -19,13 +20,19 @@ export default async function EditProviderPage({
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Edit Provider</h1>
-        <Link href="/aevinite/providers" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Providers</span>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Edit Provider</h1>
+        </div>
+        <Link
+          href="/aevinite/providers"
+          className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'w-full sm:w-auto')}
+        >
           Back to providers
         </Link>
       </div>
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>{agency.name}</CardTitle>
           <p className="text-sm text-muted-foreground">

@@ -12,12 +12,12 @@ export function DataTable({
   empty?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+    <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+        <thead className="border-b border-border bg-muted/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <tr>
             {headers.map((h) => (
-              <th key={h} className="px-4 py-3 font-medium">
+              <th key={h} className="px-4 py-3.5 font-semibold whitespace-nowrap">
                 {h}
               </th>
             ))}

@@ -30,6 +30,8 @@ export function RouteForm({
   useEffect(() => {
     if (state.message) {
       formRef.current?.reset();
+      // Reacting to a completed useActionState result — intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStops([]);
     }
     // Whole state object (new each dispatch) so identical messages still re-fire.
@@ -109,7 +111,7 @@ export function RouteForm({
       </div>
 
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={pending || !stopsValid}>
+      <Button type="submit" disabled={pending || !stopsValid} className="w-full sm:w-auto">
         {pending ? 'Saving…' : 'Add route'}
       </Button>
       {stops.length === 0 ? (

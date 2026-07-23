@@ -49,6 +49,7 @@ export function BusForm({ drivers = [] }: { drivers?: { id: string; name: string
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (uploading || pending) return; // re-entry guard (Enter during the upload)
     setState({});
     const form = formRef.current;
     if (!form) return;
@@ -205,7 +206,7 @@ export function BusForm({ drivers = [] }: { drivers?: { id: string; name: string
       </div>
 
       <FormStatus error={state.error} message={state.message} />
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy} className="w-full sm:w-auto">
         {uploading ? 'Uploading photos…' : pending ? 'Saving…' : 'Add bus'}
       </Button>
     </form>

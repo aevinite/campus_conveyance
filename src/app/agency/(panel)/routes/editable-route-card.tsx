@@ -26,6 +26,8 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
 
   useEffect(() => {
     if (state.message) {
+      // Reacting to a completed useActionState result — intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditing(false);
       router.refresh();
     }
@@ -37,7 +39,7 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
   // ---- View mode ----------------------------------------------------------
   if (!editing) {
     return (
-      <div className="rounded-2xl border border-border bg-card/50 p-4">
+      <div className="rounded-2xl border border-border bg-card/50 p-4 shadow-xs transition-colors hover:border-primary/30">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <p className="text-lg font-semibold">{route.name}</p>
@@ -131,11 +133,21 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
         </div>
 
         <FormStatus error={state.error} message={state.message} />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={pending || (!route.hasBookings && !stopsValid)}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="submit"
+            disabled={pending || (!route.hasBookings && !stopsValid)}
+            className="w-full sm:w-auto"
+          >
             {pending ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button type="button" variant="outline" disabled={pending} onClick={() => setEditing(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            className="w-full sm:w-auto"
+            onClick={() => setEditing(false)}
+          >
             Cancel
           </Button>
         </div>

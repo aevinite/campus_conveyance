@@ -14,15 +14,8 @@ import { buttonVariants } from '@/components/ui/button';
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden">
-      <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-40" />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            'radial-gradient(60% 50% at 50% -10%, color-mix(in oklch, var(--primary) 20%, transparent), transparent 70%)',
-        }}
-      />
+      <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-90" />
+      <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(80%_60%_at_50%_0%,black,transparent)]" />
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-6">
         <div className="flex items-center gap-2 sm:gap-3">
           <Link

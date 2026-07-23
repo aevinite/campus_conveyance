@@ -2,6 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import { getSessionRole } from '@/features/auth/session';
 import { getAdminReport } from '@/features/admin/repository';
 
+// Cookie-authed, per-request export — declare the runtime explicitly to match
+// the other API/route handlers rather than relying on the dynamic default.
+export const runtime = 'nodejs';
+
 // GET /aevinite/report.csv — a real spreadsheet export of the admin report
 // (issue 3: "Download report" previously only opened the browser print dialog).
 // Route handlers aren't wrapped by the (panel) layout guard, so we check the

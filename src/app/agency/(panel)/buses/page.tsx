@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Bus, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listMyBusesFull, countMyBusesFull, listUnassignedDrivers } from '@/features/agency/repository';
 import { buttonVariants } from '@/components/ui/button';
@@ -38,21 +38,31 @@ export default async function AgencyBusesPage({
     <section className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Your buses</h1>
-          <p className="text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Fleet</span>
+          <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Your buses</h1>
+          <p className="mt-1 text-muted-foreground">
             Buses you&apos;ve added. Click a bus to edit its details or driver.
           </p>
         </div>
-        <Link href="/agency/add-bus" className={buttonVariants({ size: 'sm', className: 'gap-1.5' })}>
+        <Link
+          href="/agency/add-bus"
+          className={buttonVariants({ size: 'sm', className: 'w-full gap-1.5 sm:w-auto' })}
+        >
           <Plus className="size-4" />
           Add bus
         </Link>
       </div>
 
       {buses.length === 0 ? (
-        <p className="rounded-lg border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-          No buses added yet. Use “Add bus” to add your first one.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card/40 p-10 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Bus className="size-6" />
+          </span>
+          <div>
+            <p className="font-medium">No buses added yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">Use “Add bus” to add your first one.</p>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {buses.map((b) => (

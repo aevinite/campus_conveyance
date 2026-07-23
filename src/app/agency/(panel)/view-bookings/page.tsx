@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Eye } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listMyBookings, countMyBookings } from '@/features/agency/repository';
 import { BookingCard } from '../booking-card';
@@ -43,15 +44,24 @@ export default async function AgencyViewBookingsPage({
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">View Booking</h1>
-      <p className="text-sm text-muted-foreground">
-        Every booking with the student&apos;s full details and the bus/route they chose.
-      </p>
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Bookings</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">View booking</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Every booking with the student&apos;s full details and the bus/route they chose.
+        </p>
+      </div>
 
       {bookings.length === 0 ? (
-        <p className="rounded-lg border border-border bg-card/40 p-6 text-sm text-muted-foreground">
-          No bookings yet.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card/40 p-10 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Eye className="size-6" />
+          </span>
+          <div>
+            <p className="font-medium">No bookings yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">Bookings placed with your services will appear here.</p>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">
           {bookings.map((b) => (

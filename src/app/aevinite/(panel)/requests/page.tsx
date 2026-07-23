@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Inbox } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import {
   listAgencyRequests,
@@ -17,7 +18,7 @@ const PAGE_SIZE = 10;
 function Detail({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-sm">{value || '—'}</p>
     </div>
   );
@@ -61,13 +62,24 @@ export default async function AdminRequestsPage({
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Service Provider Requests</h1>
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Inbox className="size-3.5" />
+          Applications
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Service Provider Requests</h1>
+      </div>
       {requests.length === 0 ? (
-        <p className="text-muted-foreground">No pending applications.</p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Inbox className="size-6" />
+          </span>
+          <p className="font-medium">No pending applications</p>
+        </div>
       ) : (
         <div className="space-y-4">
           {requests.map((r) => (
-            <Card key={r.id}>
+            <Card key={r.id} className="rounded-2xl">
               <CardContent className="space-y-4 py-5">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <Detail label="Company" value={r.name} />
@@ -81,7 +93,7 @@ export default async function AdminRequestsPage({
                   <Detail label="Registered address" value={r.registered_address} />
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Selected colleges / schools
                   </p>
                   {r.services.length === 0 ? (
@@ -130,9 +142,9 @@ export default async function AdminRequestsPage({
 
       {rejectedTotal > 0 && (
         <div className="space-y-3 pt-4">
-          <h2 className="text-lg font-semibold text-muted-foreground">Rejected applications</h2>
+          <h2 className="font-heading text-lg font-semibold text-muted-foreground">Rejected applications</h2>
           {rejected.map((r) => (
-            <Card key={r.id}>
+            <Card key={r.id} className="rounded-2xl">
               <CardContent className="space-y-3 py-4">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <Detail label="Company" value={r.name} />

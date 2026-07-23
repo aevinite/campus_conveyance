@@ -1,4 +1,4 @@
-import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle } from 'lucide-react';
+import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
@@ -8,6 +8,7 @@ import RouteStopsMap, {
 } from '../student/routes/[id]/route-stops-map';
 import { LinkChildForm } from './link-child-form';
 import { UnlinkChildButton } from './unlink-child-button';
+import { formatShortDate } from '@/lib/format-date';
 
 // Bookings the child could actually be riding — worth showing a live bus map for.
 const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
@@ -26,7 +27,6 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Cancelled',
 };
 
-const shortDate = new Intl.DateTimeFormat('en-IN', { month: 'short', day: 'numeric' });
 
 export default async function ParentDashboard() {
   await requireRole('PARENT');
@@ -38,10 +38,39 @@ export default async function ParentDashboard() {
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
 
-  // Active trips get a live bus map. Fetch each route's stops once (public-read)
-  // so the map has context; the bus marker itself is polled client-side.
+  // Active trips get a live bus map. Group by route_id and render ONE map per
+  // route (not per booking): siblings on the same route would otherwise each
+  // spin up a duplicate map polling the same /api/bus-location +
+  // /api/reverse-geocode, multiplying load for no extra information.
   const trackable = bookings.filter((b) => b.route_id && TRACKABLE.has(b.status));
   const routeIds = [...new Set(trackable.map((b) => b.route_id as string))];
+  const trackableRoutes = new Map<
+    string,
+    {
+      route_id: string;
+      route_name: string | null;
+      institution_name: string | null;
+      bus_number: string | null;
+      students: string[];
+    }
+  >();
+  for (const b of trackable) {
+    const id = b.route_id as string;
+    const student = b.student_name ?? 'Your child';
+    const g = trackableRoutes.get(id);
+    if (g) {
+      if (!g.students.includes(student)) g.students.push(student);
+      if (!g.bus_number) g.bus_number = b.bus_number ?? null;
+    } else {
+      trackableRoutes.set(id, {
+        route_id: id,
+        route_name: b.route_name ?? null,
+        institution_name: b.institution_name ?? null,
+        bus_number: b.bus_number ?? null,
+        students: [student],
+      });
+    }
+  }
   const stopsByRoute = new Map<string, MapStop[]>();
   if (routeIds.length > 0) {
     const { data: stopRows } = await db
@@ -71,12 +100,16 @@ export default async function ParentDashboard() {
         <div aria-hidden className="pointer-events-none absolute -right-10 -bottom-16 -z-10 opacity-[0.07]">
           <UserCircle className="size-64" />
         </div>
-        <h1 className="max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
-          Welcome, <span className="text-primary">{name}</span>.
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary shadow-xs">
+          <Sparkles className="size-3.5" />
+          Parent dashboard
+        </div>
+        <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">
+          Welcome, <span className="text-gradient">{name}</span>.
         </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          Link your children&apos;s student accounts to follow their bookings,
-          buses and drivers — all in one place.
+          Link your children&apos;s student accounts to follow their daily
+          commute — bookings, buses and drivers, all in one place.
         </p>
       </section>
 
@@ -91,31 +124,31 @@ export default async function ParentDashboard() {
               <MapPin className="size-5 text-primary" /> Track their bus
             </h2>
             <p className="text-sm text-muted-foreground">
-              Live location shows while the driver is online for the trip.
+              Live location shows while the driver is online for the ride.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-2">
-            {trackable.map((b) => (
+            {[...trackableRoutes.values()].map((g) => (
               <div
-                key={b.booking_id}
+                key={g.route_id}
                 className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-xs"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-semibold">{b.student_name ?? 'Your child'}</p>
+                    <p className="truncate font-semibold">{g.students.join(', ')}</p>
                     <p className="truncate text-sm text-muted-foreground">
-                      {[b.route_name, b.institution_name].filter(Boolean).join(' → ')}
+                      {[g.route_name, g.institution_name].filter(Boolean).join(' → ')}
                     </p>
                   </div>
-                  {b.bus_number && (
+                  {g.bus_number && (
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                      <Bus className="size-3.5" /> Bus {b.bus_number}
+                      <Bus className="size-3.5" /> Bus {g.bus_number}
                     </span>
                   )}
                 </div>
                 <RouteStopsMap
-                  stops={stopsByRoute.get(b.route_id as string) ?? []}
-                  liveRouteId={b.route_id as string}
+                  stops={stopsByRoute.get(g.route_id) ?? []}
+                  liveRouteId={g.route_id}
                 />
               </div>
             ))}
@@ -129,7 +162,7 @@ export default async function ParentDashboard() {
         {children.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No children linked yet — enter the 6-digit code from your child&apos;s
-            student profile above to see their trips here.
+            student profile above to follow their daily commute here.
           </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -172,7 +205,7 @@ export default async function ParentDashboard() {
             <p className="text-sm text-muted-foreground">
               {children.length === 0
                 ? 'Bookings will appear here once you link a child.'
-                : 'No bookings yet — they will appear here as soon as your child reserves a seat.'}
+                : 'No bookings yet — they will appear here as soon as your child reserves a seat on a route.'}
             </p>
           </div>
         ) : (
@@ -186,7 +219,7 @@ export default async function ParentDashboard() {
                   <p className="flex flex-wrap items-center gap-x-2 font-medium">
                     {b.route_name ?? 'Route'}
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                         STATUS_PILL[b.status] ?? STATUS_PILL.PENDING
                       }`}
                     >
@@ -198,7 +231,7 @@ export default async function ParentDashboard() {
                       b.student_name,
                       b.institution_name,
                       b.pickup_name && `Pickup: ${b.pickup_name}`,
-                      `Booked ${shortDate.format(new Date(b.created_at))}`,
+                      `Booked ${formatShortDate(b.created_at)}`,
                     ]
                       .filter(Boolean)
                       .join(' · ')}

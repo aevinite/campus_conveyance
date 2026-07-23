@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { dashboardFor, roleFromClaims } from '@/lib/rbac/roles';
+import { establishSessionFromUrl } from '@/features/auth/recovery-session';
 
 type Status = 'loading' | 'invalid';
 
@@ -29,28 +30,7 @@ export default function ConfirmPage() {
     );
     (async () => {
       try {
-        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        const accessToken = hash.get('access_token');
-        const refreshToken = hash.get('refresh_token');
-        const code = new URL(window.location.href).searchParams.get('code');
-
-        let session = null;
-        if (accessToken && refreshToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-          session = data.session;
-        } else if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          session = data.session;
-        } else {
-          const { data } = await supabase.auth.getSession();
-          session = data.session;
-        }
-        if (!session) throw new Error('missing confirmation session');
+        const session = await establishSessionFromUrl(supabase);
 
         const role =
           roleFromClaims(session.user.app_metadata) ??
@@ -76,7 +56,7 @@ export default function ConfirmPage() {
   return (
     <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">
+        <CardTitle className="text-2xl">
           {status === 'invalid' ? 'Confirmation failed' : 'Confirming your email…'}
         </CardTitle>
         <CardDescription>

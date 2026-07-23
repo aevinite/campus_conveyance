@@ -102,11 +102,12 @@ export const listAgencyRequests = (
  *  the "Requests" card reflects a brand-new application immediately (the report
  *  counts are cached 60s and a new signup isn't an admin action that busts them). */
 export async function countPendingAgencies(db: SupabaseClient): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('agencies')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'PENDING')
     .eq('is_deleted', false);
+  if (error) throw error;
   return count ?? 0;
 }
 /** Rejected applications — kept visible so the admin can re-approve or remove
@@ -120,11 +121,12 @@ export const listRejectedAgencies = (
 
 /** Count of rejected applications, for the Rejected section pager. */
 export async function countRejectedAgencies(db: SupabaseClient): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('agencies')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'REJECTED')
     .eq('is_deleted', false);
+  if (error) throw error;
   return count ?? 0;
 }
 
@@ -171,10 +173,11 @@ export async function listServiceRequests(
 
 /** Count of pending service-area requests, for that page's pager. */
 export async function countServiceRequests(db: SupabaseClient): Promise<number> {
-  const { count } = await db
+  const { count, error } = await db
     .from('agency_service_requests')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'PENDING');
+  if (error) throw error;
   return count ?? 0;
 }
 
@@ -380,7 +383,10 @@ export interface AdminReport {
 const cachedAdminReportAgg = unstable_cache(
   async () => {
     const admin = createAdminClient();
-    const { data } = await admin.rpc('admin_report');
+    const { data, error } = await admin.rpc('admin_report');
+    // Throw so a transient failure misses the cache (caching {} would serve
+    // all-zeros dashboards for 60s after recovery).
+    if (error) throw error;
     const agg = (data ?? {}) as {
       providers?: ProviderReportRow[];
       totals?: { buses: number; vans: number; students: number };

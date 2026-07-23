@@ -30,7 +30,10 @@ export default async function AgencyDeletedStudentsPage({
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Deleted Students</h1>
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Students</span>
+        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Deleted students</h1>
+      </div>
       <DataTable
         headers={['Name', 'Email', 'Phone', 'Action']}
         rows={hidden.map((s) => [

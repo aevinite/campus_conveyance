@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { Building2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listAgenciesDetailed, ADMIN_PAGE_SIZE, type AgencyDetail } from '@/features/admin/repository';
 import { deleteAgencyAction } from '@/features/admin/actions';
@@ -7,9 +8,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
 import { Pager, pageParams } from '@/components/pager';
+import { formatDateMedium } from '@/lib/format-date';
 
-const fmtDate = (v?: string | null) =>
-  v ? new Date(v).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : '—';
+const fmtDate = (v?: string | null) => formatDateMedium(v);
 
 export default async function AdminProvidersPage({
   searchParams,
@@ -26,14 +27,23 @@ export default async function AdminProvidersPage({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Manage Service Providers</h1>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
+          <Building2 className="size-3.5" />
+          Providers
+        </span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Manage Service Providers</h1>
         <p className="text-muted-foreground">
           The full details each provider submitted at signup. Use Edit to update anything that changes.
         </p>
       </div>
 
       {agencies.length === 0 ? (
-        <p className="text-muted-foreground">No approved service providers.</p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Building2 className="size-6" />
+          </span>
+          <p className="font-medium">No approved service providers</p>
+        </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {agencies.map((a) => (
@@ -61,12 +71,17 @@ function ProviderCard({ a }: { a: AgencyDetail }) {
   ];
 
   return (
-    <Card>
+    <Card className="rounded-2xl transition-all duration-200 hover:border-primary/40 hover:shadow-md">
       <CardContent className="space-y-4 py-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-lg font-semibold">{a.name}</p>
-            <p className="text-xs text-muted-foreground">Approved service provider</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <Building2 className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-semibold">{a.name}</p>
+              <p className="text-xs text-muted-foreground">Approved service provider</p>
+            </div>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
             <Link

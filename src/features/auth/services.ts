@@ -1,10 +1,49 @@
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LoginInput } from './schemas';
-import { AuthError } from '@/lib/errors/app-error';
+import { getSessionClaims } from './session';
+import { isAccountDeactivated } from './account-status';
+import { dashboardFor } from '@/lib/rbac/roles';
+import { AuthError, toErrorResponse } from '@/lib/errors/app-error';
+import { getClientIp, registerLoginAttempt, clearLoginFailures } from '@/lib/rate-limit';
 
 export async function loginUser(db: SupabaseClient, input: LoginInput) {
   const { error } = await db.auth.signInWithPassword(input);
   if (error) throw new AuthError(error.message);
+}
+
+/**
+ * The full password-login sequence shared by every login screen (student,
+ * agency, …): authenticate → reject soft-deleted ("removed") accounts →
+ * revalidate → redirect to the dashboard matching the account's REAL role (so
+ * credentials entered on any login page land on the correct panel).
+ *
+ * Returns an error MESSAGE on failure; on success it redirect()s and therefore
+ * never returns. Centralised so login hardening (lockouts, rate limits) lands in
+ * ONE place instead of being copy-pasted per login action and drifting.
+ */
+export async function signInAndRoute(db: SupabaseClient, input: LoginInput): Promise<string> {
+  // App-level brute-force throttle (per email|IP) on top of Supabase's own
+  // limits. Atomically reserve the attempt up front (no TOCTOU); a successful
+  // login clears the counter below.
+  const subject = `${input.email.trim().toLowerCase()}|${await getClientIp()}`;
+  if ((await registerLoginAttempt(subject)) > 0) {
+    return 'Too many failed attempts. Please wait a few minutes and try again.';
+  }
+  try {
+    await loginUser(db, input);
+  } catch (e) {
+    return toErrorResponse(e).message; // attempt already counted atomically
+  }
+  await clearLoginFailures(subject); // successful login resets the counter
+  const { userId, role } = await getSessionClaims(db);
+  if (userId && (await isAccountDeactivated(db, userId, role))) {
+    await db.auth.signOut();
+    return 'This account has been deactivated. Please contact support.';
+  }
+  revalidatePath('/', 'layout');
+  redirect(dashboardFor(role));
 }
 
 /**

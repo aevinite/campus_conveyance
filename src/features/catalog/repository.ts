@@ -19,7 +19,8 @@ export async function listInstitutions(db: SupabaseClient): Promise<Institution[
     .select('id, name, kind, description, image_url, is_verified')
     .eq('is_active', true)
     .eq('is_deleted', false)
-    .order('name');
+    .order('name')
+    .limit(1000); // defensive cap — this feeds a one-off <select>, not a paged list
   if (error) throw error;
   return (data ?? []) as Institution[];
 }
@@ -90,13 +91,14 @@ export async function listFeaturedInstitutions(
   db: SupabaseClient,
   limit = 3,
 ): Promise<Institution[]> {
-  const { data } = await db
+  const { data, error } = await db
     .from('institutions')
     .select('id, name, kind, description, image_url, is_verified')
     .eq('is_active', true)
     .eq('is_deleted', false)
     .order('name')
     .limit(limit);
+  if (error) throw error;
   return (data ?? []) as Institution[];
 }
 
@@ -106,13 +108,14 @@ export async function getInstitution(
 ): Promise<Institution | null> {
   // Only active institutions are visible to students — a disabled one 404s even
   // via a direct URL, so students can't apply to an unavailable campus.
-  const { data } = await db
+  const { data, error } = await db
     .from('institutions')
     .select('id, name, kind, description, image_url, is_verified')
     .eq('id', id)
     .eq('is_active', true)
     .eq('is_deleted', false)
     .maybeSingle();
+  if (error) throw error; // don't 404 an active campus on a transient error
   return (data as Institution) ?? null;
 }
 

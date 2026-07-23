@@ -40,7 +40,7 @@ const roles = [
   {
     key: 'user',
     title: 'Student',
-    desc: 'Find your campus, book a seat, and manage your trips.',
+    desc: 'Find your campus, reserve a seat, and manage your daily commute.',
     icon: GraduationCap,
     href: '/login',
   },
@@ -54,7 +54,7 @@ const roles = [
   {
     key: 'driver',
     title: 'Driver',
-    desc: 'Manage routes, track trips, and update your status.',
+    desc: 'See your route, check your riders, and update your status.',
     icon: User,
     href: '/driver/login',
   },
@@ -64,27 +64,27 @@ const roles = [
 // refresh on a 2-minute poll, so a newly-added provider, user, or institution
 // is reflected without a manual reload.
 type StatKey = 'providers' | 'users' | 'colleges' | 'schools';
-const STAT_ITEMS: { key: StatKey; label: string }[] = [
-  { key: 'providers', label: 'Service providers' },
-  { key: 'users', label: 'Trusted users' },
-  { key: 'colleges', label: 'Colleges' },
-  { key: 'schools', label: 'Schools' },
+const STAT_ITEMS: { key: StatKey; label: string; icon: typeof Bus }[] = [
+  { key: 'providers', label: 'Service providers', icon: Building2 },
+  { key: 'users', label: 'Trusted users', icon: Users },
+  { key: 'colleges', label: 'Colleges', icon: GraduationCap },
+  { key: 'schools', label: 'Schools', icon: BookOpen },
 ];
 
 const whyChooseUs = [
   { icon: MapPin, title: 'Live Vehicle Tracking', desc: 'Track buses and vans in real time on every route.' },
   { icon: Shield, title: 'Safe Transportation', desc: 'Verified drivers and continuously monitored routes.' },
   { icon: Bell, title: 'Instant Notifications', desc: 'Arrival, delay, and route alerts as they happen.' },
-  { icon: Calendar, title: 'Easy Booking', desc: 'Reserve transportation in just a few clicks.' },
+  { icon: Calendar, title: 'Easy Booking', desc: 'Reserve a seat for your daily route in a few steps.' },
   { icon: Users, title: 'Parent Transparency', desc: 'Parents can monitor student travel status live.' },
   { icon: CreditCard, title: 'Secure Payments', desc: 'A safe and reliable payment experience.' },
 ];
 
 const howItWorks = [
-  { step: 1, title: 'Register', desc: 'Create your student account in seconds.' },
+  { step: 1, title: 'Register', desc: 'Create your free student account.' },
   { step: 2, title: 'Pick your campus', desc: 'Select your school or college.' },
   { step: 3, title: 'Choose transport', desc: 'Browse available buses and vans.' },
-  { step: 4, title: 'Book a seat', desc: 'Reserve your spot instantly.' },
+  { step: 4, title: 'Reserve a seat', desc: 'Reserve your seat on the route.' },
   { step: 5, title: 'Track live', desc: 'Follow your vehicle in real time.' },
   { step: 6, title: 'Travel safely', desc: 'Arrive on time, every time.' },
 ];
@@ -103,7 +103,7 @@ const features = [
 ];
 
 const faqs = [
-  { question: 'How can students book transportation?', answer: 'Students register an account, select their school or college, choose available transport options, and book a seat in a few simple clicks.' },
+  { question: 'How can students book transportation?', answer: 'Students register an account, select their school or college, choose a verified bus or van, pick their pickup stop, and reserve a seat on the route for their daily commute.' },
   { question: 'Can parents track buses?', answer: "Yes, parents can monitor their child's travel status and track buses in real time through the parent dashboard." },
   { question: 'Are drivers verified?', answer: 'Absolutely — all drivers are thoroughly verified and routes are continuously monitored for safety.' },
   { question: 'How are payments handled?', answer: 'Payments are processed through a safe and reliable payment system, ensuring secure transactions.' },
@@ -169,26 +169,53 @@ export default function Home() {
 
   // Database counts for the stats band. The endpoint is cached 60s (browser +
   // server via Cache-Control/revalidate), so we DON'T force `no-store` — the
-  // poll is mostly served from the browser cache. A single 2-minute poll is
-  // plenty for a marketing band; there's no separate focus/visibility refetch
-  // because it would just re-read the same cached response (redundant).
+  // poll is mostly served from the browser cache. The 2-minute poll PAUSES while
+  // the tab is hidden (a backgrounded/forgotten marketing tab would otherwise
+  // keep polling forever) and refreshes once when it becomes visible again.
   useEffect(() => {
     let active = true;
+    let loading = false; // in-flight dedup: don't stack overlapping polls
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const ac = new AbortController();
     const load = async () => {
+      if (loading) return;
+      loading = true;
       try {
-        const res = await fetch('/api/public-stats');
+        const res = await fetch('/api/public-stats', { signal: ac.signal });
         if (!res.ok) return;
         const data = (await res.json()) as Record<StatKey, number>;
         if (active) setCounts(data);
       } catch {
-        // Network hiccup — keep the last known values.
+        // Network hiccup / aborted on unmount — keep the last known values.
+      } finally {
+        loading = false;
+      }
+    };
+    const start = () => {
+      if (interval == null) interval = setInterval(load, 120000);
+    };
+    const stop = () => {
+      if (interval != null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        void load();
+        start();
       }
     };
     load();
-    const interval = setInterval(load, 120000);
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
-      clearInterval(interval);
+      stop();
+      ac.abort();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
@@ -284,6 +311,7 @@ export default function Home() {
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 aria-label="Toggle menu"
+                aria-expanded={mobileMenuOpen}
               >
                 {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
               </button>
@@ -328,24 +356,24 @@ export default function Home() {
             </Reveal>
             <Reveal delay={0.05}>
               <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
-                Smart campus <br className="hidden sm:block" />
-                transport, <span className="bg-gradient-to-r from-primary to-[color:var(--brand-blue)] bg-clip-text text-transparent">beautifully managed</span>
+                The daily campus <br className="hidden sm:block" />
+                commute, <span className="text-gradient">fully managed</span>
               </h1>
             </Reveal>
             <Reveal delay={0.1}>
               <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg lg:mx-0">
-                Campus Conveyance connects students, parents, institutions, and transport agencies through one secure platform. Track, book, manage and travel safely.
+                Campus Conveyance connects students, parents, institutions, and transport agencies on one secure platform — reserve a seat, track your bus live, and travel safely to campus every day.
               </p>
             </Reveal>
             <Reveal delay={0.15}>
-              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:items-start">
-                <Link href="/login">
-                  <Button size="lg" className="gap-2">
+              <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
+                <Link href="/login" className="w-full sm:w-auto">
+                  <Button size="lg" className="w-full gap-2 sm:w-auto">
                     Get Started <ArrowRight className="size-5" />
                   </Button>
                 </Link>
-                <a href="#features" onClick={(e) => handleSmoothScroll(e, 'features')}>
-                  <Button size="lg" variant="outline">
+                <a href="#features" onClick={(e) => handleSmoothScroll(e, 'features')} className="w-full sm:w-auto">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
                     Explore features
                   </Button>
                 </a>
@@ -386,13 +414,19 @@ export default function Home() {
 
         {/* Stats band */}
         <Reveal delay={0.1}>
-          <div className="mt-16 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border shadow-xs md:grid-cols-4">
+          <div className="mt-16 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
             {STAT_ITEMS.map((s) => (
-              <div key={s.key} className="bg-card px-6 py-7 text-center">
-                <p className="font-heading text-3xl font-bold tracking-tight text-primary tabular-nums">
-                  {counts ? counts[s.key].toLocaleString() : '—'}
+              <div
+                key={s.key}
+                className="group rounded-2xl border border-border bg-card p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md sm:p-6"
+              >
+                <div className="mb-4 grid size-10 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
+                  <s.icon className="size-5" />
+                </div>
+                <p className="text-gradient tnum font-heading text-3xl font-bold tracking-tight sm:text-4xl">
+                  {counts ? counts[s.key].toLocaleString('en-IN') : '—'}
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground">{s.label}</p>
+                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:text-sm">{s.label}</p>
               </div>
             ))}
           </div>
@@ -423,7 +457,7 @@ export default function Home() {
 
       {/* How It Works */}
       <Section id="how-it-works" className="scroll-mt-20 border-y border-border bg-muted/30">
-        <SectionHeading eyebrow="How it works" title="From sign-up to safe arrival" subtitle="Six simple steps between you and a reserved seat." />
+        <SectionHeading eyebrow="How it works" title="From sign-up to safe arrival" subtitle="Six simple steps from account to a reserved seat on your daily route." />
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {howItWorks.map((step, i) => (
             <Reveal key={step.step} delay={i * 0.06}>
@@ -572,25 +606,30 @@ export default function Home() {
 
       {/* CTA */}
       <Section className="pb-8">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-primary/5 px-8 py-14 text-center">
+        <div className="brand-gradient relative overflow-hidden rounded-3xl px-6 py-14 text-center shadow-lg sm:px-8 md:py-16">
+          <div aria-hidden className="bg-lanes pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay" />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10"
-            style={{ background: 'radial-gradient(60% 80% at 50% 0%, color-mix(in oklch, var(--primary) 16%, transparent), transparent 70%)' }}
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'radial-gradient(70% 90% at 50% 0%, rgb(255 255 255 / 0.18), transparent 70%)' }}
           />
-          <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-4xl">Ready to travel smarter?</h2>
-          <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Join thousands of students and institutions already moving with Campus Conveyance.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/login">
-              <Button size="lg" className="gap-2">
-                Get Started <ArrowRight className="size-5" />
-              </Button>
-            </Link>
-            <a href="#contact" onClick={(e) => handleSmoothScroll(e, 'contact')}>
-              <Button size="lg" variant="outline">Contact us</Button>
-            </a>
+          <div className="relative">
+            <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-[2.75rem]">Ready to travel smarter?</h2>
+            <p className="mx-auto mt-4 max-w-xl text-white/85">
+              Join the students and institutions already commuting with Campus Conveyance.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link href="/login" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full gap-2 bg-white text-[color:var(--brand-indigo-deep)] shadow-md hover:bg-white/90 sm:w-auto">
+                  Get Started <ArrowRight className="size-5" />
+                </Button>
+              </Link>
+              <a href="#contact" onClick={(e) => handleSmoothScroll(e, 'contact')} className="w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white sm:w-auto">
+                  Contact us
+                </Button>
+              </a>
+            </div>
           </div>
         </div>
       </Section>

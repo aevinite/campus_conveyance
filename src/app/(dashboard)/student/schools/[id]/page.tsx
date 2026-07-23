@@ -89,7 +89,7 @@ export default async function SchoolDetailPage({
                 {inst.kind === 'COLLEGE' ? 'College' : 'School'}
               </span>
             </div>
-            <h1 className="mt-4 flex items-center gap-2 text-2xl font-semibold">
+            <h1 className="mt-4 flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
               {inst.name}
               <VerifiedBadge verified={inst.is_verified} className="text-[1.25rem]" />
             </h1>
@@ -101,7 +101,10 @@ export default async function SchoolDetailPage({
       </div>
 
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Pick your bus</h2>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+          Step 2 · Choose a ride
+        </p>
+        <h2 className="text-xl font-bold tracking-tight">Pick your bus</h2>
         <p className="text-sm text-muted-foreground">
           Every ride to {inst.name} — compare fares, timings and live seats, then
           tap one to reserve.

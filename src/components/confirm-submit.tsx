@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Button } from '@/components/ui/button';
 import { SubmitButton } from '@/components/submit-button';
+import { useModalFocusTrap } from '@/lib/use-modal-focus-trap';
 
 type ButtonVariant = ComponentProps<typeof Button>['variant'];
 
@@ -34,15 +35,10 @@ export function ConfirmSubmit({
   pendingText: string;
 }) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descId = useId();
+  useModalFocusTrap(open, dialogRef, () => setOpen(false));
 
   return (
     <form action={action}>
@@ -61,16 +57,23 @@ export function ConfirmSubmit({
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
+          // onMouseDown + target check: a text-selection drag that ends over the
+          // backdrop shouldn't dismiss the dialog.
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
         >
           <div
+            ref={dialogRef}
             role="alertdialog"
             aria-modal="true"
-            className="w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            tabIndex={-1}
+            className="w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-lg outline-none"
           >
-            <h2 className="text-lg font-semibold">{title}</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+            <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
+            <p id={descId} className="mt-1.5 text-sm text-muted-foreground">{description}</p>
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 type="button"

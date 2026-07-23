@@ -20,8 +20,11 @@ export default async function EditCollegePage({
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Edit College</h1>
-      <Card>
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-widest text-primary">Institutions</span>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Edit College</h1>
+      </div>
+      <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>{college.name as string}</CardTitle>
         </CardHeader>

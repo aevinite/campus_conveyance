@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { BookingRow } from '@/features/agency/repository';
+import { formatDateTime } from '@/lib/format-date';
 
 const inr = (c: number | null) =>
   c == null
@@ -8,8 +9,7 @@ const inr = (c: number | null) =>
     : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(
         c / 100,
       );
-const fmt = (v: string) =>
-  new Date(v).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+const fmt = (v: string) => formatDateTime(v);
 
 function Detail({ label, value }: { label: string; value: string | null }) {
   return (
@@ -23,7 +23,7 @@ function Detail({ label, value }: { label: string; value: string | null }) {
 /** One booking with every detail the student entered + which bus/route they chose. */
 export function BookingCard({ b, action }: { b: BookingRow; action?: ReactNode }) {
   return (
-    <Card>
+    <Card className="rounded-2xl transition-colors hover:border-primary/30">
       <CardContent className="space-y-4 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

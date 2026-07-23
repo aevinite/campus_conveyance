@@ -46,7 +46,7 @@ export function RideStageControl({
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       {STAGES.map((s, i) => {
         const done = currentIndex >= 0 && i <= currentIndex;
         const isNext = i === currentIndex + 1 || (currentIndex < 0 && i === 0);
@@ -58,19 +58,19 @@ export function RideStageControl({
             disabled={pending}
             onClick={() => mark(s.key, s.label)}
             className={cn(
-              'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60',
+              'inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60',
               done
-                ? 'border-success/30 bg-success/10 text-success'
+                ? 'border-[color:var(--success)]/30 bg-[color:var(--success)]/10 text-[color:var(--success)]'
                 : isNext
-                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  ? 'border-primary bg-primary text-primary-foreground shadow-xs hover:bg-primary/90'
                   : 'border-border bg-card text-muted-foreground hover:bg-secondary/40',
             )}
             title={done ? `Marked ${s.done} — tap to re-send` : `Mark ${s.label}`}
           >
             {isBusy ? (
-              <Loader2 className="size-3 animate-spin" />
+              <Loader2 className="size-3.5 animate-spin" />
             ) : done ? (
-              <Check className="size-3" />
+              <Check className="size-3.5" />
             ) : null}
             {done ? s.done : s.label}
           </button>
