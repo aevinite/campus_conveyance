@@ -22,3 +22,7 @@ tsconfig.tsbuildinfo
 
 # Vercel
 .vercel
+
+# Local E2E test scripts + Playwright storage-state (contains auth tokens) —
+# never commit; these hold live session tokens and test-account passwords.
+_e2e/

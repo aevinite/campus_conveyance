@@ -1,7 +1,0 @@
-OTP_SENT to infinite.storage13013+agency3@gmail.com
-Got OTP 850539
-verified=true
-COLLEGE_CLICKED: LJ University
-AFTER_SUBMIT_URL: http://localhost:3000/agency/register
-AFTER_SUBMIT_TEXT: BackCampusConveyance Back to login Apply as a Service Agency Fill in your business details. An admin reviews and approves your application before you can list buses and routes. Account Email VerifiedChange Email verified — you can now fill in the rest of the form. Provider / Company name Contact person name Full name of the person we should reach out to. Password At least 8 characters. Phone Business & verification details Registered legal name Company registration no. (CIN / Udyam) GST number PAN number Registered address Transport permit link (optional) Fitness certificate link (optional) Se
-DONE
