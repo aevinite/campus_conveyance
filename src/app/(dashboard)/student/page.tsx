@@ -422,7 +422,7 @@ export default async function StudentHome() {
           </div>
         </div>
         <div className="flex items-start gap-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--brand-cyan)]/12 text-[color:var(--brand-cyan)]">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--viz-students)]/12 text-[color:var(--viz-students)]">
             <LifeBuoy className="size-6" />
           </span>
           <div>

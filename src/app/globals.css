@@ -48,125 +48,128 @@
   --radius-2xl: calc(var(--radius) * 1.9);
   --radius-3xl: calc(var(--radius) * 2.4);
   --radius-4xl: calc(var(--radius) * 2.9);
-  --shadow-2xs: 0 1px 2px 0 oklch(0.25 0.06 272 / 0.05);
-  --shadow-xs: 0 1px 3px 0 oklch(0.25 0.06 272 / 0.07), 0 1px 2px -1px oklch(0.25 0.06 272 / 0.07);
-  --shadow-sm: 0 2px 8px -1px oklch(0.25 0.06 272 / 0.09), 0 1px 3px -1px oklch(0.25 0.06 272 / 0.07);
-  --shadow-md: 0 10px 24px -6px oklch(0.25 0.06 272 / 0.12), 0 3px 8px -2px oklch(0.25 0.06 272 / 0.08);
-  --shadow-lg: 0 20px 46px -12px oklch(0.25 0.06 272 / 0.18), 0 6px 14px -4px oklch(0.25 0.06 272 / 0.1);
-  --shadow-xl: 0 34px 70px -18px oklch(0.25 0.08 272 / 0.24);
-  --shadow-glow: 0 0 0 1px oklch(0.52 0.23 272 / 0.12), 0 12px 34px -10px oklch(0.52 0.23 272 / 0.35);
+  --shadow-2xs: 0 1px 2px 0 oklch(0.3 0.05 68 / 0.06);
+  --shadow-xs: 0 1px 3px 0 oklch(0.3 0.05 68 / 0.08), 0 1px 2px -1px oklch(0.3 0.05 68 / 0.08);
+  --shadow-sm: 0 2px 8px -1px oklch(0.3 0.05 68 / 0.1), 0 1px 3px -1px oklch(0.3 0.05 68 / 0.08);
+  --shadow-md: 0 10px 24px -6px oklch(0.3 0.05 68 / 0.13), 0 3px 8px -2px oklch(0.3 0.05 68 / 0.09);
+  --shadow-lg: 0 20px 46px -12px oklch(0.3 0.06 68 / 0.18), 0 6px 14px -4px oklch(0.3 0.05 68 / 0.11);
+  --shadow-xl: 0 34px 70px -18px oklch(0.3 0.07 68 / 0.24);
+  --shadow-glow: 0 0 0 1px oklch(0.72 0.16 82 / 0.35), 0 12px 34px -10px oklch(0.72 0.16 82 / 0.45);
 }
 
 /*
-  Campus Conveyance — "Signal Transit" theme.
-  A bold, modern mobility look: electric indigo as the primary action color,
-  a signal-green "go" accent, on cool ink-slate neutrals. Chunky radii, tinted
-  depth shadows, and a geometric display face. All surfaces are token-driven so
-  the palette propagates across every page (light + dark).
+  Campus Conveyance — "School Bus" theme.
+  A warm, confident mobility look built on the icon of student transport: a
+  deep golden-amber as the primary action color (legible black-on-yellow, the
+  classic bus livery), bright bus-yellow reserved for graphic accents + the
+  brandmark, on warm ink neutrals. Chunky radii, warm-tinted depth shadows, and
+  a geometric display face. All surfaces are token-driven so the palette
+  propagates across every page (light + dark).
 */
 :root {
   --radius: 0.9rem;
 
-  /* Fixed brand colors (logo + graphic accents / gradients) */
-  --brand-indigo: #4f39f6;
-  --brand-indigo-deep: #3a24d0;
-  --brand-green: #17b877;
-  --brand-cyan: #14b4d6;
-  --brand-glow: #6d5efc;
+  /* Fixed brand colors (logo + graphic accents / gradients).
+     yellow/gold/honey = bright graphics; amber-deep = readable text on light. */
+  --brand-yellow: #ffc02e;
+  --brand-gold: #f59e0b;
+  --brand-honey: #ffdd7a;
+  --brand-orange: #f97316;
+  --brand-amber-deep: #a3560a;
 
-  --background: oklch(0.986 0.004 265);
-  --foreground: oklch(0.22 0.03 268);
+  --background: oklch(0.99 0.006 90);
+  --foreground: oklch(0.23 0.02 66);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.03 268);
+  --card-foreground: oklch(0.23 0.02 66);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.03 268);
+  --popover-foreground: oklch(0.23 0.02 66);
 
-  --primary: oklch(0.52 0.23 272);
-  --primary-foreground: oklch(0.99 0.01 272);
+  --primary: oklch(0.72 0.16 78);
+  --primary-foreground: oklch(0.24 0.04 62);
 
-  --secondary: oklch(0.96 0.01 268);
-  --secondary-foreground: oklch(0.3 0.03 268);
+  --secondary: oklch(0.965 0.012 86);
+  --secondary-foreground: oklch(0.3 0.02 66);
 
-  --muted: oklch(0.965 0.008 268);
-  --muted-foreground: oklch(0.5 0.02 268);
+  --muted: oklch(0.965 0.01 86);
+  --muted-foreground: oklch(0.5 0.022 68);
 
-  --accent: oklch(0.95 0.035 275);
-  --accent-foreground: oklch(0.45 0.19 273);
+  --accent: oklch(0.95 0.05 88);
+  --accent-foreground: oklch(0.42 0.11 66);
 
   --destructive: oklch(0.585 0.22 27);
   --success: oklch(0.62 0.15 152);
-  --warning: oklch(0.72 0.16 70);
+  --warning: oklch(0.68 0.16 55);
 
-  --border: oklch(0.912 0.008 268);
-  --input: oklch(0.912 0.008 268);
-  --ring: oklch(0.52 0.23 272);
+  --border: oklch(0.9 0.012 84);
+  --input: oklch(0.9 0.012 84);
+  --ring: oklch(0.72 0.16 78);
 
-  --chart-1: oklch(0.52 0.23 272);
-  --chart-2: oklch(0.64 0.15 165);
-  --chart-3: oklch(0.62 0.14 205);
-  --chart-4: oklch(0.6 0.2 320);
-  --chart-5: oklch(0.72 0.16 55);
+  --chart-1: oklch(0.72 0.16 82);
+  --chart-2: oklch(0.66 0.19 48);
+  --chart-3: oklch(0.6 0.13 200);
+  --chart-4: oklch(0.62 0.15 160);
+  --chart-5: oklch(0.58 0.18 20);
 
-  --sidebar: oklch(0.982 0.006 268);
-  --sidebar-foreground: oklch(0.22 0.03 268);
-  --sidebar-primary: oklch(0.52 0.23 272);
-  --sidebar-primary-foreground: oklch(0.99 0.01 272);
-  --sidebar-accent: oklch(0.95 0.035 275);
-  --sidebar-accent-foreground: oklch(0.45 0.19 273);
-  --sidebar-border: oklch(0.912 0.008 268);
-  --sidebar-ring: oklch(0.52 0.23 272);
+  --sidebar: oklch(0.985 0.008 88);
+  --sidebar-foreground: oklch(0.23 0.02 66);
+  --sidebar-primary: oklch(0.72 0.16 78);
+  --sidebar-primary-foreground: oklch(0.24 0.04 62);
+  --sidebar-accent: oklch(0.95 0.05 88);
+  --sidebar-accent-foreground: oklch(0.42 0.11 66);
+  --sidebar-border: oklch(0.9 0.012 84);
+  --sidebar-ring: oklch(0.72 0.16 78);
 }
 
 .dark {
-  --brand-indigo: #8b7cff;
-  --brand-indigo-deep: #6d5efc;
-  --brand-green: #34d99b;
-  --brand-cyan: #3ecbe8;
-  --brand-glow: #8b7cff;
+  --brand-yellow: #ffcf4d;
+  --brand-gold: #ffb627;
+  --brand-honey: #ffe39b;
+  --brand-orange: #fb923c;
+  --brand-amber-deep: #fbbf24;
 
-  --background: oklch(0.17 0.02 270);
-  --foreground: oklch(0.96 0.01 270);
+  --background: oklch(0.185 0.014 72);
+  --foreground: oklch(0.96 0.01 86);
 
-  --card: oklch(0.21 0.024 270);
-  --card-foreground: oklch(0.96 0.01 270);
-  --popover: oklch(0.21 0.024 270);
-  --popover-foreground: oklch(0.96 0.01 270);
+  --card: oklch(0.225 0.016 72);
+  --card-foreground: oklch(0.96 0.01 86);
+  --popover: oklch(0.225 0.016 72);
+  --popover-foreground: oklch(0.96 0.01 86);
 
-  --primary: oklch(0.68 0.2 276);
-  --primary-foreground: oklch(0.16 0.04 272);
+  --primary: oklch(0.82 0.16 86);
+  --primary-foreground: oklch(0.24 0.05 60);
 
-  --secondary: oklch(0.26 0.022 270);
-  --secondary-foreground: oklch(0.96 0.01 270);
+  --secondary: oklch(0.27 0.016 72);
+  --secondary-foreground: oklch(0.96 0.01 86);
 
-  --muted: oklch(0.25 0.02 270);
-  --muted-foreground: oklch(0.72 0.02 270);
+  --muted: oklch(0.26 0.014 72);
+  --muted-foreground: oklch(0.73 0.02 80);
 
-  --accent: oklch(0.32 0.07 274);
-  --accent-foreground: oklch(0.86 0.09 276);
+  --accent: oklch(0.33 0.06 74);
+  --accent-foreground: oklch(0.88 0.11 86);
 
   --destructive: oklch(0.68 0.19 24);
   --success: oklch(0.74 0.15 157);
   --warning: oklch(0.8 0.15 72);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.68 0.2 276);
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.82 0.16 86);
 
-  --chart-1: oklch(0.68 0.2 276);
-  --chart-2: oklch(0.74 0.15 160);
-  --chart-3: oklch(0.72 0.14 205);
-  --chart-4: oklch(0.7 0.19 320);
-  --chart-5: oklch(0.78 0.15 58);
+  --chart-1: oklch(0.82 0.16 86);
+  --chart-2: oklch(0.74 0.18 52);
+  --chart-3: oklch(0.7 0.13 200);
+  --chart-4: oklch(0.72 0.15 160);
+  --chart-5: oklch(0.68 0.18 22);
 
-  --sidebar: oklch(0.19 0.022 270);
-  --sidebar-foreground: oklch(0.96 0.01 270);
-  --sidebar-primary: oklch(0.68 0.2 276);
-  --sidebar-primary-foreground: oklch(0.16 0.04 272);
-  --sidebar-accent: oklch(0.32 0.07 274);
-  --sidebar-accent-foreground: oklch(0.86 0.09 276);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.68 0.2 276);
+  --sidebar: oklch(0.205 0.015 72);
+  --sidebar-foreground: oklch(0.96 0.01 86);
+  --sidebar-primary: oklch(0.82 0.16 86);
+  --sidebar-primary-foreground: oklch(0.24 0.05 60);
+  --sidebar-accent: oklch(0.33 0.06 74);
+  --sidebar-accent-foreground: oklch(0.88 0.11 86);
+  --sidebar-border: oklch(1 0 0 / 11%);
+  --sidebar-ring: oklch(0.82 0.16 86);
 }
 
 @layer base {
@@ -198,20 +201,20 @@
 /* Data-viz palette. Marks use these; text/ink use the theme's foreground
    tokens. Dark steps are re-tuned for the dark surface. */
 :root {
-  --viz-bus: #4f39f6;      /* categorical slot 1 (indigo) */
-  --viz-van: #14b4d6;      /* categorical slot 2 (cyan) */
-  --viz-students: #17b877; /* categorical slot 3 (green) */
-  --viz-paid: #17b877;     /* status: good */
+  --viz-bus: #f59e0b;      /* categorical slot 1 (amber-gold) */
+  --viz-van: #f97316;      /* categorical slot 2 (orange) */
+  --viz-students: #0ea5b5; /* categorical slot 3 (teal, complement) */
+  --viz-paid: #16a34a;     /* status: good */
   --viz-pending: #eab308;  /* status: warning */
-  --viz-track: #e7e6f2;    /* bar track / gridline */
+  --viz-track: #efe7d6;    /* bar track / gridline */
 }
 .dark {
-  --viz-bus: #8b7cff;
-  --viz-van: #3ecbe8;
-  --viz-students: #34d99b;
+  --viz-bus: #fbbf24;
+  --viz-van: #fb923c;
+  --viz-students: #2dd4d8;
   --viz-paid: #34d99b;
   --viz-pending: #facc15;
-  --viz-track: #2b2940;
+  --viz-track: #362f21;
 }
 
 /* Utility: subtle grid backdrop used on marketing + auth surfaces. */
@@ -224,34 +227,45 @@
 
 /* Bold-transit helpers ---------------------------------------------------- */
 
-/* The signature brand gradient (indigo → glow → cyan/green). Use as a text
-   clip or a fill for hero accents, active pills, and CTAs. */
+/* The signature brand gradient — a warm "golden hour" fill (bronze → amber →
+   gold). Kept mid-toned on purpose so white/dark display text sits legibly on
+   top. Use for hero accents, active pills, and CTAs. */
 .brand-gradient {
   background-image: linear-gradient(
-    100deg,
-    var(--brand-indigo) 0%,
-    var(--brand-glow) 48%,
-    var(--brand-cyan) 100%
+    105deg,
+    oklch(0.58 0.15 52) 0%,
+    oklch(0.66 0.17 72) 52%,
+    oklch(0.72 0.16 88) 100%
   );
 }
+/* Clipped-text gradient — deep warm tones so headlines/numbers stay readable
+   on light surfaces. Brightened in dark mode below. */
 .text-gradient {
   background-image: linear-gradient(
     100deg,
-    var(--brand-indigo) 0%,
-    var(--brand-glow) 55%,
-    var(--brand-cyan) 100%
+    oklch(0.52 0.15 48) 0%,
+    oklch(0.62 0.17 68) 55%,
+    oklch(0.6 0.17 34) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
+.dark .text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--brand-gold) 0%,
+    var(--brand-yellow) 55%,
+    var(--brand-orange) 100%
+  );
+}
 
-/* Ambient radial glow field for hero / auth / empty-state backdrops. */
+/* Ambient radial glow field — warm sunrise for hero / auth / empty backdrops. */
 .bg-aurora {
   background-image:
-    radial-gradient(55% 45% at 12% 0%, color-mix(in oklch, var(--brand-indigo) 22%, transparent), transparent 60%),
-    radial-gradient(45% 45% at 92% 8%, color-mix(in oklch, var(--brand-cyan) 16%, transparent), transparent 60%),
-    radial-gradient(40% 40% at 60% 100%, color-mix(in oklch, var(--brand-green) 14%, transparent), transparent 60%);
+    radial-gradient(55% 45% at 12% 0%, color-mix(in oklch, var(--brand-gold) 24%, transparent), transparent 60%),
+    radial-gradient(45% 45% at 92% 8%, color-mix(in oklch, var(--brand-yellow) 20%, transparent), transparent 60%),
+    radial-gradient(40% 40% at 60% 100%, color-mix(in oklch, var(--brand-orange) 14%, transparent), transparent 60%);
 }
 
 /* Diagonal "route/road" hatch — a subtle transit texture for accent panels. */
@@ -331,5 +345,5 @@ input[type="password"]::-ms-clear {
   font-size: 10px;
 }
 .leaflet-control-attribution a {
-  color: #6d5efc !important;
+  color: #b4700a !important;
 }

@@ -620,7 +620,7 @@ export default function Home() {
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link href="/login" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full gap-2 bg-white text-[color:var(--brand-indigo-deep)] shadow-md hover:bg-white/90 sm:w-auto">
+                <Button size="lg" className="w-full gap-2 bg-white text-[#3a2a06] shadow-md hover:bg-white/90 sm:w-auto">
                   Get Started <ArrowRight className="size-5" />
                 </Button>
               </Link>
