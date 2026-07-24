@@ -13,7 +13,7 @@
 
 create index concurrently if not exists idx_audit_logs_actor on audit_logs(actor_id);
 create index concurrently if not exists idx_notifications_institution on notifications(institution_id);
-create index concurrently if not exists idx_gps_tracking_institution on gps_tracking(institution_id);
+-- (gps_tracking was dropped live — see 0085 — so no index for it here.)
 -- bookings.pickup_stop_id/drop_stop_id are NO ACTION FKs → speed the delete-time
 -- check (and stop lookups); the partial index serves expire_stale_holds().
 create index concurrently if not exists idx_bookings_pickup_stop on bookings(pickup_stop_id);

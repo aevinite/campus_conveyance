@@ -248,10 +248,12 @@ create index if not exists idx_audit_institution on audit_logs(institution_id, c
 do $$
 declare t text;
 begin
-  for t in select unnest(array['institutions','profiles','institution_admins',
+  -- institution_admins, complaints, subscriptions, settings were dropped live
+  -- (see 0085) — removed here so this idempotent trigger loop won't 42P01 on a
+  -- missing table if re-run.
+  for t in select unnest(array['institutions','profiles',
     'students','parents','drivers','vehicles','routes','route_stops',
-    'route_assignments','seat_allocations','bookings','payments','complaints',
-    'subscriptions','settings'])
+    'route_assignments','seat_allocations','bookings','payments'])
   loop
     execute format('drop trigger if exists trg_%I_updated on %I;', t, t);
     execute format(

@@ -73,10 +73,13 @@ create policy inst_super_write on institutions for all
 do $$
 declare t text;
 begin
-  for t in select unnest(array['institution_admins','students','parents',
+  -- NOTE: institution_admins, attendance, gps_tracking, complaints, subscriptions
+  -- and settings were dropped live (see 0085) — removed from this array so this
+  -- idempotent loop can be re-run for RLS drift without a 42P01 on a missing table.
+  for t in select unnest(array['students','parents',
     'drivers','vehicles','routes','route_stops','route_assignments',
-    'seat_allocations','bookings','payments','attendance','gps_tracking',
-    'notifications','complaints','subscriptions','settings','audit_logs'])
+    'seat_allocations','bookings','payments',
+    'notifications','audit_logs'])
   loop
     execute format('drop policy if exists %1$s_tenant_rw on public.%1$I;', t);
     execute format($f$

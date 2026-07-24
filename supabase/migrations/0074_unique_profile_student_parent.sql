@@ -47,7 +47,6 @@ begin
 
     foreach dup in array r.ids[2:array_length(r.ids, 1)] loop
       update bookings          set student_id = canonical where student_id = dup;
-      update attendance        set student_id = canonical where student_id = dup;
       update ride_events       set student_id = canonical where student_id = dup;
       update parent_link_codes set student_id = canonical where student_id = dup;
       -- Composite-PK tables: drop rows that would collide on repoint, then move.
