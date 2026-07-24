@@ -107,7 +107,8 @@ export default async function StudentHome() {
       {/* Greeting hero */}
       <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary shadow-xs">
+          <div className="inline-flex items-center gap-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            <span aria-hidden className="h-px w-8 bg-gradient-to-r from-transparent to-primary" />
             <Sparkles className="size-3.5" />
             <span className="tnum">{formatWeekdayDate(new Date())}</span>
           </div>
