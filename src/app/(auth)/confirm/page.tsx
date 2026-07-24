@@ -71,7 +71,7 @@ export default function ConfirmPage() {
         )}
         {status === 'invalid' && (
           <div className="space-y-4">
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Please sign in, or register again to get a new confirmation link.
             </p>
             <Link href="/login" className={buttonVariants({ className: 'w-full' })}>

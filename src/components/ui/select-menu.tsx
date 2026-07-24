@@ -25,6 +25,7 @@ export function SelectMenu({
   disabled = false,
   onValueChange,
   id,
+  ariaLabel,
   className,
 }: {
   name: string;
@@ -36,6 +37,8 @@ export function SelectMenu({
   disabled?: boolean;
   onValueChange?: (value: string) => void;
   id?: string;
+  /** Accessible name for the trigger when there's no visible <label htmlFor>. */
+  ariaLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -168,6 +171,7 @@ export function SelectMenu({
         type="button"
         id={id}
         disabled={disabled}
+        aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}

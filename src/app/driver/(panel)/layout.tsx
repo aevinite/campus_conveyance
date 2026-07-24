@@ -13,9 +13,10 @@ const BASE_ITEMS: SidebarItem[] = [
   { label: 'My Riders', href: '/driver/riders', icon: 'Users' },
   { label: 'Profile', href: '/driver/profile', icon: 'UserCircle' },
 ];
-// "Live map" is only useful to a driver actually driving a bus today, so it's
-// shown on the same condition as the online/offline toggle.
+// "Live map" and "Route progress" are only useful to a driver actually driving
+// a bus today, so they show on the same condition as the online/offline toggle.
 const LIVE_ITEM: SidebarItem = { label: 'Live map', href: '/driver/live', icon: 'Route' };
+const STOPS_ITEM: SidebarItem = { label: 'Route progress', href: '/driver/stops', icon: 'Milestone' };
 
 export default async function DriverPanelLayout({ children }: { children: React.ReactNode }) {
   await requireRole('DRIVER', '/driver/login');
@@ -58,8 +59,9 @@ export default async function DriverPanelLayout({ children }: { children: React.
     );
   }
 
+  // Dashboard, Live map, Route progress, then My Buses / My Riders / Profile.
   const items = drivesToday
-    ? [BASE_ITEMS[0], LIVE_ITEM, ...BASE_ITEMS.slice(1)]
+    ? [BASE_ITEMS[0], LIVE_ITEM, STOPS_ITEM, ...BASE_ITEMS.slice(1)]
     : BASE_ITEMS;
 
   return (

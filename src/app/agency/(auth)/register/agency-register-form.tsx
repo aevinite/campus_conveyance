@@ -129,6 +129,7 @@ function CollegeMultiSelect({ institutions }: { institutions: Institution[] }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Type a college or school name…"
+                aria-label="Search for a college or school"
                 className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
@@ -358,7 +359,7 @@ function EmailVerifyField({
       )}
       {msg && !verified && <p className="text-xs text-muted-foreground">{msg}</p>}
       {err && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {err}
         </p>
       )}
@@ -482,7 +483,7 @@ export function AgencyRegisterForm({
           </div>
 
           {state.error && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {state.error}
             </p>
           )}

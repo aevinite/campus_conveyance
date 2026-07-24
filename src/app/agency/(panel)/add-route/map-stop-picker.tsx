@@ -218,6 +218,7 @@ export default function MapStopPicker({
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => results.length > 0 && setOpen(true)}
               placeholder="Search a nearby area, e.g. Prahlad Nagar"
+              aria-label="Search for a pickup area"
               className={`${inputCls} pl-9`}
             />
             {searching && (
@@ -245,9 +246,9 @@ export default function MapStopPicker({
                 No matches. Try adding the city, or click the map to drop a stop.
               </p>
             )}
-            {results.map((r, i) => (
+            {results.map((r) => (
               <button
-                key={i}
+                key={`${r.lat},${r.lng}`}
                 type="button"
                 onClick={() => pick(r)}
                 className="flex w-full items-start gap-2.5 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-muted"
@@ -280,7 +281,9 @@ export default function MapStopPicker({
           {value.map((s, i) => {
             const missingDesc = s.description.trim().length === 0;
             return (
-              <li key={i} className="space-y-2 rounded-lg border border-border p-2.5">
+              // Stable key by location — an array index would carry a controlled
+              // description input's state to the wrong row when a stop is removed.
+              <li key={`${s.lat},${s.lng},${s.name}`} className="space-y-2 rounded-lg border border-border p-2.5">
                 <div className="flex items-center gap-2">
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                     {i + 1}

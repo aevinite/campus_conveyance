@@ -44,12 +44,14 @@ export function TimePicker({ name, defaultValue }: { name: string; defaultValue?
       <div className="grid grid-cols-[1fr_1fr_5rem] items-center gap-2">
         <SelectMenu
           name={`${name}_h`}
+          ariaLabel="Hour"
           defaultValue={String(init.h12)}
           onValueChange={(v) => setH12(Number(v))}
           options={HOURS}
         />
         <SelectMenu
           name={`${name}_m`}
+          ariaLabel="Minute"
           searchable
           searchPlaceholder="Minute…"
           defaultValue={String(init.m)}
@@ -58,6 +60,7 @@ export function TimePicker({ name, defaultValue }: { name: string; defaultValue?
         />
         <SelectMenu
           name={`${name}_mer`}
+          ariaLabel="AM or PM"
           defaultValue={init.mer}
           onValueChange={setMer}
           options={MERIDIEMS}

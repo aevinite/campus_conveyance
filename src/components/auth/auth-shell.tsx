@@ -6,15 +6,15 @@ import { buttonVariants } from '@/components/ui/button';
 
 /**
  * Shared backdrop for every auth portal (student, agency, driver, admin) so the
- * sign-in surfaces are visually identical: a soft dotted grid, an indigo glow,
- * a centered brand mark and a theme toggle. A "Back" button sits in the very
- * top-left corner so it's always easy to leave any login / forgot-password
- * screen and return to the home page.
+ * sign-in surfaces are visually identical: a premium dark "ink" canvas with a
+ * warm yellow aurora glow, a masked grid, a centered brand mark and a theme
+ * toggle. A "Back" button sits in the very top-left corner so it's always easy
+ * to leave any login / forgot-password screen and return to the home page.
  */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-screen flex-col overflow-x-hidden">
-      <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-90" />
+    <div className="dark relative flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
+      <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-95" />
       <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(80%_60%_at_50%_0%,black,transparent)]" />
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-6">
         <div className="flex items-center gap-2 sm:gap-3">

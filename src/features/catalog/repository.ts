@@ -71,7 +71,8 @@ export async function countInstitutions(
   if (opts.kind && opts.kind !== 'ALL') q = q.eq('kind', opts.kind);
   const search = opts.query?.trim();
   if (search) q = q.ilike('name', `%${search}%`);
-  const { count } = await q;
+  const { count, error } = await q;
+  if (error) throw error; // don't report 0 (empty pager) over visible cards
   return count ?? 0;
 }
 

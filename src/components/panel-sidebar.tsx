@@ -23,6 +23,7 @@ import {
   Bus,
   BusFront,
   MapPlus,
+  Milestone,
   Route,
   UserCircle,
   Settings,
@@ -52,6 +53,7 @@ const ICONS = {
   Bus,
   BusFront,
   MapPlus,
+  Milestone,
   Route,
   UserCircle,
   Settings,
@@ -155,7 +157,7 @@ export function PanelSidebar({
   return (
     <div className="flex min-h-screen bg-muted/30">
       {/* Desktop rail */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      <aside className="dark sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center justify-between gap-2 px-5 py-5">
           <Logo href={homeHref} />
           <ThemeToggle className="size-8" />
@@ -168,7 +170,7 @@ export function PanelSidebar({
 
       {/* Right column: mobile top bar + main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-sidebar-border bg-sidebar/95 px-4 py-3 backdrop-blur md:hidden">
+        <header className="dark sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-sidebar-border bg-sidebar/95 px-4 py-3 text-sidebar-foreground backdrop-blur md:hidden">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -197,7 +199,7 @@ export function PanelSidebar({
             aria-modal="true"
             aria-label="Menu"
             tabIndex={-1}
-            className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-sidebar-border bg-sidebar shadow-xl outline-none"
+            className="dark absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl outline-none"
           >
             <div className="flex items-center justify-between gap-2 px-5 py-5">
               <Logo href={homeHref} />

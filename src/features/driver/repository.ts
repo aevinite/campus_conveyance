@@ -42,6 +42,18 @@ export interface DriverBooking {
   current_stage: string | null;
 }
 
+export interface DriverRouteStop {
+  route_id: string;
+  route_name: string | null;
+  bus_number: string | null;
+  stop_id: string;
+  stop_name: string | null;
+  sequence: number;
+  /** Current status of this stop today: NEXT | SKIPPED | null. */
+  status: string | null;
+  rider_count: number;
+}
+
 export interface DriverStatus {
   is_online: boolean;
   lat: number | null;
@@ -92,6 +104,17 @@ export async function listDriverBookings(
   });
   if (error) throw error;
   return (data ?? []) as DriverBooking[];
+}
+
+/** Ordered pickup stops for every bus the driver drives today, each with its
+ *  current status (next/skipped) and how many riders are waiting there. Drives
+ *  the "Route progress" page; the UI groups the rows by route. */
+export async function listDriverRouteProgress(
+  db: SupabaseClient,
+): Promise<DriverRouteStop[]> {
+  const { data, error } = await db.rpc('driver_route_progress');
+  if (error) throw error;
+  return (data ?? []) as DriverRouteStop[];
 }
 
 /** Roster totals for the dashboard cards (no full-roster fetch). */

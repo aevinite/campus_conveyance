@@ -281,8 +281,8 @@ export default function Home() {
 
       {/* Header */}
       <header
-        className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-          scrolled ? 'border-b border-border bg-background/80 shadow-sm backdrop-blur-xl' : 'border-b border-transparent'
+        className={`dark fixed inset-x-0 top-0 z-50 border-b text-foreground transition-all duration-300 ${
+          scrolled ? 'border-white/10 bg-background/85 shadow-lg backdrop-blur-xl' : 'border-transparent bg-background/30 backdrop-blur-sm'
         }`}
       >
         <div className="mx-auto max-w-6xl px-6 sm:px-10">
@@ -345,93 +345,96 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero */}
-      <Section id="home" className="pt-28 pb-14 md:pt-36 md:pb-20">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
-          <div className="text-center lg:text-left">
-            <Reveal>
-              <div className="mb-6 flex justify-center lg:justify-start">
-                <Eyebrow>For schools &amp; colleges</Eyebrow>
-              </div>
-            </Reveal>
-            <Reveal delay={0.05}>
-              <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl">
-                The daily campus <br className="hidden sm:block" />
-                commute, <span className="text-gradient">fully managed</span>
-              </h1>
-            </Reveal>
-            <Reveal delay={0.1}>
-              <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg lg:mx-0">
-                Campus Conveyance connects students, parents, institutions, and transport agencies on one secure platform — reserve a seat, track your bus live, and travel safely to campus every day.
-              </p>
-            </Reveal>
-            <Reveal delay={0.15}>
-              <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
-                <Link href="/login" className="w-full sm:w-auto">
-                  <Button size="lg" className="w-full gap-2 sm:w-auto">
-                    Get Started <ArrowRight className="size-5" />
-                  </Button>
-                </Link>
-                <a href="#features" onClick={(e) => handleSmoothScroll(e, 'features')} className="w-full sm:w-auto">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
-                    Explore features
-                  </Button>
-                </a>
+      {/* Hero — premium dark "ink" band with electric-yellow accents */}
+      <section id="home" className="dark relative isolate overflow-hidden bg-background pt-28 pb-16 text-foreground md:pt-36 md:pb-24">
+        <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-95" />
+        <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.1] [mask-image:radial-gradient(75%_60%_at_50%_0%,black,transparent)]" />
+        <div aria-hidden className="bg-lanes pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-40 opacity-[0.15]" />
+        <div className="mx-auto max-w-6xl px-6 sm:px-10">
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            <div className="text-center lg:text-left">
+              <Reveal>
+                <div className="mb-6 flex justify-center lg:justify-start">
+                  <Eyebrow>For schools &amp; colleges</Eyebrow>
+                </div>
+              </Reveal>
+              <Reveal delay={0.05}>
+                <h1 className="text-balance text-4xl font-bold leading-[1.02] tracking-tight md:text-5xl lg:text-[4rem]">
+                  The daily campus <br className="hidden sm:block" />
+                  commute, <span className="text-gradient">fully managed</span>
+                </h1>
+              </Reveal>
+              <Reveal delay={0.1}>
+                <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground md:text-lg lg:mx-0">
+                  Campus Conveyance connects students, parents, institutions, and transport agencies on one secure platform — reserve a seat, track your bus live, and travel safely to campus every day.
+                </p>
+              </Reveal>
+              <Reveal delay={0.15}>
+                <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
+                  <Link href="/login" className="w-full sm:w-auto">
+                    <Button size="lg" className="w-full gap-2 shadow-lg shadow-primary/20 sm:w-auto">
+                      Get Started <ArrowRight className="size-5" />
+                    </Button>
+                  </Link>
+                  <a href="#features" onClick={(e) => handleSmoothScroll(e, 'features')} className="w-full sm:w-auto">
+                    <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                      Explore features
+                    </Button>
+                  </a>
+                </div>
+              </Reveal>
+            </div>
+
+            {/* Sign-in role picker */}
+            <Reveal delay={0.2}>
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-md sm:p-7">
+                <div className="mb-5 flex items-center gap-2">
+                  <span className="brand-gradient h-4 w-1.5 rounded-full" />
+                  <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sign in to your portal</p>
+                </div>
+                <div className="space-y-3">
+                  {roles.map((role) => (
+                    <Link
+                      key={role.key}
+                      href={role.href}
+                      className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:border-primary/50 hover:bg-white/[0.07] hover:shadow-md"
+                    >
+                      <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                        <role.icon className="size-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">{role.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">{role.desc}</p>
+                      </div>
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
+                    </Link>
+                  ))}
+                </div>
               </div>
             </Reveal>
           </div>
 
-          {/* Sign-in role picker */}
-          <Reveal delay={0.2}>
-            <div className="rounded-3xl border border-border bg-card/80 p-6 shadow-lg backdrop-blur-sm sm:p-7">
-              <div className="mb-5">
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sign in to</p>
-                <p className="mt-1 font-heading text-xl font-bold tracking-tight">
-                  Campus <span className="text-primary">Conveyance</span>
-                </p>
-              </div>
-              <div className="space-y-3">
-                {roles.map((role) => (
-                  <Link
-                    key={role.key}
-                    href={role.href}
-                    className="group flex items-center gap-4 rounded-2xl border border-border bg-background p-4 transition-all duration-200 hover:border-primary/50 hover:shadow-md"
-                  >
-                    <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                      <role.icon className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold">{role.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{role.desc}</p>
-                    </div>
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
-                  </Link>
-                ))}
-              </div>
+          {/* Stats band */}
+          <Reveal delay={0.1}>
+            <div className="mt-16 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
+              {STAT_ITEMS.map((s) => (
+                <div
+                  key={s.key}
+                  className="group rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-white/[0.07] sm:p-6"
+                >
+                  <div className="mb-4 grid size-10 place-items-center rounded-xl bg-primary/15 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
+                    <s.icon className="size-5" />
+                  </div>
+                  <p className="text-gradient tnum font-heading text-3xl font-bold tracking-tight sm:text-4xl">
+                    {counts ? counts[s.key].toLocaleString('en-IN') : '—'}
+                  </p>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:text-sm">{s.label}</p>
+                </div>
+              ))}
             </div>
           </Reveal>
         </div>
-
-        {/* Stats band */}
-        <Reveal delay={0.1}>
-          <div className="mt-16 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4">
-            {STAT_ITEMS.map((s) => (
-              <div
-                key={s.key}
-                className="group rounded-2xl border border-border bg-card p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md sm:p-6"
-              >
-                <div className="mb-4 grid size-10 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
-                  <s.icon className="size-5" />
-                </div>
-                <p className="text-gradient tnum font-heading text-3xl font-bold tracking-tight sm:text-4xl">
-                  {counts ? counts[s.key].toLocaleString('en-IN') : '—'}
-                </p>
-                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:text-sm">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-      </Section>
+      </section>
 
       {/* Why Choose Us */}
       <Section className="scroll-mt-20">
@@ -604,28 +607,27 @@ export default function Home() {
         </div>
       </Section>
 
-      {/* CTA */}
+      {/* CTA — dark ink panel with an electric-yellow edge */}
       <Section className="pb-8">
-        <div className="brand-gradient relative overflow-hidden rounded-3xl px-6 py-14 text-center shadow-lg sm:px-8 md:py-16">
-          <div aria-hidden className="bg-lanes pointer-events-none absolute inset-0 opacity-20 mix-blend-overlay" />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ background: 'radial-gradient(70% 90% at 50% 0%, rgb(255 255 255 / 0.18), transparent 70%)' }}
-          />
+        <div className="dark relative isolate overflow-hidden rounded-3xl bg-background px-6 py-14 text-center text-foreground shadow-xl ring-1 ring-white/10 sm:px-8 md:py-16">
+          <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-80" />
+          <div aria-hidden className="bg-lanes pointer-events-none absolute inset-0 -z-10 opacity-[0.15]" />
+          <div aria-hidden className="brand-gradient pointer-events-none absolute inset-x-0 top-0 h-1" />
           <div className="relative">
-            <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-[2.75rem]">Ready to travel smarter?</h2>
-            <p className="mx-auto mt-4 max-w-xl text-white/85">
+            <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight md:text-4xl lg:text-[2.75rem]">
+              Ready to travel <span className="text-gradient">smarter?</span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
               Join the students and institutions already commuting with Campus Conveyance.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link href="/login" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full gap-2 bg-white text-[#3a2a06] shadow-md hover:bg-white/90 sm:w-auto">
+                <Button size="lg" className="w-full gap-2 shadow-lg shadow-primary/20 sm:w-auto">
                   Get Started <ArrowRight className="size-5" />
                 </Button>
               </Link>
               <a href="#contact" onClick={(e) => handleSmoothScroll(e, 'contact')} className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white sm:w-auto">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto">
                   Contact us
                 </Button>
               </a>
@@ -634,8 +636,9 @@ export default function Home() {
         </div>
       </Section>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-card">
+      {/* Footer — dark ink to bookend the page */}
+      <footer className="dark relative border-t border-white/10 bg-background text-foreground">
+        <div aria-hidden className="brand-gradient pointer-events-none absolute inset-x-0 top-0 h-0.5 opacity-80" />
         <div className="mx-auto max-w-6xl px-6 py-14 sm:px-10">
           <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
             <div className="lg:col-span-1">

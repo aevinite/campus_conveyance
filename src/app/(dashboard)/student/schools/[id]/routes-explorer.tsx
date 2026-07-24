@@ -101,6 +101,7 @@ export function RoutesExplorer({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Search routes or agencies…"
+            aria-label="Search routes or agencies"
             className="pl-9"
           />
         </div>

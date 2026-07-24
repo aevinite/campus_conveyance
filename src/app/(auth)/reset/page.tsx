@@ -65,7 +65,7 @@ export default function ResetPage() {
 
         {status === 'invalid' && (
           <div className="space-y-4">
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               Please request a new reset link — this one is no longer valid.
             </p>
             <Link href="/forgot" className={buttonVariants({ className: 'w-full' })}>
@@ -103,7 +103,7 @@ export default function ResetPage() {
               </div>
             </div>
             {state.error && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {state.error}
               </p>
             )}

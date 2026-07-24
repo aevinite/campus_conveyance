@@ -116,19 +116,20 @@ class Gate {
 // the DB via rateLimit() at the call sites instead (see the routes).
 export const photonGate = new Gate(200, 12);
 
-/** fetch() with an abort timeout so one slow upstream can't stall the app. */
+/**
+ * fetch() with an abort timeout so one slow upstream can't stall the app.
+ * Uses AbortSignal.timeout so the deadline covers the FULL exchange — including
+ * the caller's res.json() body read, since the response body stream is governed
+ * by the same signal. A headers-then-stall-body upstream therefore still aborts
+ * at timeoutMs (the old manual clearTimeout freed the timer once headers arrived,
+ * leaving the body read unbounded). No manual timer to leak.
+ */
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs = 4000,
 ): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(t);
-  }
+  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
 }
 
 // Serialize Nominatim calls WITHIN an instance to at most one in flight. The DB
@@ -156,14 +157,19 @@ class Semaphore {
   constructor(private readonly max: number) {}
   async run<T>(fn: () => Promise<T>): Promise<T> {
     if (this.active >= this.max) {
+      // Wait for a slot to be HANDED to us (no self-increment) — the releasing
+      // caller keeps the count unchanged when transferring, so a fresh caller
+      // can't slip in during the microtask gap and over-admit past `max`.
       await new Promise<void>((resolve) => this.waiters.push(resolve));
+    } else {
+      this.active++;
     }
-    this.active++;
     try {
       return await fn();
     } finally {
-      this.active--;
-      this.waiters.shift()?.();
+      const next = this.waiters.shift();
+      if (next) next(); // transfer the slot (count stays)
+      else this.active--; // no one waiting → release it
     }
   }
 }

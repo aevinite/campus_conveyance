@@ -16,6 +16,7 @@ create index if not exists idx_ride_events_recorded_by on ride_events(recorded_b
 create index if not exists idx_route_assignments_institution on route_assignments(institution_id);
 create index if not exists idx_seat_allocations_institution on seat_allocations(institution_id);
 create index if not exists idx_parents_institution on parents(institution_id);
+create index if not exists idx_route_stops_institution on route_stops(institution_id);
 create index if not exists idx_agency_service_requests_institution on agency_service_requests(institution_id);
 
 -- other unindexed FKs

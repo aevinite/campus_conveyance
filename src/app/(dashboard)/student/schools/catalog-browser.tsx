@@ -76,6 +76,7 @@ export function CatalogBrowser({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Search schools & colleges…"
+            aria-label="Search schools and colleges"
             className="pl-9"
           />
         </div>

@@ -164,7 +164,7 @@ export async function getRouteWithStops(
 } | null> {
   // Route and its stops both key only off routeId, so fetch them together
   // rather than serially (one round-trip instead of two on the hot detail page).
-  const [{ data: route }, { data: stops }] = await Promise.all([
+  const [{ data: route, error: routeErr }, { data: stops, error: stopsErr }] = await Promise.all([
     db
       .from('routes')
       .select(
@@ -183,6 +183,10 @@ export async function getRouteWithStops(
       .eq('route_id', routeId)
       .order('sequence'),
   ]);
+  // Surface a transient failure instead of masking it as a 404 (route not found)
+  // or a bookable route rendered with zero pickup stops.
+  if (routeErr) throw routeErr;
+  if (stopsErr) throw stopsErr;
   if (!route) return null;
 
   // A route reachable via an old bookmark must still be LIVE, or the student

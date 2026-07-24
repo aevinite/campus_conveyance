@@ -36,6 +36,83 @@ export async function markRideStageAction(
   return { ok: true, stage: parsed.data.stage };
 }
 
+const stopSchema = z.object({
+  routeId: z.string().uuid(),
+  stopId: z.string().uuid(),
+});
+
+export type StopProgressResult = { ok?: boolean; nextStop?: string | null; error?: string };
+
+/**
+ * Set the pickup slot the driver is heading to next. Clears any previous "next"
+ * on the route, un-skips this stop if it was skipped, and notifies riders there.
+ */
+export async function setNextStopAction(
+  routeId: string,
+  stopId: string,
+): Promise<StopProgressResult> {
+  const parsed = stopSchema.safeParse({ routeId, stopId });
+  if (!parsed.success) return { error: 'Could not update the route.' };
+  const db = await createClient();
+  try {
+    const { error } = await db.rpc('driver_set_next_stop', {
+      p_route_id: parsed.data.routeId,
+      p_stop_id: parsed.data.stopId,
+    });
+    if (error) throw new AppError('DRIVER', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  revalidatePath('/driver/stops');
+  return { ok: true };
+}
+
+/**
+ * Mark a pickup slot as skipped ("I'm not stopping here"). Riders waiting there
+ * are told to walk to the next non-skipped stop; its name is returned so the UI
+ * can confirm where they were redirected.
+ */
+export async function skipStopAction(
+  routeId: string,
+  stopId: string,
+): Promise<StopProgressResult> {
+  const parsed = stopSchema.safeParse({ routeId, stopId });
+  if (!parsed.success) return { error: 'Could not update the route.' };
+  const db = await createClient();
+  try {
+    const { data, error } = await db.rpc('driver_skip_stop', {
+      p_route_id: parsed.data.routeId,
+      p_stop_id: parsed.data.stopId,
+    });
+    if (error) throw new AppError('DRIVER', error.message);
+    revalidatePath('/driver/stops');
+    return { ok: true, nextStop: (data as string | null) ?? null };
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+}
+
+/** Clear a stop's next/skipped status (undo). Silent — no rider notification. */
+export async function resetStopAction(
+  routeId: string,
+  stopId: string,
+): Promise<StopProgressResult> {
+  const parsed = stopSchema.safeParse({ routeId, stopId });
+  if (!parsed.success) return { error: 'Could not update the route.' };
+  const db = await createClient();
+  try {
+    const { error } = await db.rpc('driver_reset_stop', {
+      p_route_id: parsed.data.routeId,
+      p_stop_id: parsed.data.stopId,
+    });
+    if (error) throw new AppError('DRIVER', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  revalidatePath('/driver/stops');
+  return { ok: true };
+}
+
 export type OnlineResult = { ok?: boolean; online?: boolean; error?: string };
 
 /** Flip the driver online/offline. Offline clears the stored live location. */
