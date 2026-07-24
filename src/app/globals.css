@@ -128,13 +128,13 @@
   --brand-orange: #fb923c;
   --brand-amber-deep: #fbbf24;
 
-  --background: oklch(0.185 0.014 72);
-  --foreground: oklch(0.96 0.01 86);
+  --background: oklch(0.16 0.014 70);
+  --foreground: oklch(0.97 0.01 86);
 
-  --card: oklch(0.225 0.016 72);
-  --card-foreground: oklch(0.96 0.01 86);
-  --popover: oklch(0.225 0.016 72);
-  --popover-foreground: oklch(0.96 0.01 86);
+  --card: oklch(0.205 0.016 71);
+  --card-foreground: oklch(0.97 0.01 86);
+  --popover: oklch(0.205 0.016 71);
+  --popover-foreground: oklch(0.97 0.01 86);
 
   --primary: oklch(0.82 0.16 86);
   --primary-foreground: oklch(0.24 0.05 60);
@@ -162,13 +162,13 @@
   --chart-4: oklch(0.72 0.15 160);
   --chart-5: oklch(0.68 0.18 22);
 
-  --sidebar: oklch(0.205 0.015 72);
-  --sidebar-foreground: oklch(0.96 0.01 86);
+  --sidebar: oklch(0.145 0.014 68);
+  --sidebar-foreground: oklch(0.97 0.01 86);
   --sidebar-primary: oklch(0.82 0.16 86);
   --sidebar-primary-foreground: oklch(0.24 0.05 60);
-  --sidebar-accent: oklch(0.33 0.06 74);
-  --sidebar-accent-foreground: oklch(0.88 0.11 86);
-  --sidebar-border: oklch(1 0 0 / 11%);
+  --sidebar-accent: oklch(0.31 0.07 74);
+  --sidebar-accent-foreground: oklch(0.92 0.12 88);
+  --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.82 0.16 86);
 }
 
@@ -279,6 +279,36 @@
 
 .glow-primary {
   box-shadow: var(--shadow-glow);
+}
+
+/* Signature card hover: a subtle lift + warm-tinted shadow + amber edge. Use on
+   any interactive tile so motion + depth read consistently across the app. */
+.hover-lift {
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in oklch, var(--primary) 40%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hover-lift:hover { transform: none; }
+}
+
+/* An "ink" chrome surface — the deep warm-black used for nav rails, headers,
+   heroes and CTAs. Pair with the `dark` class so token children re-tune. */
+.surface-ink {
+  background-color: var(--sidebar);
+  color: var(--sidebar-foreground);
+}
+
+/* Amber left-accent bar for active nav / selected rows. */
+.accent-bar {
+  background-image: linear-gradient(
+    to bottom,
+    var(--brand-yellow),
+    var(--brand-gold)
+  );
 }
 
 /* Numeric readouts (stats, fares, counts) look sharp in tabular figures. */

@@ -3,6 +3,16 @@ import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
 
 const ITEMS: SidebarItem[] = [
   { label: 'Dashboard', href: '/aevinite', icon: 'LayoutDashboard' },
+  // Operations — full read-only visibility into the live platform.
+  { label: 'Buses & Vans', href: '/aevinite/fleet', icon: 'Bus' },
+  { label: 'Routes & Stops', href: '/aevinite/routes', icon: 'Route' },
+  { label: 'Bookings', href: '/aevinite/bookings', icon: 'Ticket' },
+  { label: 'Live Rides', href: '/aevinite/live', icon: 'Radio' },
+  { label: 'Drivers', href: '/aevinite/drivers', icon: 'IdCard' },
+  { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },
+  { label: 'Notifications', href: '/aevinite/notifications', icon: 'Bell' },
+  { label: 'Contact Inquiries', href: '/aevinite/inquiries', icon: 'Mail' },
+  // Marketplace governance.
   { label: 'Service Provider Requests', href: '/aevinite/requests', icon: 'Inbox' },
   { label: 'Service Area Requests', href: '/aevinite/service-requests', icon: 'ClipboardList' },
   { label: 'Manage Students', href: '/aevinite/students', icon: 'Users' },

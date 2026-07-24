@@ -25,6 +25,11 @@ import {
   MapPlus,
   Milestone,
   Route,
+  Ticket,
+  Radio,
+  UsersRound,
+  Bell,
+  Mail,
   UserCircle,
   Settings,
   History,
@@ -55,6 +60,11 @@ const ICONS = {
   MapPlus,
   Milestone,
   Route,
+  Ticket,
+  Radio,
+  UsersRound,
+  Bell,
+  Mail,
   UserCircle,
   Settings,
   History,
@@ -117,7 +127,7 @@ function SidebarNav({
               )}
             >
               {active && (
-                <span className="brand-gradient absolute inset-y-1.5 left-0 w-1 rounded-full" />
+                <span className="accent-bar absolute inset-y-1.5 left-0 w-1.5 rounded-full shadow-[0_0_12px_-1px_var(--brand-gold)]" />
               )}
               <Icon className={cn('size-4 shrink-0 transition-colors', active && 'text-primary')} />
               {it.label}
