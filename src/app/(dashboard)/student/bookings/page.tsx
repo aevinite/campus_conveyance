@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle, Ticket, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle, Ticket, ArrowRight, History } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listMyBookings, countMyBookings, type BookingRow } from '@/features/booking/repository';
@@ -171,13 +171,21 @@ export default async function BookingsPage({
           </p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">My Bookings</h1>
         </div>
-        <Link
-          href="/student/schools"
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/70"
-        >
-          Reserve a seat
-          <ArrowRight className="size-4" />
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/student/history"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <History className="size-4" /> Trip history
+          </Link>
+          <Link
+            href="/student/schools"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/70"
+          >
+            Reserve a seat
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
       </div>
       {bookings.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { rateLimit } from '@/lib/rate-limit';
+import { drainEmailOutbox } from '@/lib/email-outbox';
+import { drainPushOutbox } from '@/lib/push';
 
 // Driver GPS ping while online. This fires every ~9s per online driver, so it's
 // a lightweight API route rather than a full server action (no RSC action
@@ -51,5 +54,23 @@ export async function POST(req: Request) {
   }
 
   const { error } = await db.rpc('driver_update_location', { p_lat: lat, p_lng: lng });
+
+  // Arrival alerts: with the fresh fix stored, check whether the bus is now
+  // within the geofence of any rider's pickup stop. The RPC returns the number
+  // of riders newly alerted (bell + queued email/push rows); only drain the
+  // outboxes when there's something to send, so the hot ping path stays cheap.
+  // Fully best-effort — a geofence/drain failure never affects the ping result.
+  if (!error) {
+    try {
+      const { data: alerted } = await db.rpc('check_pickup_geofence', { p_lat: lat, p_lng: lng });
+      if (typeof alerted === 'number' && alerted > 0) {
+        after(() => drainEmailOutbox());
+        after(() => drainPushOutbox());
+      }
+    } catch {
+      /* geofence is best-effort; the GPS fix is already saved */
+    }
+  }
+
   return NextResponse.json({ ok: !error }, { headers });
 }

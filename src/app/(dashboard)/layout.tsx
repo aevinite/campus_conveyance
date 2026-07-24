@@ -44,7 +44,7 @@ export default async function DashboardLayout({
               institution), not a hardcoded /student that bounces other roles. */}
           <Logo href={dashboardFor(role)} />
           <div className="flex items-center gap-2 sm:gap-2.5">
-            <NotificationBell items={notifications} unread={unread} />
+            <NotificationBell items={notifications} unread={unread} userId={userId} />
             <PushToggle />
             <ThemeToggle />
             <UserMenu name={fullName ?? ''} email={email ?? ''} role={role} />

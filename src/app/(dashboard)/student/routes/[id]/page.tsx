@@ -343,6 +343,14 @@ export default async function RouteDetailPage({
               // route (PENDING hold or CONFIRMED) — a WAITLISTED rider has no seat
               // and isn't on the bus, so they don't get the live map.
               liveRouteId={activeBooking && activeBooking.status !== 'WAITLISTED' ? id : undefined}
+              // The rider's own pickup stop → powers the live "N min away" ETA badge.
+              pickupStop={(() => {
+                if (!activeBooking || activeBooking.status === 'WAITLISTED') return null;
+                const s = data.stops.find((x) => x.id === activeBooking.pickup_stop_id);
+                return s && s.lat != null && s.lng != null
+                  ? { lat: s.lat, lng: s.lng, name: s.name }
+                  : null;
+              })()}
             />
           )}
           {data.stops.length === 0 ? (

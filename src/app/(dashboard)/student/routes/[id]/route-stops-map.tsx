@@ -58,16 +58,28 @@ interface LiveState {
   speedKmh: number | null;
   area: string | null;
   stopped: boolean;
+  /** Estimated minutes until the bus reaches the rider's pickup stop (null when
+   *  unknown — e.g. stationary or no pickup stop). */
+  etaMin: number | null;
+  /** Straight-line metres from the bus to the rider's pickup stop (null if no stop). */
+  distM: number | null;
 }
 
 export default function RouteStopsMap({
   stops,
   liveRouteId,
+  pickupStop,
 }: {
   stops: MapStop[];
   /** When set, poll for and show this route's live bus position. */
   liveRouteId?: string;
+  /** The viewing rider's own pickup stop — enables the "N min away" ETA badge. */
+  pickupStop?: { lat: number; lng: number; name: string } | null;
 }) {
+  // Read the latest pickup stop from a ref so the poll effect (keyed on
+  // liveRouteId) never has to re-subscribe when the prop object identity changes.
+  const pickupRef = useRef(pickupStop);
+  pickupRef.current = pickupStop;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
@@ -199,6 +211,17 @@ export default function RouteStopsMap({
       centeredOnBus.current = false;
     }
 
+    // Distance + ETA from the current bus fix to the viewing rider's pickup stop.
+    // ETA needs a real speed (m/s); while stopped we only know the distance.
+    function pickupEta(pos: LatLng): { etaMin: number | null; distM: number | null } {
+      const p = pickupRef.current;
+      if (!p) return { etaMin: null, distM: null };
+      const d = haversineMeters(pos, [p.lat, p.lng]);
+      const spd = speedRef.current; // metres/second (smoothed)
+      const etaMin = spd && spd > 0.7 ? Math.max(1, Math.ceil(d / spd / 60)) : null;
+      return { etaMin, distM: d };
+    }
+
     async function tick() {
       // Skip until the async Leaflet import + map init finished — otherwise the
       // first tick fetches a fix we can't render yet (wasted poll). Self-resumes.
@@ -246,7 +269,7 @@ export default function RouteStopsMap({
               centeredOnBus.current = true;
             }
             void fetchArea(pos);
-            setLive({ busNumber: data.busNumber, speedKmh: null, area: areaRef.current, stopped: true });
+            setLive({ busNumber: data.busNumber, speedKmh: null, area: areaRef.current, stopped: true, ...pickupEta(pos) });
           } else {
             const prev = prevBusPos.current!;
             const dist = haversineMeters(prev, pos);
@@ -272,12 +295,13 @@ export default function RouteStopsMap({
                 speedKmh: toKmh(speedRef.current),
                 area: areaRef.current,
                 stopped: false,
+                ...pickupEta(pos),
               });
             } else {
               // Stationary: snap to correct drift, report stopped.
               speedRef.current = 0;
               busMarkerRef.current.setLatLng(pos);
-              setLive({ busNumber: data.busNumber, speedKmh: 0, area: areaRef.current, stopped: true });
+              setLive({ busNumber: data.busNumber, speedKmh: 0, area: areaRef.current, stopped: true, ...pickupEta(pos) });
             }
             prevBusPos.current = pos;
             prevBusTime.current = now;
@@ -327,6 +351,16 @@ export default function RouteStopsMap({
 
   const speedLabel = live?.stopped ? 'Stopped' : `${Math.round(live?.speedKmh ?? 0)} km/h`;
 
+  // "N min away" (moving, ETA known) / "Arriving now" (within ~150 m) / distance.
+  const etaLabel =
+    live?.distM == null
+      ? null
+      : live.distM <= 150
+        ? 'Arriving now'
+        : live.etaMin != null
+          ? `~${live.etaMin} min away`
+          : `${(live.distM / 1000).toFixed(1)} km away`;
+
   return (
     <div className="relative">
       {live && (
@@ -339,6 +373,11 @@ export default function RouteStopsMap({
             {speedLabel}
             {live.area ? <span className="truncate">· {live.area}</span> : null}
           </span>
+          {etaLabel && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary shadow-sm backdrop-blur-sm">
+              {etaLabel}
+            </span>
+          )}
         </div>
       )}
       <div

@@ -1,4 +1,5 @@
-import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles, History, ArrowRight } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
@@ -196,7 +197,15 @@ export default async function ParentDashboard() {
 
       {/* Bookings */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Their bookings</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold">Their bookings</h2>
+          <Link
+            href="/parent/history"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/70"
+          >
+            <History className="size-4" /> Trip history <ArrowRight className="size-4" />
+          </Link>
+        </div>
         {bookings.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-12 text-center">
             <span className="grid size-11 place-items-center rounded-full bg-secondary text-muted-foreground">

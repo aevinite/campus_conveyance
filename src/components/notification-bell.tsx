@@ -1,7 +1,9 @@
 'use client';
-import { useTransition } from 'react';
+import { useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { Bell, CheckCheck } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,12 +25,58 @@ import { formatCompactDateTime } from '@/lib/format-date';
 export function NotificationBell({
   items,
   unread,
+  userId,
 }: {
   items: NotificationRow[];
   unread: number;
+  /** The viewer's id — used to scope the Realtime subscription to their rows. */
+  userId?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // Realtime: the bell used to update only on navigation. Subscribe to this
+  // user's own `notifications` rows (authorized by the notifications_own_read RLS
+  // policy) and refresh the server-rendered list the moment one arrives/changes.
+  // A new row also pops a toast so an alert is noticed without opening the menu.
+  const seen = useRef<Set<string>>(new Set(items.map((n) => n.id)));
+  useEffect(() => {
+    if (!userId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`notifications:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${userId}`,
+        },
+        (payload) => {
+          const row = payload.new as { id?: string; title?: string };
+          if (row?.id && !seen.current.has(row.id)) {
+            seen.current.add(row.id);
+            if (row.title) toast(row.title);
+          }
+          router.refresh();
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${userId}`,
+        },
+        () => router.refresh(),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, router]);
 
   function markRead(id: string) {
     startTransition(async () => {
