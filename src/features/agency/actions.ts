@@ -50,6 +50,63 @@ function retryMessage(seconds: number): string {
   return mins <= 1 ? 'Please wait a minute and try again.' : `Please wait about ${mins} minutes and try again.`;
 }
 
+/**
+ * Seed the new agency's service areas from the colleges + vehicle types it picked
+ * on the signup form, right after the account is created. The 0009/0090 signup
+ * trigger that was meant to do this has drifted / isn't applied on live, so an
+ * approved provider served no college and couldn't add routes. Doing it here in
+ * app code makes onboarding work regardless of DB trigger state (approveAgency
+ * also re-seeds as a safety net). Idempotent — the unique (agency_id,
+ * institution_id, vehicle_type) index backs the upsert, so it's safe if the
+ * trigger DID fire. Best-effort: the account already exists, so a seed hiccup
+ * must never fail the signup.
+ */
+async function seedSignupServices(
+  admin: ReturnType<typeof createAdminClient>,
+  ownerId: string,
+  fallbackName: string,
+  institutionIds: string[],
+  vehicleTypes: ('BUS' | 'VAN')[],
+): Promise<void> {
+  const instIds = [...new Set(institutionIds.filter((x) => UUID_RE.test(x)))];
+  const vtypes = [...new Set(vehicleTypes)];
+  if (instIds.length === 0 || vtypes.length === 0) return;
+  // The handle_new_user trigger created the PENDING agency row from metadata in
+  // the same transaction as the auth user — resolve it so we can attach services.
+  const { data: ag } = await admin
+    .from('agencies')
+    .select('id, name')
+    .eq('owner_profile_id', ownerId)
+    .maybeSingle();
+  const agency = ag as { id: string; name: string | null } | null;
+  if (!agency) return;
+  // Only seed institutions that still exist and aren't deleted, so a stale id
+  // can't fail the whole upsert on an FK violation.
+  const { data: valid } = await admin
+    .from('institutions')
+    .select('id')
+    .in('id', instIds)
+    .eq('is_deleted', false);
+  const validIds = new Set(((valid ?? []) as { id: string }[]).map((r) => r.id));
+  const name = agency.name ?? fallbackName;
+  const rows: { agency_id: string; institution_id: string; vehicle_type: 'BUS' | 'VAN'; name: string }[] = [];
+  for (const iid of instIds) {
+    if (!validIds.has(iid)) continue;
+    for (const vt of vtypes) {
+      rows.push({
+        agency_id: agency.id,
+        institution_id: iid,
+        vehicle_type: vt,
+        name: `${name} — ${vt === 'VAN' ? 'Van' : 'Bus'}`,
+      });
+    }
+  }
+  if (rows.length === 0) return;
+  await admin
+    .from('agency_services')
+    .upsert(rows, { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true });
+}
+
 export type FormState = { error?: string; message?: string };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -206,6 +263,18 @@ export async function agencyRegisterAction(
     },
   });
   if (error) return { error: error.message };
+  // Seed service areas from the signup selections NOW, so the provider serves the
+  // colleges it picked the moment an admin approves it — independent of the DB
+  // signup trigger (drifted on live) and of how approval happens. Best-effort:
+  // the account already exists; approveAgencyAction re-seeds as a safety net.
+  try {
+    if (data.user?.id) {
+      // Use the typed service-role client (createAdminClient) for the seed writes.
+      await seedSignupServices(createAdminClient(), data.user.id, d.name, d.institutionIds, d.vehicleTypes);
+    }
+  } catch {
+    /* best-effort — signup already succeeded */
+  }
   try {
     await sendSignupConfirmationEmail(d.email, data.properties.action_link);
   } catch (e) {
