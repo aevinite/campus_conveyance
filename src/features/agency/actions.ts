@@ -1,5 +1,6 @@
 'use server';
 import { revalidatePath, updateTag } from 'next/cache';
+import { after } from 'next/server';
 import { redirect } from 'next/navigation';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
@@ -19,6 +20,7 @@ import {
   driverEditSchema,
 } from './schemas';
 import { getMyAgency, agencyReportTag } from './repository';
+import { drainEmailOutbox } from '@/lib/email-outbox';
 import {
   confirmBooking,
   rejectBooking,
@@ -1008,6 +1010,9 @@ async function decideBooking(
   // The acting user is the agency owner; bust their own report cache.
   const agency = await getMyAgency(db);
   if (agency) updateTag(agencyReportTag(agency.id)); // dashboard bookings/revenue/students tiles
+  // Confirm/reject queued a rejected/confirmed email (and a reject may promote a
+  // waitlisted rider); flush the outbox. Registered before any redirect below.
+  after(() => drainEmailOutbox());
   if (notice) redirect(`/agency/bookings?notice=${encodeURIComponent(notice)}`);
 }
 

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { reserveSchema, cancelSchema, paySchema, studentDetailsSchema } from './schemas';
 import { reserveSeat, cancelBooking, saveStudentDetails, payBooking } from './services';
 import { sendBookingConfirmedEmail } from './confirmation-email';
+import { drainEmailOutbox } from '@/lib/email-outbox';
 import { toErrorResponse } from '@/lib/errors/app-error';
 
 export type ReserveState = {
@@ -27,6 +28,8 @@ export async function reserveSeatAction(
   const db = await createClient();
   try {
     const result = await reserveSeat(db, parsed.data);
+    // Flush the reserved/waitlisted emails the DB trigger just queued.
+    after(() => drainEmailOutbox());
     revalidatePath('/student/bookings');
     revalidatePath('/student'); // home "recent trips" strip
     revalidatePath(`/student/routes/${parsed.data.routeId}`);
@@ -78,6 +81,8 @@ export async function payBookingAction(
       // off when the response ends).
       after(() => sendBookingConfirmedEmail(parsed.data.bookingId, parsed.data.method));
     }
+    // Flush the confirmed (parent) / any queued lifecycle emails.
+    after(() => drainEmailOutbox());
     revalidatePath('/student/bookings');
     revalidatePath('/student');
     // Refresh the route detail page too (its seat count + resume-payment panel
@@ -104,6 +109,9 @@ export async function cancelBookingAction(
     // Surface the failure to the user instead of crashing the page.
     return { error: toErrorResponse(e).message };
   }
+  // Cancelling frees a seat → may promote a waitlisted rider; flush both the
+  // cancel notice (to parents) and any promotion email the trigger queued.
+  after(() => drainEmailOutbox());
   revalidatePath('/student/bookings');
   revalidatePath('/student');
   // Refresh the route detail page too — cancelling frees a seat, so its seat

@@ -1,7 +1,9 @@
 'use server';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { drainEmailOutbox } from '@/lib/email-outbox';
 import { AppError, toErrorResponse } from '@/lib/errors/app-error';
 
 export type NotificationActionResult = { ok?: boolean; error?: string };
@@ -21,6 +23,9 @@ export async function markNotificationReadAction(
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
+  // Opportunistically flush any lifecycle emails queued by DB-only paths
+  // (payment-timeout / waitlist-promotion cron) that no action drained yet.
+  after(() => drainEmailOutbox());
   // The bell (unread badge + list) is rendered in every dashboard layout header.
   revalidatePath('/', 'layout');
   return { ok: true };
@@ -35,6 +40,7 @@ export async function markAllNotificationsReadAction(): Promise<NotificationActi
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
+  after(() => drainEmailOutbox());
   revalidatePath('/', 'layout');
   return { ok: true };
 }

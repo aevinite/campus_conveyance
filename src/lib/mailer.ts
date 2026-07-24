@@ -245,6 +245,47 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
   });
 }
 
+/**
+ * Booking-lifecycle mail (reserved / waitlisted / rejected / promoted /
+ * expired / cancelled, and confirmed for parents). The trigger already composed
+ * a human title + body; this just wraps them in the branded shell and sends. It
+ * is called only by the outbox drainer, which is entirely best-effort.
+ */
+export async function sendBookingLifecycleEmail(
+  to: string,
+  title: string,
+  body: string,
+) {
+  const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = `
+    <div style="font-family:Segoe UI,system-ui,sans-serif;max-width:480px;margin:0 auto;color:#1a1a2e">
+      <h2 style="margin:0 0 8px">${esc(title)}</h2>
+      <p style="color:#555;line-height:1.5">${esc(body)}</p>
+      <p style="margin:24px 0">
+        <a href="${site}/login"
+           style="background:#6d5efc;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;display:inline-block">
+          Open Campus Conveyance
+        </a>
+      </p>
+      <p style="color:#aaa;font-size:12px;margin-top:24px">
+        You're receiving this because you (or your linked student) have a booking
+        on Campus Conveyance.
+      </p>
+    </div>`;
+
+  await getTransport().sendMail({
+    from,
+    to,
+    replyTo: process.env.GMAIL_SENDER,
+    subject: `${title} — Campus Conveyance`,
+    text: `${title}\n\n${body}\n\nOpen Campus Conveyance: ${site}/login`,
+    html,
+  });
+}
+
 export async function sendSignupConfirmationEmail(to: string, confirmLink: string) {
   const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
   const html = `
