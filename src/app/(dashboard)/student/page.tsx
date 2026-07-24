@@ -175,9 +175,9 @@ export default async function StudentHome() {
         <div className="grid gap-5 sm:grid-cols-2 lg:col-span-3 lg:content-start">
           <Link
             href="/student/schools"
-            className="group flex flex-col gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-6 transition-all hover:-translate-y-1 hover:bg-primary/15"
+            className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
           >
-            <span className="grid size-11 place-items-center rounded-xl bg-primary text-primary-foreground">
+            <span className="grid size-11 place-items-center rounded-xl bg-secondary text-foreground">
               <Search className="size-6" />
             </span>
             <h2 className="text-lg font-semibold">Browse campuses</h2>
