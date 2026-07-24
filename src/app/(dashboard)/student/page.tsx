@@ -14,7 +14,7 @@ import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
 import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/repository';
-import { institutionKindCounts, listFeaturedInstitutions } from '@/features/catalog/repository';
+import { listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
@@ -77,13 +77,12 @@ const STEPS = [
 export default async function StudentHome() {
   await requireRole('STUDENT');
   const db = await createClient();
-  const [{ fullName }, recentRows, statusCounts, kinds, featured] = await Promise.all([
+  const [{ fullName }, recentRows, statusCounts, featured] = await Promise.all([
     getSessionClaims(db),
     // Only the few rows the home actually shows, not the whole history + driver
     // overlay; counts come from a SQL GROUP BY, institutions from head counts.
     listRecentBookings(db, 8),
     myBookingStatusCounts(db),
-    institutionKindCounts(db),
     listFeaturedInstitutions(db, 12),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
@@ -92,8 +91,6 @@ export default async function StudentHome() {
   const recent = recentRows.slice(0, 4);
   const nextTrip = active.find((b) => b.status === 'CONFIRMED') ?? active[0] ?? null;
 
-  const schoolsCount = kinds.schools;
-  const collegesCount = kinds.colleges;
 
   // Status breakdown for the mini bar chart (only non-empty buckets).
   // Cancelled bookings are hidden from the student panel entirely.
@@ -315,11 +312,6 @@ export default async function StudentHome() {
           <div className="flex items-end justify-between">
             <div>
               <h2 className="text-xl font-semibold">Explore campuses</h2>
-              <p className="text-sm text-muted-foreground">
-                <span className="tnum">{schoolsCount}</span> school{schoolsCount === 1 ? '' : 's'} ·{' '}
-                <span className="tnum">{collegesCount}</span> college
-                {collegesCount === 1 ? '' : 's'} available to book.
-              </p>
             </div>
             <Link
               href="/student/schools"
