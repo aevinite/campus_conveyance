@@ -6,7 +6,7 @@ import { SubmitButton } from '@/components/submit-button';
 
 /**
  * "Parent access": the student generates a 6-digit code; their parent enters
- * it on the parent dashboard within 3 minutes to link the two accounts.
+ * it on the parent dashboard within 15 minutes to link the two accounts.
  */
 export function ParentAccessCard() {
   const [state, action, pending] = useActionState<ParentCodeState, FormData>(
@@ -36,7 +36,7 @@ export function ParentAccessCard() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Generate a one-time code and have your parent enter it on their Campus
-        Conveyance parent dashboard. The code works for <b>3 minutes</b> and
+        Conveyance parent dashboard. The code works for <b>15 minutes</b> and
         links their account to yours — they&apos;ll see your bookings, bus and
         driver details.
       </p>

@@ -9,7 +9,7 @@ import { SubmitButton } from '@/components/submit-button';
 
 /**
  * Linking works with a one-time 6-digit code the child generates from their
- * student profile (Profile → Parent access). Codes expire after 3 minutes.
+ * student profile (Profile → Parent access). Codes expire after 15 minutes.
  */
 export function LinkChildForm() {
   const [state, action, pending] = useActionState<LinkChildState, FormData>(
@@ -47,7 +47,7 @@ export function LinkChildForm() {
           <h2 className="font-semibold">Link your child</h2>
           <p className="text-sm text-muted-foreground">
             Ask your child to open <b>Profile → Parent access</b> in their student
-            account and generate a code, then enter it here within 3 minutes.
+            account and generate a code, then enter it here within 15 minutes.
           </p>
         </div>
       </div>
