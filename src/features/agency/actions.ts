@@ -621,7 +621,14 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
     // Surface a lookup failure — otherwise the route is created UNLINKED to its
     // service (students browsing by service wouldn't see it).
     if (svcErr) throw new AppError('SERVICE', svcErr.message);
-    await addRoute(db, agency.id, parsed.data, (svc as { id: string } | null)?.id ?? null, stops);
+    // No approved service area for this college → refuse rather than create an
+    // orphaned, service-unlinked route that would report "success" yet be
+    // invisible to students. The agency must have an approved service here first.
+    const serviceId = (svc as { id: string } | null)?.id ?? null;
+    if (!serviceId) {
+      return { error: 'You don’t have an approved service area for this college yet. Request one first.' };
+    }
+    await addRoute(db, agency.id, parsed.data, serviceId, stops);
     // The bus picker lives on /agency/add-route and hides buses already on a route;
     // revalidate THAT path (not the non-existent /agency/routes/new) so the just-
     // assigned bus disappears from the list and can't be put on a second route.
@@ -873,12 +880,15 @@ export async function hardDeleteDriverAction(formData: FormData): Promise<void> 
   if (!agency) return;
   const admin = createAdminClient();
   // Scope to this agency; only ever hard-delete something already soft-deleted.
-  const { data: row } = await admin
+  // A SELECT error must surface — otherwise it reads as "not found" and silently
+  // no-ops, leaving the driver + their login in place while reporting success.
+  const { data: row, error: readErr } = await admin
     .from('drivers')
     .select('profile_id, is_deleted')
     .eq('id', driverId)
     .eq('agency_id', agency.id)
     .maybeSingle();
+  if (readErr) throw new AppError('AGENCY', readErr.message);
   if (!row || (row as { is_deleted: boolean }).is_deleted !== true) return;
   // Remove the driver row first (vehicles.driver_id / bus_driver_changes.driver_id
   // are ON DELETE SET NULL), then delete the login account for good.

@@ -221,7 +221,7 @@ export default async function BookingsPage({
                       </p>
                     </div>
                     {b.status !== 'CANCELLED' && b.status !== 'REJECTED' && (
-                      <CancelBookingButton bookingId={b.id} paid={b.is_paid} />
+                      <CancelBookingButton bookingId={b.id} routeId={b.routeId} paid={b.is_paid} />
                     )}
                   </div>
 

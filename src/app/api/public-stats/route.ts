@@ -36,6 +36,11 @@ const getCounts = unstable_cache(
       db.from('institutions').select('id', { count: 'exact', head: true }).eq('kind', 'COLLEGE').eq('is_active', true).eq('is_deleted', false),
       db.from('institutions').select('id', { count: 'exact', head: true }).eq('kind', 'SCHOOL').eq('is_active', true).eq('is_deleted', false),
     ]);
+    // If any count errored, THROW rather than returning it as 0 — otherwise
+    // unstable_cache would pin a bogus "0" (or an understated band) for the full
+    // 60s window. Throwing leaves the data cache empty so the next hit retries.
+    const err = providers.error ?? users.error ?? colleges.error ?? schools.error;
+    if (err) throw err;
     return {
       providers: providers.count ?? 0,
       users: users.count ?? 0,
@@ -48,12 +53,23 @@ const getCounts = unstable_cache(
 );
 
 export async function GET() {
-  return NextResponse.json(
-    await getCounts(),
-    // Cache in the browser AND shared caches for 60s (matching `revalidate`), so
-    // the landing page's poll is mostly served from the browser cache and rarely
-    // hits the server. `max-age` is what makes the BROWSER cache it (s-maxage
-    // alone only covers CDNs); both are set so the client comment holds true.
-    { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=120' } },
-  );
+  try {
+    return NextResponse.json(
+      await getCounts(),
+      // Cache in the browser AND shared caches for 60s (matching `revalidate`), so
+      // the landing page's poll is mostly served from the browser cache and rarely
+      // hits the server. `max-age` is what makes the BROWSER cache it (s-maxage
+      // alone only covers CDNs); both are set so the client comment holds true.
+      { headers: { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=120' } },
+    );
+  } catch {
+    // A DB hiccup shouldn't throw a bare 500 (which ships with no Cache-Control,
+    // so every anonymous tab would immediately re-hit and amplify the outage).
+    // Return safe zeros with a SHORT cache so the band degrades gracefully and
+    // self-heals on the next request once the DB recovers.
+    return NextResponse.json(
+      { providers: 0, users: 0, colleges: 0, schools: 0 },
+      { status: 200, headers: { 'Cache-Control': 'public, max-age=10, s-maxage=10' } },
+    );
+  }
 }

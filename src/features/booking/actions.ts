@@ -106,5 +106,10 @@ export async function cancelBookingAction(
   }
   revalidatePath('/student/bookings');
   revalidatePath('/student');
+  // Refresh the route detail page too — cancelling frees a seat, so its seat
+  // count + resume-payment panel change (mirrors reserve/pay). routeId is passed
+  // by the form when the button is rendered from a bookings list row.
+  const routeId = String(formData.get('routeId') ?? '');
+  if (routeId) revalidatePath(`/student/routes/${routeId}`);
   return { ok: true };
 }

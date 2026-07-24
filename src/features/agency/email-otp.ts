@@ -14,13 +14,17 @@ const OTP_TTL_MS = 10 * 60 * 1000; // code is valid for 10 minutes
 const VERIFIED_TTL_MS = 2 * 60 * 60 * 1000;
 
 function secret(): string {
-  // Server-only key; never shipped to the browser. Falls back so local dev works
-  // even if the service-role key isn't set.
-  return (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.GMAIL_APP_PASSWORD ||
-    'campus-conveyance-otp-dev-secret'
-  );
+  // Server-only key; never shipped to the browser.
+  const real = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.GMAIL_APP_PASSWORD;
+  if (real) return real;
+  // The old code fell back to a HARDCODED constant so local dev worked without a
+  // key — but if that ever ran in production (missing env), the OTP-signing key
+  // would be public, letting anyone forge a "verified email" token. Refuse it in
+  // production; keep the convenience fallback only for local dev.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('OTP secret unavailable: set SUPABASE_SERVICE_ROLE_KEY.');
+  }
+  return 'campus-conveyance-otp-dev-secret';
 }
 
 const norm = (email: string) => email.trim().toLowerCase();

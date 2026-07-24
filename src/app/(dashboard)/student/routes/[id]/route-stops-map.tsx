@@ -184,6 +184,21 @@ export default function RouteStopsMap({
       }
     }
 
+    // Remove the live marker and reset all derived-motion state. Shared by the
+    // "gone stale" path, the persistent-error path, and the effect cleanup so a
+    // route change / offline bus never leaves a frozen marker or carries stale
+    // heading/speed into the next route.
+    function teardownMarker() {
+      animCancel.current?.();
+      const m = mapRef.current;
+      if (busMarkerRef.current && m) m.removeLayer(busMarkerRef.current);
+      busMarkerRef.current = null;
+      prevBusPos.current = null;
+      speedRef.current = null;
+      headingRef.current = null;
+      centeredOnBus.current = false;
+    }
+
     async function tick() {
       // Skip until the async Leaflet import + map init finished — otherwise the
       // first tick fetches a fix we can't render yet (wasted poll). Self-resumes.
@@ -195,11 +210,20 @@ export default function RouteStopsMap({
           cache: 'no-store',
           signal: ac.signal,
         });
-        // A 429 (per-caller cap) or any non-OK response returns {live:false} but
-        // is NOT a "bus offline" signal — bail without touching missedPolls so a
-        // transient cap breach (parent tracking several routes + tab churn) can't
-        // remove a marker for a bus that's actually still streaming.
-        if (!res.ok) return;
+        // A 429 (per-caller cap) is NOT a "bus offline" signal — bail without
+        // touching missedPolls so a transient cap breach (parent tracking several
+        // routes + tab churn) can't remove a marker for a bus still streaming.
+        // A persistent NON-429 error (e.g. 5xx), however, must NOT freeze a stale
+        // marker forever — count it like a missed poll so the bus is eventually
+        // removed if the endpoint stays down.
+        if (!res.ok) {
+          if (res.status === 429) return;
+          if (++missedPolls >= STALE_MISSES) {
+            teardownMarker();
+            setLive(null);
+          }
+          return;
+        }
         const data = (await res.json()) as LiveResponse;
         if (stopped) return;
         const L = leafletRef.current;
@@ -261,15 +285,7 @@ export default function RouteStopsMap({
         } else if (++missedPolls >= STALE_MISSES) {
           // Genuinely not live (driver offline / fix gone stale) — remove after a
           // couple of consecutive misses, not a single blip.
-          animCancel.current?.();
-          if (busMarkerRef.current && m) {
-            m.removeLayer(busMarkerRef.current);
-            busMarkerRef.current = null;
-          }
-          prevBusPos.current = null;
-          speedRef.current = null;
-          headingRef.current = null;
-          centeredOnBus.current = false;
+          teardownMarker();
           setLive(null);
         }
       } catch {
@@ -301,7 +317,10 @@ export default function RouteStopsMap({
       stopped = true;
       stop();
       ac.abort();
-      animCancel.current?.();
+      // Drop the old route's marker + motion state so a liveRouteId change (map
+      // NOT rebuilt, since it's keyed on stopsSig) doesn't leave the previous
+      // bus on screen or feed its last position into the new route's bearing.
+      teardownMarker();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [liveRouteId]);

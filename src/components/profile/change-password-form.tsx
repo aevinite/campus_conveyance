@@ -33,16 +33,19 @@ export function ChangePasswordForm() {
         <Input id="confirmPassword" name="confirmPassword" type={type} autoComplete="new-password" minLength={8} required />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      {/* Not a <label> — it wraps a <button>, not a form field, so a label here is
+          invalid and gives the button a misleading implicit association. */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <button
           type="button"
           onClick={() => setShow((v) => !v)}
+          aria-pressed={show}
           className="inline-flex items-center gap-1.5 hover:text-foreground"
         >
           {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           {show ? 'Hide passwords' : 'Show passwords'}
         </button>
-      </label>
+      </div>
 
       {state.error && (
         <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

@@ -85,6 +85,8 @@ export function CatalogBrowser({
             {TABS.map((t) => (
               <button
                 key={t.key}
+                type="button"
+                aria-pressed={kind === t.key}
                 onClick={() => go({ kind: t.key, page: 1 })}
                 className={`rounded-md px-3 py-1 text-sm transition-colors ${
                   kind === t.key

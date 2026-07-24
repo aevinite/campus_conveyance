@@ -84,6 +84,10 @@ export async function institutionKindCounts(
     db.from('institutions').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('is_deleted', false).eq('kind', 'SCHOOL'),
     db.from('institutions').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('is_deleted', false).eq('kind', 'COLLEGE'),
   ]);
+  // Surface a query failure instead of reporting 0/0 — a transient error would
+  // otherwise render an empty "0 schools · 0 colleges" band over real data.
+  if (schools.error) throw schools.error;
+  if (colleges.error) throw colleges.error;
   return { schools: schools.count ?? 0, colleges: colleges.count ?? 0 };
 }
 

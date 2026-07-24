@@ -9,9 +9,13 @@ import { useModalFocusTrap } from '@/lib/use-modal-focus-trap';
 
 export function CancelBookingButton({
   bookingId,
+  routeId,
   paid = false,
 }: {
   bookingId: string;
+  /** The booking's route — lets the action revalidate that route's detail page
+   *  (its seat count changes when the seat is freed). */
+  routeId?: string | null;
   /** A paid booking → warn about (mock) refund handling before cancelling. */
   paid?: boolean;
 }) {
@@ -77,6 +81,7 @@ export function CancelBookingButton({
               </Button>
               <form action={action}>
                 <input type="hidden" name="bookingId" value={bookingId} />
+                {routeId && <input type="hidden" name="routeId" value={routeId} />}
                 <SubmitButton variant="destructive" size="sm" pendingText="Cancelling…">
                   Yes, cancel
                 </SubmitButton>

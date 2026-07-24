@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
 import {
@@ -93,12 +93,12 @@ const features = [
   { title: 'Route Management', icon: Route, desc: 'Plan and manage transport routes efficiently.' },
   { title: 'Bus Tracking', icon: Bus, desc: 'Real-time tracking of the entire fleet.' },
   { title: 'Van Tracking', icon: Van, desc: 'Monitor van locations and routes live.' },
-  { title: 'Attendance Monitoring', icon: ClipboardCheck, desc: 'Track student attendance and boarding.' },
+  { title: 'Live Trip Stages', icon: ClipboardCheck, desc: 'Drivers mark each journey stage — students and parents follow along.' },
   { title: 'Driver Management', icon: UserCheck, desc: 'Manage driver profiles and schedules.' },
   { title: 'Parent Dashboard', icon: UserCircle, desc: "Parents follow their child's journey." },
   { title: 'Student Dashboard', icon: GraduationCap, desc: 'Students manage bookings and rides.' },
-  { title: 'Emergency Alerts', icon: Bell, desc: 'Instant alerts for delays or emergencies.' },
-  { title: 'Transport Analytics', icon: BarChart3, desc: 'Analyze data and optimize operations.' },
+  { title: 'Ride Notifications', icon: Bell, desc: 'Timely updates on bookings, approvals, and trip progress.' },
+  { title: 'Provider Reports', icon: BarChart3, desc: 'Agencies and admins track bookings and revenue at a glance.' },
   { title: 'Booking Management', icon: BookOpen, desc: 'Simplify seat booking and reservations.' },
 ];
 
@@ -159,12 +159,20 @@ export default function Home() {
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [formSending, setFormSending] = useState(false);
   const [counts, setCounts] = useState<Record<StatKey, number> | null>(null);
+  // The post-submit "reset the form" timer — tracked so a second submit doesn't
+  // stack timers and an unmount before it fires can't setState on a dead component.
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Clear the pending reset timer on unmount.
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
   }, []);
 
   // Database counts for the stats band. The endpoint is cached 60s (browser +
@@ -226,6 +234,7 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formSending) return; // re-entry guard: ignore a submit already in flight
     if (!formData.name || !formData.email || !formData.message) {
       toast.error('Please fill in all required fields.');
       return;
@@ -248,9 +257,11 @@ export default function Home() {
       }
       setFormSubmitted(true);
       toast.success('Thank you for contacting Campus Conveyance. Our team will get back to you shortly.');
-      setTimeout(() => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => {
         setFormData({ name: '', email: '', phone: '', organization: '', message: '' });
         setFormSubmitted(false);
+        resetTimer.current = null;
       }, 5000);
     } catch {
       toast.error('Could not send your message right now — please try again.');
@@ -585,14 +596,22 @@ export default function Home() {
               <Reveal key={faq.question} delay={i * 0.04}>
                 <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
                   <button
+                    type="button"
                     className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left font-semibold transition-colors hover:bg-muted/50"
                     onClick={() => setExpandedFaq(open ? null : i)}
                     aria-expanded={open}
+                    aria-controls={`faq-panel-${i}`}
                   >
                     <span className="text-sm md:text-base">{faq.question}</span>
                     <ChevronDown className={`size-5 shrink-0 text-primary transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
                   </button>
                   <m.div
+                    id={`faq-panel-${i}`}
+                    role="region"
+                    // The answer stays in the DOM for the height animation, so hide
+                    // it from assistive tech while collapsed — otherwise a screen
+                    // reader announces every answer regardless of open state.
+                    aria-hidden={!open}
                     initial={false}
                     animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
                     transition={{ duration: 0.3, ease: 'easeInOut' }}

@@ -79,7 +79,7 @@ export function DriverChangePanel({
           </p>
           {todayReason && <p className="text-xs text-muted-foreground">Reason: {todayReason}</p>}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" variant="outline" size="sm" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen((v) => !v)}>
+            <Button type="button" variant="outline" size="sm" aria-expanded={open} aria-controls={open ? regionId : undefined} onClick={() => setOpen((v) => !v)}>
               {open ? 'Cancel' : `Edit today’s ${noun}`}
             </Button>
             <form action={revertAction}>
@@ -96,7 +96,7 @@ export function DriverChangePanel({
           <p className="text-sm text-muted-foreground">
             Regular {noun}{regularName ? `: ${regularName}` : ''} is on duty today.
           </p>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen((v) => !v)}>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" aria-expanded={open} aria-controls={open ? regionId : undefined} onClick={() => setOpen((v) => !v)}>
             <UserCog className="size-3.5" /> {open ? 'Cancel' : `Change ${noun} for today`}
           </Button>
         </div>

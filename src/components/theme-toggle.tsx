@@ -21,7 +21,10 @@ export function ThemeToggle({ className }: { className?: string }) {
   return (
     <button
       type="button"
-      aria-label="Toggle theme"
+      // Reflect the resolved theme in the accessible name (only after mount, to
+      // avoid a hydration mismatch — the server can't know the resolved theme).
+      aria-label={mounted ? (isDark ? 'Switch to light theme' : 'Switch to dark theme') : 'Toggle theme'}
+      aria-pressed={mounted ? isDark : undefined}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       className={cn(
         'inline-flex size-9 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none',

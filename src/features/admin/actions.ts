@@ -115,11 +115,18 @@ export async function permanentlyDeleteAgencyAction(formData: FormData): Promise
   const admin = createAdminClient();
 
   // Grab the owner first so we can also remove their login after the row is gone.
-  const { data: agency } = await admin
+  // A SELECT error here must NOT be treated as "no owner" — that would delete the
+  // agency row but leave the owner's auth user orphaned (email stuck forever).
+  const { data: agency, error: readErr } = await admin
     .from('agencies')
-    .select('owner_profile_id')
+    .select('owner_profile_id, is_deleted')
     .eq('id', id)
     .maybeSingle();
+  if (readErr) throw new AppError('ADMIN', readErr.message);
+  // Only ever hard-delete something already soft-deleted (parity with the driver
+  // purge) — this action is reached from Deleted Providers, so a not-yet-removed
+  // provider landing here is a stale view, not an instruction to purge.
+  if (!agency || (agency as { is_deleted: boolean }).is_deleted !== true) return;
 
   const { error } = await admin.from('agencies').delete().eq('id', id);
   if (error) throw new AppError('ADMIN', error.message);
@@ -306,6 +313,16 @@ export async function permanentlyDeleteStudentAction(formData: FormData): Promis
   const id = String(formData.get('studentId') ?? '');
   if (!UUID_RE.test(id)) return;
   const admin = createAdminClient();
+  // Only purge an already soft-deleted student (parity with the agency/driver
+  // purges) — reached from Deleted Students, so an active student arriving here
+  // is a stale view, not an instruction to irreversibly delete a live account.
+  const { data: prof, error: readErr } = await admin
+    .from('profiles')
+    .select('is_deleted')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) throw new AppError('ADMIN', readErr.message);
+  if (!prof || (prof as { is_deleted: boolean }).is_deleted !== true) return;
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) throw new AppError('ADMIN', error.message);
   await logAction(await createClient(), 'STUDENT_PURGED', 'profile', id);
@@ -431,6 +448,16 @@ export async function permanentlyDeleteCollegeAction(formData: FormData): Promis
   const id = String(formData.get('id') ?? '');
   if (!UUID_RE.test(id)) return;
   const admin = createAdminClient();
+  // Only purge an already soft-deleted college (parity with the other purges) —
+  // this cascades routes/stops/bookings/payments, so a stale click on a live
+  // college must not irreversibly wipe it. Reached only from Deleted Colleges.
+  const { data: inst, error: readErr } = await admin
+    .from('institutions')
+    .select('is_deleted')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) throw new AppError('ADMIN', readErr.message);
+  if (!inst || (inst as { is_deleted: boolean }).is_deleted !== true) return;
   const { error } = await admin.from('institutions').delete().eq('id', id);
   if (error) throw new AppError('ADMIN', error.message);
   await logAction(await createClient(), 'COLLEGE_PURGED', 'institution', id);

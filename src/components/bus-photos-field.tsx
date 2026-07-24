@@ -96,7 +96,9 @@ export function BusPhotosField({
               type="button"
               onClick={() => remove(i)}
               aria-label={`Remove photo ${i + 1}`}
-              className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              // Visible on hover AND on keyboard focus — an opacity-0 control that
+              // only appears on :hover is unreachable/invisible to keyboard users.
+              className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               <X className="size-3" />
             </button>

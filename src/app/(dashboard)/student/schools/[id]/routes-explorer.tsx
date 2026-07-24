@@ -109,6 +109,8 @@ export function RoutesExplorer({
           {TABS.map((t) => (
             <button
               key={t.key}
+              type="button"
+              aria-pressed={vehicleType === t.key}
               onClick={() => go({ type: t.key, page: 1 })}
               className={`rounded-md px-3 py-1 text-sm transition-colors ${
                 vehicleType === t.key

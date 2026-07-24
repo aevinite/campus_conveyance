@@ -50,6 +50,9 @@ export default function MapStopPicker({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
+  // Guards setState in the geolocation callbacks, which can resolve after the
+  // component unmounts (the browser prompt has no abort signal).
+  const mountedRef = useRef(true);
   const LRef = useRef<typeof import('leaflet') | null>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
   const layerRef = useRef<LeafletNS.LayerGroup | null>(null);
@@ -114,6 +117,7 @@ export default function MapStopPicker({
     })();
     return () => {
       cancelled = true;
+      mountedRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
     };
@@ -153,6 +157,12 @@ export default function MapStopPicker({
         const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}${bias}`, {
           signal: ac.signal,
         });
+        // A non-OK response (401/5xx) may not carry a JSON array — don't try to
+        // render it as suggestions; just clear the list.
+        if (!res.ok) {
+          setResults([]);
+          return;
+        }
         const data = (await res.json()) as Suggestion[];
         setResults(Array.isArray(data) ? data : []);
       } catch (e) {
@@ -172,10 +182,13 @@ export default function MapStopPicker({
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (!mountedRef.current) return;
         mapRef.current?.setView([pos.coords.latitude, pos.coords.longitude], 15);
         setLocating(false);
       },
-      () => setLocating(false),
+      () => {
+        if (mountedRef.current) setLocating(false);
+      },
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
