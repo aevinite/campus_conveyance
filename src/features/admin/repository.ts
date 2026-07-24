@@ -429,7 +429,9 @@ export interface AuditLogRow {
 
 /** Most recent admin actions (approvals/rejections/deletes/restores/toggles). */
 export async function listAuditLogs(db: SupabaseClient, opts: PageOpts = {}): Promise<Paged<AuditLogRow>> {
-  const limit = opts.limit ?? 1000;
+  // Default to one page, not 1000 — a caller that omits `limit` should get a
+  // bounded read, not a near-unbounded one that hits PostgREST's row cap.
+  const limit = opts.limit ?? ADMIN_PAGE_SIZE;
   const offset = opts.offset ?? 0;
   const { data, error, count } = await db
     .from('audit_logs')

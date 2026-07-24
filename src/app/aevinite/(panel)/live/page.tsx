@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { Radio, Bus } from 'lucide-react';
 import { listOnlineBuses, listRideEvents, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
 import { DataTable } from '@/components/data-table';
@@ -20,6 +21,9 @@ export default async function AdminLivePage({
     listRideEvents({ limit: OPS_PAGE_SIZE, offset }),
   ]);
   const totalPages = Math.max(1, Math.ceil(events.total / OPS_PAGE_SIZE));
+  // An out-of-range ?page (e.g. after rows aged out) redirects to the last page,
+  // matching the other paginated ops lists instead of showing an empty table.
+  if (events.total > 0 && page > totalPages) redirect(`/aevinite/live?page=${totalPages}`);
 
   return (
     <section className="space-y-6">

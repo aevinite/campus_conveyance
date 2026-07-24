@@ -138,9 +138,13 @@ export default function MapStopPicker({
     const q = query.trim();
     if (q.length < 2) {
       // Reset results when the query is cleared — intentional in-effect setState.
+      // Also clear `searching`: if a fetch was in flight when the query dropped
+      // below 2 chars, its cleanup aborts the request but the finally-block that
+      // would reset the spinner never runs on an aborted fetch, leaving a stuck "…".
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setOpen(false);
+      setSearching(false);
       return;
     }
     setOpen(true);

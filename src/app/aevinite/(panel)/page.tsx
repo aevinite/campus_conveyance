@@ -3,15 +3,14 @@ import { Inbox, Building2, Users, School, LayoutDashboard } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminReport, countPendingAgencies } from '@/features/admin/repository';
 import { formatDateTime } from '@/lib/format-date';
+import { rupees } from '@/lib/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
 import { DownloadReportButton } from '@/components/download-report-button';
 
-const inr = (cents: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(
-    (cents || 0) / 100,
-  );
+// Currency uses the shared rupees() helper (was a duplicated local formatter).
+const inr = rupees;
 
 export default async function AdminDashboard() {
   const db = await createClient();

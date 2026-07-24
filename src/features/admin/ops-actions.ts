@@ -4,6 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSessionRole } from '@/features/auth/session';
 
+// Guard id-shaped input before it reaches Postgres — a malformed value is a
+// 22P02 (invalid uuid) crash to the error page rather than a clean no-op.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // The one operational write the admin owns: marking a landing-page contact
 // inquiry handled (or reopening it). Everything else in the ops console is
 // read-only — bookings/seats/rides stay owned by agencies and drivers.
@@ -14,7 +18,7 @@ export async function setContactStatusAction(formData: FormData): Promise<void> 
 
   const id = String(formData.get('id') ?? '');
   const status = String(formData.get('status') ?? '');
-  if (!id || (status !== 'NEW' && status !== 'HANDLED')) return;
+  if (!UUID_RE.test(id) || (status !== 'NEW' && status !== 'HANDLED')) return;
 
   // Write via service-role (reads in this console already bypass RLS).
   const admin = createAdminClient();

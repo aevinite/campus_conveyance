@@ -516,7 +516,12 @@ export async function listOnlineBuses(): Promise<OnlineBusRow[]> {
     .from('driver_locations')
     .select('driver_id, lat, lng, updated_at')
     .eq('is_online', true)
-    .order('updated_at', { ascending: false });
+    .order('updated_at', { ascending: false })
+    // Defensive cap: this snapshot is rendered unpaginated, so bound it rather
+    // than risk streaming an unbounded set (and PostgREST's 1000-row cap would
+    // silently truncate it anyway). Freshest-online first, so the cap keeps the
+    // most relevant rows.
+    .limit(500);
   if (error) throw error;
   const rows = (data ?? []) as Record<string, unknown>[];
   if (rows.length === 0) return [];

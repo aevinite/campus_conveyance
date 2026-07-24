@@ -311,6 +311,13 @@ export async function requestServiceAction(_: FormState, formData: FormData): Pr
       description: parsed.data.description,
       status: 'PENDING',
     });
+    // The check above is a fast path; the partial unique index uq_asr_pending
+    // (migration 0089) is the real guard. A concurrent double-submit that slips
+    // past the check hits it here — map that to the same friendly message rather
+    // than a raw 23505.
+    if (error?.code === '23505') {
+      return { error: 'You already have a pending request for this college and vehicle type.' };
+    }
     if (error) throw new AppError('SERVICE', error.message);
   } catch (e) {
     return { error: toErrorResponse(e).message };
