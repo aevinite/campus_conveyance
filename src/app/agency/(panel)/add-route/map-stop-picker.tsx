@@ -319,54 +319,53 @@ export default function MapStopPicker({
         confirm the exact spot.
       </p>
 
-      {/* Map/geocoder-independent fallback — always works, even if the map or the
-          search can't load, so route creation is never blocked. */}
-      <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-          Can’t use the map? Add a stop by coordinates
-        </summary>
-        <div className="mt-2 space-y-2">
-          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
-            <input
-              value={manual.name}
-              onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))}
-              placeholder="Stop name (optional)"
-              aria-label="Manual stop name"
-              className={inputCls}
-            />
-            <input
-              value={manual.lat}
-              onChange={(e) => setManual((m) => ({ ...m, lat: e.target.value }))}
-              inputMode="decimal"
-              placeholder="Latitude, e.g. 23.0225"
-              aria-label="Manual stop latitude"
-              className={inputCls}
-            />
-            <input
-              value={manual.lng}
-              onChange={(e) => setManual((m) => ({ ...m, lng: e.target.value }))}
-              inputMode="decimal"
-              placeholder="Longitude, e.g. 72.5714"
-              aria-label="Manual stop longitude"
-              className={inputCls}
-            />
-            <button
-              type="button"
-              onClick={addManualStop}
-              className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-input bg-transparent px-3 text-sm font-medium transition-colors hover:bg-muted"
-            >
-              Add stop
-            </button>
-          </div>
-          {manualErr ? (
-            <p className="text-xs text-destructive" role="alert">{manualErr}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Tip: in Google Maps, right-click the exact spot and click the “lat, lng” at the top to copy it.
-            </p>
-          )}
+      {/* Map/geocoder-independent fallback — ALWAYS rendered (not collapsed), so
+          route creation is never blocked if the map or search can't load, and the
+          fields are reachable for keyboard users and automated tests. */}
+      <div className="space-y-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+        <p className="text-xs font-medium text-muted-foreground">
+          Or add a stop by coordinates <span className="font-normal">(works even if the map doesn’t load)</span>
+        </p>
+        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+          <input
+            value={manual.name}
+            onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))}
+            placeholder="Stop name (optional)"
+            aria-label="Manual stop name"
+            className={inputCls}
+          />
+          <input
+            value={manual.lat}
+            onChange={(e) => setManual((m) => ({ ...m, lat: e.target.value }))}
+            inputMode="decimal"
+            placeholder="Latitude, e.g. 23.0225"
+            aria-label="Manual stop latitude"
+            className={inputCls}
+          />
+          <input
+            value={manual.lng}
+            onChange={(e) => setManual((m) => ({ ...m, lng: e.target.value }))}
+            inputMode="decimal"
+            placeholder="Longitude, e.g. 72.5714"
+            aria-label="Manual stop longitude"
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={addManualStop}
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-input bg-transparent px-3 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Add stop
+          </button>
         </div>
-      </details>
+        {manualErr ? (
+          <p className="text-xs text-destructive" role="alert">{manualErr}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Tip: in Google Maps, right-click the exact spot and click the “lat, lng” at the top to copy it.
+          </p>
+        )}
+      </div>
 
       {value.length === 0 ? (
         <p className="text-sm text-muted-foreground">No pickup stops added yet.</p>
