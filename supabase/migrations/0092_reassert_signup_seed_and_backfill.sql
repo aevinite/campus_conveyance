@@ -1,4 +1,6 @@
--- 0090_reassert_signup_seed_and_backfill.sql (idempotent — requires 0009/0010)
+-- 0092_reassert_signup_seed_and_backfill.sql (idempotent — requires 0009/0010)
+-- (Renumbered from 0090 — that ordinal collided with 0090_route_billing_plans.sql,
+--  which is likely why a number-ordered runner skipped this on the live DB.)
 -- H1: freshly-approved agencies served no college. The 0009 signup trigger that
 -- seeds agency_services from the owner's institution_ids × vehicle_types drifted
 -- on live (an older handle_new_user without the seeding block is deployed), so

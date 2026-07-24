@@ -234,6 +234,15 @@ export default function MapStopPicker({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => results.length > 0 && setOpen(true)}
+              onKeyDown={(e) => {
+                // Enter adds the top suggestion — a keyboard-only, map-independent
+                // way to add a stop (no map click / precise row click needed). Also
+                // prevents Enter here from submitting the enclosing route form early.
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (results.length > 0) pick(results[0]);
+                }
+              }}
               placeholder="Search a nearby area, e.g. Prahlad Nagar"
               aria-label="Search for a pickup area"
               className={`${inputCls} pl-9`}
