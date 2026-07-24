@@ -49,6 +49,58 @@ async function setAgency(db: Db, agencyId: string, patch: Record<string, unknown
   if (error) throw new AppError('ADMIN', error.message);
 }
 
+/**
+ * Seed an approved agency's service areas from the colleges + vehicle types it
+ * chose at signup (stored in the owner's auth user_metadata as institution_ids /
+ * vehicle_types). This previously relied on the 0009 signup trigger, which has
+ * drifted on live — so freshly-approved agencies served no college and couldn't
+ * add routes through the normal flow. Doing it HERE, at approval, guarantees the
+ * provider immediately shows under the campuses it picked. Idempotent: a unique
+ * (agency_id, institution_id, vehicle_type) index backs the upsert, so re-approval
+ * or an already-seeded agency is a no-op. Uses the service-role client to read the
+ * owner's metadata and write across RLS.
+ */
+async function seedAgencyServicesFromSignup(
+  admin: ReturnType<typeof createAdminClient>,
+  agencyId: string,
+  agencyName: string,
+  ownerId: string | null,
+): Promise<void> {
+  if (!ownerId) return;
+  const { data: userRes, error: uErr } = await admin.auth.admin.getUserById(ownerId);
+  if (uErr || !userRes?.user) return;
+  const meta = (userRes.user.user_metadata ?? {}) as Record<string, unknown>;
+  const rawIds = Array.isArray(meta.institution_ids) ? meta.institution_ids : [];
+  const rawTypes = Array.isArray(meta.vehicle_types) ? meta.vehicle_types : [];
+  const instIds = [...new Set(rawIds.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))];
+  const vtypes = [...new Set(rawTypes.filter((v): v is 'BUS' | 'VAN' => v === 'BUS' || v === 'VAN'))];
+  if (instIds.length === 0 || vtypes.length === 0) return;
+  // Only seed institutions that still exist and aren't deleted, so a stale
+  // metadata id can't fail the whole upsert on an FK violation.
+  const { data: valid } = await admin
+    .from('institutions')
+    .select('id')
+    .in('id', instIds)
+    .eq('is_deleted', false);
+  const validIds = new Set(((valid ?? []) as { id: string }[]).map((r) => r.id));
+  const rows: { agency_id: string; institution_id: string; vehicle_type: 'BUS' | 'VAN'; name: string }[] = [];
+  for (const iid of instIds) {
+    if (!validIds.has(iid)) continue;
+    for (const vt of vtypes) {
+      rows.push({
+        agency_id: agencyId,
+        institution_id: iid,
+        vehicle_type: vt,
+        name: `${agencyName} — ${vt === 'VAN' ? 'Van' : 'Bus'}`,
+      });
+    }
+  }
+  if (rows.length === 0) return;
+  await admin
+    .from('agency_services')
+    .upsert(rows, { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true });
+}
+
 export async function approveAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
   if (!UUID_RE.test(id)) return;
@@ -62,6 +114,25 @@ export async function approveAgencyAction(formData: FormData): Promise<void> {
     rejected_reason: null,
   });
   await logAction(db, 'AGENCY_APPROVED', 'agency', id, {}, userId);
+  // Seed the provider's service areas from its signup selections so it immediately
+  // serves the campuses it picked. Best-effort: approval is already committed, and
+  // the provider can also file a "request service area", so a metadata/seed hiccup
+  // must never fail the approval itself.
+  try {
+    const admin = createAdminClient();
+    const { data: agency } = await admin
+      .from('agencies')
+      .select('owner_profile_id, name')
+      .eq('id', id)
+      .maybeSingle();
+    const a = agency as { owner_profile_id: string | null; name: string } | null;
+    if (a) {
+      await seedAgencyServicesFromSignup(admin, id, a.name, a.owner_profile_id);
+      updateTag(agencyReportTag(id)); // the agency's own dashboard "services" tile
+    }
+  } catch {
+    /* best-effort — approval already succeeded */
+  }
   revalidatePath('/aevinite/requests');
   revalidatePath('/aevinite/providers');
   revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts

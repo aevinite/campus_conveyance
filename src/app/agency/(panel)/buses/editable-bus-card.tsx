@@ -179,7 +179,7 @@ export function EditableBusCard({
                 <IdCard className="size-3.5" /> {bus.registration_no}
               </p>
             )}
-            <div className="flex items-center gap-2 pt-1 text-sm">
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-sm">
               {bus.driver_photo_url ? (
                 <Image
                   src={bus.driver_photo_url}
@@ -194,7 +194,7 @@ export function EditableBusCard({
                   <User className="size-4" />
                 </span>
               )}
-              <span className="font-medium">{bus.driver_name || 'Driver'}</span>
+              <span className="min-w-0 font-medium break-words">{bus.driver_name || 'Driver'}</span>
               {bus.driver_phone && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                   <Phone className="size-3.5" /> {bus.driver_phone}

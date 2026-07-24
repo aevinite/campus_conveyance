@@ -15,9 +15,9 @@ const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '—');
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/50 py-2">
+    <div className="flex flex-col gap-0.5 border-b border-border/50 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-sm text-right">{value || '—'}</dd>
+      <dd className="text-sm sm:text-right">{value || '—'}</dd>
     </div>
   );
 }
