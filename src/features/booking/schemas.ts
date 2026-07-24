@@ -6,6 +6,9 @@ export const reserveSchema = z.object({
   // Drop-off is always the campus (institution), so students don't pick it.
   // Optional/empty → stored as null on the booking.
   dropStopId: z.union([z.string().uuid(), z.literal('')]).optional(),
+  // The pricing plan the student chose (per month / semester / year). Optional
+  // for legacy clients — reserve_seat falls back to the route's primary plan.
+  billingPeriod: z.enum(['MONTHLY', 'SEMESTER', 'YEARLY']).optional(),
 });
 export const cancelSchema = z.object({ bookingId: z.string().uuid() });
 // Cash-on-board was removed: the agency can only confirm PAID bookings, and

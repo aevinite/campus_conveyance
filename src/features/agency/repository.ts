@@ -334,6 +334,9 @@ export interface RouteFull {
   id: string;
   name: string;
   price_cents: number | null;
+  price_monthly_cents: number | null;
+  price_semester_cents: number | null;
+  price_yearly_cents: number | null;
   departure_time: string | null;
   institutionName: string;
   busLabel: string;
@@ -359,7 +362,7 @@ export async function listMyRoutesFull(
   let q = db
     .from('routes')
     .select(
-      'id, name, price_cents, departure_time, institutions(name), vehicles(bus_number, registration_no), route_stops(name, description, lat, lng, address, sequence)',
+      'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, departure_time, institutions(name), vehicles(bus_number, registration_no), route_stops(name, description, lat, lng, address, sequence)',
     )
     .eq('agency_id', agencyId)
     .order('created_at', { ascending: false });
@@ -381,6 +384,9 @@ export async function listMyRoutesFull(
       id: r.id as string,
       name: r.name as string,
       price_cents: (r.price_cents as number) ?? null,
+      price_monthly_cents: (r.price_monthly_cents as number) ?? null,
+      price_semester_cents: (r.price_semester_cents as number) ?? null,
+      price_yearly_cents: (r.price_yearly_cents as number) ?? null,
       departure_time: (r.departure_time as string) ?? null,
       institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
       busLabel: v?.bus_number ? `Bus ${v.bus_number}` : v?.registration_no ?? 'Bus',

@@ -83,6 +83,7 @@ export async function reserveSeat(
     p_pickup_stop_id: input.pickupStopId,
     // Drop-off is the campus itself — no route_stop row for it, so store null.
     p_drop_stop_id: input.dropStopId ? input.dropStopId : null,
+    p_billing_period: input.billingPeriod ?? null,
   });
   if (error) throw new AppError('BOOKING', error.message);
   // Guard against an empty RPC result — dereferencing data.id/.status blind would

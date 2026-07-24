@@ -7,10 +7,18 @@ import { DataTable } from '@/components/data-table';
 import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { formatDateTime, formatDateMedium } from '@/lib/format-date';
 import { relativeTime } from '@/lib/format';
+import BusGallery from '@/app/(dashboard)/student/routes/[id]/bus-gallery';
 
 export const dynamic = 'force-dynamic';
 
 const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
+
+/** Bus photos the provider uploaded — `photos[]` plus `image_url`, de-duped. */
+function busPhotos(v: Record<string, unknown>): string[] {
+  const arr = Array.isArray(v.photos) ? (v.photos as unknown[]).filter((p): p is string => typeof p === 'string') : [];
+  const img = typeof v.image_url === 'string' ? v.image_url : null;
+  return [...new Set([...arr, ...(img ? [img] : [])])];
+}
 
 function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
@@ -73,6 +81,15 @@ export default async function AdminVehicleDetailPage({ params }: { params: Promi
           </div>
         </div>
       </div>
+
+      {busPhotos(v).length > 0 && (
+        <Card className="rounded-2xl">
+          <CardContent className="space-y-3 py-5">
+            <h2 className="font-semibold">Bus photos</h2>
+            <BusGallery photos={busPhotos(v)} alt={s(v.bus_number) ?? 'Bus'} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Vehicle identity */}

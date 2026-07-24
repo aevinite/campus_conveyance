@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { IdCard } from 'lucide-react';
 import { listDrivers, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
 import { DataTable } from '@/components/data-table';
@@ -29,7 +30,7 @@ export default async function AdminDriversPage({
         <p className="text-muted-foreground">Every driver on the platform ({total}), their provider and assigned bus.</p>
       </div>
       <DataTable
-        headers={['Name', 'Contact', 'Licence no.', 'Provider', 'Bus', 'Active', 'Online']}
+        headers={['Name', 'Contact', 'Licence no.', 'Provider', 'Bus', 'Active', 'Online', '']}
         rows={rows.map((d) => [
           <span key="n" className="font-medium">{d.name ?? '—'}</span>,
           <div key="c" className="min-w-0 text-sm">
@@ -41,6 +42,9 @@ export default async function AdminDriversPage({
           d.busNumber ?? '—',
           <BoolBadge key="a" value={!!d.is_active} yes="Active" no="Inactive" />,
           <StatusBadge key="o" value={d.isOnline ? 'Online' : 'Offline'} />,
+          <Link key="v" href={`/aevinite/drivers/${d.id}`} className="text-primary underline-offset-4 hover:underline">
+            View →
+          </Link>,
         ])}
         empty="No drivers registered yet."
       />

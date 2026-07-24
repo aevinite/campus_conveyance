@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
 import { formatTime } from '@/lib/format-date';
+import { periodSuffix } from '@/lib/billing';
 
 const PAGE_SIZE = 10;
 
@@ -215,6 +216,7 @@ export default async function BookingsPage({
                         {inr(b.price_cents) && (
                           <span className="tnum text-sm font-normal text-muted-foreground">
                             · {inr(b.price_cents)}
+                            {periodSuffix(b.billing_period)}
                           </span>
                         )}
                         {statusPill(b)}

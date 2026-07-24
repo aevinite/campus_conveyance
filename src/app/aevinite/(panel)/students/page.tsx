@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listStudents, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
@@ -28,11 +29,14 @@ export default async function AdminStudentsPage({
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Manage Students</h1>
       </div>
       <DataTable
-        headers={['Name', 'Email', 'Phone', 'Action']}
+        headers={['Name', 'Email', 'Phone', 'Details', 'Action']}
         rows={students.map((s) => [
           s.full_name ?? '—',
           s.email ?? '—',
           s.phone ?? '—',
+          <Link key="v" href={`/aevinite/students/${s.id}`} className="text-primary underline-offset-4 hover:underline">
+            View →
+          </Link>,
           <ConfirmSubmit
             key={s.id}
             action={deleteStudentAction}

@@ -110,21 +110,43 @@ const departureTime = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Enter a valid departure time (HH:MM).');
 
+// Each route is priced by one or more plans — per month, per semester (6 months)
+// and/or per year. A blank field means "not offered on that plan"; at least one
+// must be set. Empty string → undefined so a blank box isn't coerced to 0.
+const priceOpt = z.preprocess(
+  (v) => (v === '' || v == null ? undefined : v),
+  z.coerce.number().min(0, 'Enter a valid price.').optional(),
+);
+const atLeastOnePlan = (d: { priceMonthly?: number; priceSemester?: number; priceYearly?: number }) =>
+  [d.priceMonthly, d.priceSemester, d.priceYearly].some((v) => v != null && v > 0);
+const atLeastOnePlanMsg = {
+  message: 'Set a price for at least one plan (per month, per semester or per year).',
+  path: ['priceSemester'],
+};
+
 // A route belongs to the agency and ends at one of the colleges it serves.
 // No separate start location — the first pickup stop is where pickup begins.
-export const routeSchema = z.object({
-  institutionId: z.string().uuid('Select the college / school.'),
-  vehicleId: z.string().uuid('Select a bus.'),
-  priceRupees: z.coerce.number().min(0),
-  departureTime,
-  imageUrl: urlOpt,
-});
+export const routeSchema = z
+  .object({
+    institutionId: z.string().uuid('Select the college / school.'),
+    vehicleId: z.string().uuid('Select a bus.'),
+    priceMonthly: priceOpt,
+    priceSemester: priceOpt,
+    priceYearly: priceOpt,
+    departureTime,
+    imageUrl: urlOpt,
+  })
+  .refine(atLeastOnePlan, atLeastOnePlanMsg);
 
-// Editing an existing route: price + time (stops handled separately).
-export const routeEditSchema = z.object({
-  priceRupees: z.coerce.number().min(0),
-  departureTime,
-});
+// Editing an existing route: plan prices + time (stops handled separately).
+export const routeEditSchema = z
+  .object({
+    priceMonthly: priceOpt,
+    priceSemester: priceOpt,
+    priceYearly: priceOpt,
+    departureTime,
+  })
+  .refine(atLeastOnePlan, atLeastOnePlanMsg);
 
 // Substitute driver for a bus for TODAY (regular driver didn't turn up). Must be
 // one of the agency's own registered, unassigned drivers — chosen by id, not typed.

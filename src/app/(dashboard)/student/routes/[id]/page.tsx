@@ -17,6 +17,7 @@ import { SeatMap } from './seat-map';
 import RouteStopsMap from './route-stops-map';
 import BusGallery from './bus-gallery';
 import { formatTime } from '@/lib/format-date';
+import { offeredPlans, planPrice, periodLabel } from '@/lib/billing';
 
 // 0 means the agency never set a price — treat it like "not set".
 const inr = (cents: number | null) =>
@@ -71,7 +72,23 @@ export default async function RouteDetailPage({
   // entry here could never be promoted). Kept distinct from soldOut so the panel
   // shows "not accepting bookings" instead of a dead "Join waitlist" button.
   const notBookable = availability.total <= 0;
-  const fare = inr(data.route.price_cents);
+  // The plans the agency priced for this route — the student picks one at checkout.
+  const planOptions = offeredPlans(data.route).map((p) => ({
+    period: p.period,
+    label: p.label,
+    suffix: p.suffix,
+    amount: `₹${Math.round(p.cents / 100).toLocaleString('en-IN')}`,
+  }));
+  const priceSummary =
+    planOptions.length > 0
+      ? planOptions.map((p) => `${p.amount}${p.suffix}`).join(' · ')
+      : null;
+  // For a resumed (already-requested) booking the plan is fixed — show its price.
+  const resumePlanCents = activeBooking
+    ? planPrice(data.route, activeBooking.billing_period) ?? data.route.price_cents
+    : null;
+  const resumeFare = inr(resumePlanCents);
+  const resumePeriodLabel = activeBooking ? periodLabel(activeBooking.billing_period) : null;
   const v = data.vehicle;
   const busPhotos = v ? (v.photos?.length ? v.photos : v.image_url ? [v.image_url] : []) : [];
   const hasGeo = data.stops.some((s) => s.lat != null && s.lng != null);
@@ -99,9 +116,9 @@ export default async function RouteDetailPage({
               <span className="tnum">{availability.total}</span> seats available
             </span>
           )}
-          {fare && (
+          {priceSummary && (
             <span>
-              Fare: <span className="tnum font-semibold text-foreground">{fare}</span>
+              Plans: <span className="tnum font-semibold text-foreground">{priceSummary}</span>
             </span>
           )}
         </p>
@@ -377,7 +394,9 @@ export default async function RouteDetailPage({
                   stops={data.stops}
                   soldOut={soldOut}
                   destinationName={data.institutionName}
-                  fare={fare}
+                  plans={planOptions}
+                  resumeFare={resumeFare}
+                  resumePeriodLabel={resumePeriodLabel}
                   resumeBookingId={activeBooking.id}
                   // Pickup was chosen at request time; resolve its name from the
                   // route's stops so the resume-payment receipt can show it.
@@ -456,7 +475,7 @@ export default async function RouteDetailPage({
                   soldOut={soldOut}
                   notBookable={notBookable}
                   destinationName={data.institutionName}
-                  fare={fare}
+                  plans={planOptions}
                 />
               )}
             </CardContent>

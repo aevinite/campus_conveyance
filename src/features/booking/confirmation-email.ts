@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendBookingConfirmationEmail } from '@/lib/mailer';
+import { planPrice, periodSuffix, type BillingPeriod } from '@/lib/billing';
 
 const METHOD_LABELS: Record<string, string> = {
   UPI: 'UPI',
@@ -37,8 +38,8 @@ export async function sendBookingConfirmedEmail(
     const { data: b } = await db
       .from('bookings')
       .select(
-        `id, status, student_name, student_email, paid_at, pickup_stop_id,
-         routes(name, price_cents, departure_time,
+        `id, status, student_name, student_email, paid_at, pickup_stop_id, billing_period,
+         routes(name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, departure_time,
            institutions(name),
            vehicles(bus_number, bus_model, registration_no, is_ac,
                     driver_name, driver_phone, conductor_name, conductor_phone),
@@ -63,12 +64,19 @@ export async function sendBookingConfirmedEmail(
     type RouteRef = {
       name: string | null;
       price_cents: number | null;
+      price_monthly_cents: number | null;
+      price_semester_cents: number | null;
+      price_yearly_cents: number | null;
       departure_time: string | null;
       institutions: { name: string | null } | { name: string | null }[] | null;
       vehicles: VehicleRef | VehicleRef[] | null;
       agencies: { name: string | null } | { name: string | null }[] | null;
     };
     const route = one(b.routes as unknown as RouteRef | RouteRef[] | null);
+    // Charge/display the plan the booking was made under (fall back to the flat fare).
+    const period = ((b.billing_period as string) ?? null) as BillingPeriod | null;
+    const fareCents = route ? planPrice(route, period) ?? route.price_cents : null;
+    const fareLabel = inr(fareCents);
     const vehicle = one(route?.vehicles ?? null);
     const institution = one(route?.institutions ?? null);
     const agency = one(route?.agencies ?? null);
@@ -98,7 +106,7 @@ export async function sendBookingConfirmedEmail(
       agencyName: agency?.name ?? null,
       pickupName,
       departureTime: fmtTime((route?.departure_time as string) ?? null),
-      fare: inr(route?.price_cents ?? null),
+      fare: fareLabel ? `${fareLabel}${periodSuffix(period)}` : null,
       methodLabel: METHOD_LABELS[method] ?? method,
       paidAt: b.paid_at
         ? new Intl.DateTimeFormat('en-IN', {

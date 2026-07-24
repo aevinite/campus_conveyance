@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSessionClaims } from '@/features/auth/session';
 import { todayIST } from '@/lib/today-ist';
+import type { BillingPeriod } from '@/lib/billing';
+import { planPrice } from '@/lib/billing';
 
 /** Today's substitute staff member for a bus (null when the regular one is on duty). */
 export interface DriverChange {
@@ -16,6 +18,9 @@ export interface RouteSummary {
   id: string;
   name: string;
   price_cents: number | null;
+  price_monthly_cents: number | null;
+  price_semester_cents: number | null;
+  price_yearly_cents: number | null;
 }
 export interface Stop {
   id: string;
@@ -62,7 +67,10 @@ export interface BookingRow {
   created_at: string;
   routeId: string | null;
   routeName: string;
+  /** Price of the plan this booking was made under (falls back to the flat fare). */
   price_cents: number | null;
+  /** The plan (MONTHLY/SEMESTER/YEARLY) chosen at booking, if any. */
+  billing_period: BillingPeriod | null;
   is_paid: boolean;
   approved_at: string | null;
   expires_at: string | null;
@@ -93,6 +101,8 @@ export interface ActiveBooking {
   approved_at: string | null;
   expires_at: string | null;
   pickup_stop_id: string | null;
+  /** The plan this booking was made under (MONTHLY/SEMESTER/YEARLY). */
+  billing_period: BillingPeriod | null;
 }
 
 /** The caller's single active booking on ANY route (one bus at a time). */
@@ -110,7 +120,7 @@ export async function getMyActiveBooking(
   // of a separate students lookup, then the active booking, in a single query.
   const { data, error } = await db
     .from('bookings')
-    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, routes(id, name), students!inner(profile_id)')
+    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, routes(id, name), students!inner(profile_id)')
     .eq('students.profile_id', userId)
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
     // The one-active-booking unique index already guarantees ≤1 match; the
@@ -145,6 +155,7 @@ export async function getMyActiveBooking(
     approved_at: (data.approved_at as string) ?? null,
     expires_at: (data.expires_at as string) ?? null,
     pickup_stop_id: (data.pickup_stop_id as string) ?? null,
+    billing_period: ((data.billing_period as string) ?? null) as BillingPeriod | null,
     routeId: route?.id ?? null,
     routeName: route?.name ?? null,
   };
@@ -170,7 +181,7 @@ export async function getRouteWithStops(
       .select(
         // Only the vehicle columns the detail page actually renders (dropped the
         // never-shown driver_address/driver_dob/conductor_address/conductor_dob).
-        'id, name, price_cents, is_active, institutions(name, is_active, is_deleted), agencies(status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id, driver_blood_group, driver_alt_phone, effective_date))',
+        'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, is_active, institutions(name, is_active, is_deleted), agencies(status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id, driver_blood_group, driver_alt_phone, effective_date))',
       )
       .eq('id', routeId)
       // Only TODAY's substitute rows are embedded (bus_driver_changes accumulate
@@ -240,6 +251,9 @@ export async function getRouteWithStops(
       id: route.id as string,
       name: route.name as string,
       price_cents: (route.price_cents as number) ?? null,
+      price_monthly_cents: ((route as { price_monthly_cents?: number }).price_monthly_cents as number) ?? null,
+      price_semester_cents: ((route as { price_semester_cents?: number }).price_semester_cents as number) ?? null,
+      price_yearly_cents: ((route as { price_yearly_cents?: number }).price_yearly_cents as number) ?? null,
     },
     stops: (stops ?? []) as Stop[],
     vehicle,
@@ -296,7 +310,7 @@ export async function listMyBookings(
   let q = db
     .from('bookings')
     .select(
-      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, routes(id, name, price_cents, vehicles(id, bus_number, driver_name, driver_phone))',
+      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, vehicles(id, bus_number, driver_name, driver_phone))',
     )
     // Cancelled bookings are hidden from the student panel entirely
     // (user decision 2026-07-18) — whatever the cancel reason.
@@ -310,20 +324,29 @@ export async function listMyBookings(
   if (error) throw error;
 
   type VehRef = { id: string; bus_number: string | null; driver_name: string | null; driver_phone: string | null };
-  type RouteRef = { id: string; name: string; price_cents: number | null; vehicles: VehRef | VehRef[] | null };
+  type RouteRef = {
+    id: string; name: string; price_cents: number | null;
+    price_monthly_cents: number | null; price_semester_cents: number | null; price_yearly_cents: number | null;
+    vehicles: VehRef | VehRef[] | null;
+  };
 
   const rows = (data ?? []).map((b) => {
     const routes = b.routes as RouteRef | RouteRef[] | null;
     const route = Array.isArray(routes) ? routes[0] : routes;
     const veh = route?.vehicles as VehRef | VehRef[] | null | undefined;
     const vehicle = (Array.isArray(veh) ? veh[0] : veh) ?? null;
+    const period = ((b.billing_period as string) ?? null) as BillingPeriod | null;
+    // Show what the student actually committed to: the price of their chosen plan,
+    // falling back to the legacy flat fare for older bookings.
+    const planCents = route ? planPrice(route, period) : null;
     return {
       id: b.id as string,
       status: b.status as string,
       created_at: b.created_at as string,
       routeId: route?.id ?? null,
       routeName: route?.name ?? 'Route',
-      price_cents: route?.price_cents ?? null,
+      price_cents: planCents ?? route?.price_cents ?? null,
+      billing_period: period,
       is_paid: (b.is_paid as boolean) ?? false,
       approved_at: (b.approved_at as string) ?? null,
       expires_at: (b.expires_at as string) ?? null,

@@ -68,6 +68,14 @@ function PanelSteps({ active }: { active: 1 | 2 | 3 }) {
   );
 }
 
+export type PlanOption = {
+  period: 'MONTHLY' | 'SEMESTER' | 'YEARLY';
+  label: string;
+  suffix: string;
+  /** Pre-formatted amount, e.g. "₹9,000". */
+  amount: string;
+};
+
 export function ReserveForm({
   routeId,
   routeName,
@@ -75,8 +83,10 @@ export function ReserveForm({
   soldOut,
   notBookable = false,
   destinationName,
-  fare,
+  plans,
   resumeBookingId,
+  resumeFare,
+  resumePeriodLabel,
   resumePickupName,
   payBy,
   payByIso,
@@ -87,8 +97,12 @@ export function ReserveForm({
   soldOut: boolean;
   notBookable?: boolean;
   destinationName: string | null;
-  fare: string | null;
+  /** Pricing plans the student can pick from (fresh booking flow). */
+  plans: PlanOption[];
   resumeBookingId?: string;
+  /** For a resumed booking the plan is already fixed — its amount + label. */
+  resumeFare?: string | null;
+  resumePeriodLabel?: string | null;
   /** Pickup name for a resumed booking (chosen at request time, not re-selected
    *  here) so the confirmation receipt can still show the Pickup line. */
   resumePickupName?: string | null;
@@ -110,6 +124,7 @@ export function ReserveForm({
   const [paying, setPaying] = useState(false);
   const [method, setMethod] = useState<string | null>(null);
   const [pickupId, setPickupId] = useState(resumeBookingId ? '' : (stops[0]?.id ?? ''));
+  const [planIdx, setPlanIdx] = useState(0);
   const [payDismissed, setPayDismissed] = useState(false);
   const [receiptDismissed, setReceiptDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -140,6 +155,12 @@ export function ReserveForm({
   // Fall back to the resumed booking's pickup (pickupId is empty on resume).
   const pickupName = stops.find((s) => s.id === pickupId)?.name ?? resumePickupName ?? null;
   const methodLabel = METHODS.find((m) => m.value === method)?.label ?? null;
+
+  // The plan being paid for: fixed on a resumed booking, else the student's pick.
+  const isResume = Boolean(resumeBookingId);
+  const selectedPlan = plans[planIdx] ?? plans[0] ?? null;
+  const amountLabel = isResume ? (resumeFare ?? null) : (selectedPlan?.amount ?? null);
+  const planLabelText = isResume ? (resumePeriodLabel ?? null) : (selectedPlan?.label ?? null);
 
   async function onReserve(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -237,8 +258,11 @@ export function ReserveForm({
         <div className="mt-5 rounded-2xl border border-primary/30 bg-primary/[0.06] p-6 text-center">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Amount payable</p>
           <p className="tnum mt-1 text-5xl font-extrabold tracking-tight text-primary sm:text-6xl">
-            {fare ?? 'Set by agency'}
+            {amountLabel ?? 'Set by agency'}
           </p>
+          {planLabelText && (
+            <p className="mt-1 text-sm font-semibold text-primary/80">{planLabelText}</p>
+          )}
           <p className="mt-2 text-sm text-muted-foreground">{routeName}</p>
         </div>
 
@@ -300,7 +324,8 @@ export function ReserveForm({
             ['Route', routeName],
             ['Pickup', pickupName],
             ['Drop-off', destinationName ?? 'Your campus'],
-            ['Fare paid', fare ?? 'Set by agency'],
+            ['Plan', planLabelText],
+            ['Fare paid', amountLabel ?? 'Set by agency'],
             ['Paid via', methodLabel],
             ['Status', 'Confirmed'],
           ]
@@ -444,6 +469,44 @@ export function ReserveForm({
     <form ref={formRef} onSubmit={onReserve} className="space-y-4">
       <PanelSteps active={1} />
       <input type="hidden" name="routeId" value={routeId} />
+      {selectedPlan && <input type="hidden" name="billingPeriod" value={selectedPlan.period} />}
+
+      {plans.length > 0 && (
+        <div className="space-y-2">
+          <Label>Choose a plan</Label>
+          <div className="grid gap-2">
+            {plans.map((p, i) => {
+              const on = i === planIdx;
+              return (
+                <button
+                  key={p.period}
+                  type="button"
+                  onClick={() => setPlanIdx(i)}
+                  aria-pressed={on}
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${
+                    on ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <span
+                      className={`grid size-4 shrink-0 place-items-center rounded-full border ${
+                        on ? 'border-primary' : 'border-muted-foreground/40'
+                      }`}
+                    >
+                      {on && <span className="size-2 rounded-full bg-primary" />}
+                    </span>
+                    <span className="text-sm font-medium">{p.label}</span>
+                  </span>
+                  <span className="tnum text-sm font-semibold">
+                    {p.amount}
+                    <span className="text-muted-foreground">{p.suffix}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="pickupStopId">Pickup stop</Label>

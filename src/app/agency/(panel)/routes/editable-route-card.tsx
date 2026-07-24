@@ -10,9 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TimePicker } from '@/components/ui/time-picker';
 import { FormStatus } from '@/components/form-status';
+import { rupees } from '@/lib/format';
+import { offeredPlans } from '@/lib/billing';
 
-const rupees = (cents: number | null) => `₹${Math.round((cents ?? 0) / 100)}`;
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '');
+const asRupees = (cents: number | null) => (cents != null && cents > 0 ? String(Math.round(cents / 100)) : '');
 
 export function EditableRouteCard({ route }: { route: RouteFull }) {
   const router = useRouter();
@@ -49,7 +51,15 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
                 <IndianRupee className="size-3.5" />
-                {rupees(route.price_cents)}
+                {(() => {
+                  const plans = offeredPlans(route);
+                  if (plans.length === 0) return <span>No price set</span>;
+                  return (
+                    <span className="tnum">
+                      {plans.map((p) => `${rupees(p.cents)}${p.suffix}`).join(' · ')}
+                    </span>
+                  );
+                })()}
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <Clock className="size-3.5" />
@@ -89,23 +99,30 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
         <input type="hidden" name="routeId" value={route.id} />
         <input type="hidden" name="stops" value={JSON.stringify(stops)} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor={`price-${route.id}`}>Route price (₹)</Label>
-            <Input
-              id={`price-${route.id}`}
-              name="priceRupees"
-              type="number"
-              min={0}
-              step="1"
-              required
-              defaultValue={Math.round((route.price_cents ?? 0) / 100)}
-            />
+        <div className="space-y-2">
+          <Label>Pricing plans (₹)</Label>
+          <p className="text-xs text-muted-foreground">
+            Students pick a plan at checkout. A semester is 6 months. Leave a plan blank if you don&apos;t
+            offer it (at least one is required).
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor={`price-m-${route.id}`} className="text-sm font-normal text-muted-foreground">Per month</Label>
+              <Input id={`price-m-${route.id}`} name="priceMonthly" type="number" min={0} step="1" inputMode="numeric" placeholder="—" defaultValue={asRupees(route.price_monthly_cents)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`price-s-${route.id}`} className="text-sm font-normal text-muted-foreground">Per semester (6 mo)</Label>
+              <Input id={`price-s-${route.id}`} name="priceSemester" type="number" min={0} step="1" inputMode="numeric" placeholder="—" defaultValue={asRupees(route.price_semester_cents)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`price-y-${route.id}`} className="text-sm font-normal text-muted-foreground">Per year</Label>
+              <Input id={`price-y-${route.id}`} name="priceYearly" type="number" min={0} step="1" inputMode="numeric" placeholder="—" defaultValue={asRupees(route.price_yearly_cents)} />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Departure time</Label>
-            <TimePicker name="departureTime" defaultValue={hhmm(route.departure_time)} />
-          </div>
+        </div>
+        <div className="space-y-1.5 sm:max-w-xs">
+          <Label>Departure time</Label>
+          <TimePicker name="departureTime" defaultValue={hhmm(route.departure_time)} />
         </div>
 
         <div className="space-y-1.5">

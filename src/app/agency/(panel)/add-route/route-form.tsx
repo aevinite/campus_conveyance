@@ -99,15 +99,31 @@ export function RouteForm({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="priceRupees">Route price (₹)</Label>
-          <Input id="priceRupees" name="priceRupees" type="number" min={0} step="1" required />
+      <div className="space-y-2">
+        <Label>Pricing plans (₹)</Label>
+        <p className="text-xs text-muted-foreground">
+          Set a price for the plans you offer — students pick one at checkout. A semester is 6 months.
+          Leave a plan blank if you don&apos;t offer it (at least one is required).
+        </p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="priceMonthly" className="text-sm font-normal text-muted-foreground">Per month</Label>
+            <Input id="priceMonthly" name="priceMonthly" type="number" min={0} step="1" inputMode="numeric" placeholder="e.g. 1800" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="priceSemester" className="text-sm font-normal text-muted-foreground">Per semester (6 mo)</Label>
+            <Input id="priceSemester" name="priceSemester" type="number" min={0} step="1" inputMode="numeric" placeholder="e.g. 9000" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="priceYearly" className="text-sm font-normal text-muted-foreground">Per year</Label>
+            <Input id="priceYearly" name="priceYearly" type="number" min={0} step="1" inputMode="numeric" placeholder="e.g. 16000" />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Departure time</Label>
-          <TimePicker name="departureTime" />
-        </div>
+      </div>
+
+      <div className="space-y-1.5 sm:max-w-xs">
+        <Label>Departure time</Label>
+        <TimePicker name="departureTime" />
       </div>
 
       <FormStatus error={state.error} message={state.message} />

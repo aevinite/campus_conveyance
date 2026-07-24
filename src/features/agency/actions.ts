@@ -682,7 +682,11 @@ export async function updateRouteAction(_: FormState, formData: FormData): Promi
     const replaced = await updateRoute(
       db,
       routeId,
-      parsed.data.priceRupees,
+      {
+        priceMonthly: parsed.data.priceMonthly,
+        priceSemester: parsed.data.priceSemester,
+        priceYearly: parsed.data.priceYearly,
+      },
       parsed.data.departureTime,
       stops,
     );

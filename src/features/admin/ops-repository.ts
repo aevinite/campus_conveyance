@@ -345,7 +345,7 @@ export interface RouteDetail {
   institutionName: string;
   agencyName: string;
   busNumber: string | null;
-  stops: { id: string; name: string; sequence: number | null; address: string | null; lat: number | null; lng: number | null }[];
+  stops: { id: string; name: string; sequence: number | null; address: string | null; description: string | null; lat: number | null; lng: number | null }[];
   occupancy: { totalSeats: number | null; reservedSeats: number | null } | null;
   riders: SeatRider[];
   progress: { stopName: string; status: string | null; recorded_at: string | null }[];
@@ -366,7 +366,7 @@ export async function getRouteDetail(id: string): Promise<RouteDetail | null> {
 
   const { data: stopData, error: stopErr } = await client
     .from('route_stops')
-    .select('id, name, sequence, address, lat, lng')
+    .select('id, name, sequence, address, description, lat, lng')
     .eq('route_id', id)
     .order('sequence', { ascending: true });
   if (stopErr) throw stopErr;
@@ -440,24 +440,11 @@ export interface BookingRow {
   paid_at: string | null;
 }
 
-export async function listBookings(
-  opts: PageOpts & { status?: string } = {},
-): Promise<Paged<BookingRow>> {
-  const client = db();
-  // Apply the status filter (a filter op) BEFORE .order()/.range() (transform
-  // ops), which is what the query-builder types require.
-  const base = client
-    .from('bookings')
-    .select(
-      'id, student_name, student_email, route_id, pickup_stop_id, drop_stop_id, status, is_paid, created_at, paid_at',
-      { count: 'exact' },
-    );
-  const filtered = opts.status ? base.eq('status', opts.status) : base;
-  let q = filtered.order('created_at', { ascending: false });
-  q = range(q, opts);
-  const { data, error, count } = await q;
-  if (error) throw error;
-  const rows = (data ?? []) as Record<string, unknown>[];
+const BOOKING_COLS =
+  'id, student_name, student_email, route_id, pickup_stop_id, drop_stop_id, status, is_paid, created_at, paid_at';
+
+/** Resolve raw booking rows → BookingRow[] (route name, bus number, stop names). */
+async function decorateBookings(client: SupabaseClient, rows: Record<string, unknown>[]): Promise<BookingRow[]> {
   const routes = await mapByIds<{ id: string; name: string; vehicle_id: string | null }>(
     client,
     'routes',
@@ -476,25 +463,38 @@ export async function listBookings(
     'id, name',
     rows.flatMap((r) => [r.pickup_stop_id as string, r.drop_stop_id as string]),
   );
-  return {
-    rows: rows.map((r) => {
-      const route = routes.get(r.route_id as string);
-      return {
-        id: r.id as string,
-        studentName: (r.student_name as string) ?? null,
-        studentEmail: (r.student_email as string) ?? null,
-        routeName: route?.name ?? '—',
-        busNumber: route?.vehicle_id ? (vehicles.get(route.vehicle_id)?.bus_number ?? null) : null,
-        pickupStop: stops.get(r.pickup_stop_id as string)?.name ?? '—',
-        dropStop: stops.get(r.drop_stop_id as string)?.name ?? '—',
-        status: r.status as string,
-        isPaid: !!r.is_paid,
-        created_at: (r.created_at as string) ?? null,
-        paid_at: (r.paid_at as string) ?? null,
-      };
-    }),
-    total: count ?? 0,
-  };
+  return rows.map((r) => {
+    const route = routes.get(r.route_id as string);
+    return {
+      id: r.id as string,
+      studentName: (r.student_name as string) ?? null,
+      studentEmail: (r.student_email as string) ?? null,
+      routeName: route?.name ?? '—',
+      busNumber: route?.vehicle_id ? (vehicles.get(route.vehicle_id)?.bus_number ?? null) : null,
+      pickupStop: stops.get(r.pickup_stop_id as string)?.name ?? '—',
+      dropStop: stops.get(r.drop_stop_id as string)?.name ?? '—',
+      status: r.status as string,
+      isPaid: !!r.is_paid,
+      created_at: (r.created_at as string) ?? null,
+      paid_at: (r.paid_at as string) ?? null,
+    };
+  });
+}
+
+export async function listBookings(
+  opts: PageOpts & { status?: string } = {},
+): Promise<Paged<BookingRow>> {
+  const client = db();
+  // Apply the status filter (a filter op) BEFORE .order()/.range() (transform
+  // ops), which is what the query-builder types require.
+  const base = client.from('bookings').select(BOOKING_COLS, { count: 'exact' });
+  const filtered = opts.status ? base.eq('status', opts.status) : base;
+  let q = filtered.order('created_at', { ascending: false });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = await decorateBookings(client, (data ?? []) as Record<string, unknown>[]);
+  return { rows, total: count ?? 0 };
 }
 
 // ---- Live rides -----------------------------------------------------------
@@ -838,4 +838,172 @@ export async function listContactMessages(opts: PageOpts = {}): Promise<Paged<Co
   const { data, error, count } = await q;
   if (error) throw error;
   return { rows: (data ?? []) as ContactMessageRow[], total: count ?? 0 };
+}
+
+// ---- Student detail (everything a student filled) -------------------------
+// Keyed by the STUDENT's profile id (that's what the Manage Students list uses).
+// The `students` row — where the booking/"details" form saves address, class,
+// guardian info — is linked by students.profile_id = profiles.id.
+
+export interface StudentDetail {
+  profile: { id: string; full_name: string | null; email: string | null; phone: string | null };
+  student: {
+    address: string | null;
+    grade: string | null;
+    guardian_name: string | null;
+    guardian_phone: string | null;
+    roll_no: string | null;
+    qr_code: string | null;
+  } | null;
+  institutionName: string | null;
+  bookings: BookingRow[];
+  parents: { name: string | null; email: string | null; phone: string | null }[];
+}
+
+export async function getStudentDetail(profileId: string): Promise<StudentDetail | null> {
+  const client = db();
+  const { data: p, error } = await client
+    .from('profiles')
+    .select('id, full_name, email, phone, role')
+    .eq('id', profileId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!p) return null;
+
+  const { data: st, error: sErr } = await client
+    .from('students')
+    .select('id, address, grade, guardian_name, guardian_phone, roll_no, qr_code, institution_id')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  if (sErr) throw sErr;
+
+  let institutionName: string | null = null;
+  let bookings: BookingRow[] = [];
+  let parents: StudentDetail['parents'] = [];
+
+  if (st) {
+    if (st.institution_id) {
+      const inst = await mapByIds<{ id: string; name: string }>(client, 'institutions', 'id, name', [st.institution_id as string]);
+      institutionName = inst.get(st.institution_id as string)?.name ?? null;
+    }
+    const { data: bk, error: bErr } = await client
+      .from('bookings')
+      .select(BOOKING_COLS)
+      .eq('student_id', st.id as string)
+      .order('created_at', { ascending: false });
+    if (bErr) throw bErr;
+    bookings = await decorateBookings(client, (bk ?? []) as Record<string, unknown>[]);
+
+    // Parents linked to this student.
+    const { data: links } = await client.from('parent_students').select('parent_id').eq('student_id', st.id as string);
+    const parentIds = (links ?? []).map((l) => (l as { parent_id: string }).parent_id);
+    if (parentIds.length) {
+      const parentRows = await mapByIds<{ id: string; profile_id: string | null }>(client, 'parents', 'id, profile_id', parentIds);
+      const profs = await mapByIds<{ id: string; full_name: string | null; email: string | null; phone: string | null }>(
+        client,
+        'profiles',
+        'id, full_name, email, phone',
+        [...parentRows.values()].map((pr) => pr.profile_id),
+      );
+      parents = [...parentRows.values()].map((pr) => {
+        const prof = pr.profile_id ? profs.get(pr.profile_id) : undefined;
+        return { name: prof?.full_name ?? null, email: prof?.email ?? null, phone: prof?.phone ?? null };
+      });
+    }
+  }
+
+  return {
+    profile: {
+      id: p.id as string,
+      full_name: (p.full_name as string) ?? null,
+      email: (p.email as string) ?? null,
+      phone: (p.phone as string) ?? null,
+    },
+    student: st
+      ? {
+          address: (st.address as string) ?? null,
+          grade: (st.grade as string) ?? null,
+          guardian_name: (st.guardian_name as string) ?? null,
+          guardian_phone: (st.guardian_phone as string) ?? null,
+          roll_no: (st.roll_no as string) ?? null,
+          qr_code: (st.qr_code as string) ?? null,
+        }
+      : null,
+    institutionName,
+    bookings,
+    parents,
+  };
+}
+
+// ---- Driver detail (full KYC the agency entered) --------------------------
+
+export interface DriverDetail {
+  driver: Record<string, unknown>;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  agencyName: string;
+  vehicle: { id: string; bus_number: string | null; registration_no: string | null } | null;
+  isOnline: boolean;
+  lastPing: string | null;
+  changes: {
+    id: string;
+    driver_name: string | null;
+    driver_phone: string | null;
+    role: string | null;
+    reason: string | null;
+    effective_date: string | null;
+    created_at: string | null;
+  }[];
+}
+
+export async function getDriverDetail(id: string): Promise<DriverDetail | null> {
+  const client = db();
+  const { data: d, error } = await client.from('drivers').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  if (!d) return null;
+  const driver = d as Record<string, unknown>;
+
+  const [profiles, agencies] = await Promise.all([
+    mapByIds<{ id: string; full_name: string | null; email: string | null; phone: string | null }>(
+      client,
+      'profiles',
+      'id, full_name, email, phone',
+      [driver.profile_id as string],
+    ),
+    mapByIds<{ id: string; name: string }>(client, 'agencies', 'id, name', [driver.agency_id as string]),
+  ]);
+  const prof = driver.profile_id ? profiles.get(driver.profile_id as string) : undefined;
+
+  const { data: veh } = await client
+    .from('vehicles')
+    .select('id, bus_number, registration_no')
+    .eq('driver_id', id)
+    .limit(1)
+    .maybeSingle();
+
+  const { data: loc } = await client
+    .from('driver_locations')
+    .select('is_online, updated_at')
+    .eq('driver_id', id)
+    .maybeSingle();
+
+  const { data: chg } = await client
+    .from('bus_driver_changes')
+    .select('id, driver_name, driver_phone, role, reason, effective_date, created_at')
+    .eq('driver_id', id)
+    .order('created_at', { ascending: false })
+    .limit(25);
+
+  return {
+    driver,
+    name: prof?.full_name ?? null,
+    email: prof?.email ?? null,
+    phone: prof?.phone ?? null,
+    agencyName: agencies.get(driver.agency_id as string)?.name ?? '—',
+    vehicle: veh ? { id: veh.id as string, bus_number: (veh.bus_number as string) ?? null, registration_no: (veh.registration_no as string) ?? null } : null,
+    isOnline: !!(loc as { is_online?: boolean } | null)?.is_online,
+    lastPing: (loc as { updated_at?: string } | null)?.updated_at ?? null,
+    changes: (chg ?? []) as DriverDetail['changes'],
+  };
 }

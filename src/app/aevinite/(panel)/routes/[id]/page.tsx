@@ -49,6 +49,10 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
         <Card className="rounded-2xl">
           <CardContent className="space-y-3 py-5">
             <h2 className="font-semibold">Route details</h2>
+            {typeof r.image_url === 'string' && r.image_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={r.image_url} alt={s(r.name) ?? 'Route'} className="aspect-[16/9] w-full rounded-xl border border-border object-cover" />
+            )}
             <dl>
               <Field label="Start location" value={s(r.start_location)} />
               <Field label="Vehicle type" value={r.vehicle_type === 'VAN' ? 'Van' : 'Bus'} />
@@ -80,6 +84,7 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                     </span>
                     <div className="min-w-0">
                       <p className="font-medium">{st.name}</p>
+                      {st.description && <p className="text-xs text-muted-foreground">Exact spot: {st.description}</p>}
                       {st.address && <p className="text-xs text-muted-foreground">{st.address}</p>}
                       {st.lat != null && st.lng != null && (
                         <p className="font-mono text-[11px] text-muted-foreground">{st.lat.toFixed(5)}, {st.lng.toFixed(5)}</p>
