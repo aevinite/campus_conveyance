@@ -21,6 +21,7 @@ import {
 } from './schemas';
 import { getMyAgency, agencyReportTag } from './repository';
 import { drainEmailOutbox } from '@/lib/email-outbox';
+import { drainPushOutbox } from '@/lib/push';
 import {
   confirmBooking,
   rejectBooking,
@@ -1010,9 +1011,10 @@ async function decideBooking(
   // The acting user is the agency owner; bust their own report cache.
   const agency = await getMyAgency(db);
   if (agency) updateTag(agencyReportTag(agency.id)); // dashboard bookings/revenue/students tiles
-  // Confirm/reject queued a rejected/confirmed email (and a reject may promote a
-  // waitlisted rider); flush the outbox. Registered before any redirect below.
+  // Confirm/reject queued a rejected/confirmed email + push (and a reject may
+  // promote a waitlisted rider); flush both. Registered before any redirect below.
   after(() => drainEmailOutbox());
+  after(() => drainPushOutbox());
   if (notice) redirect(`/agency/bookings?notice=${encodeURIComponent(notice)}`);
 }
 

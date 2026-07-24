@@ -24,17 +24,27 @@ function fmtTime(t: string | null): string | null {
 }
 
 /**
- * Send the booking-confirmed email for a just-paid booking. Reads with the
- * service-role client (the caller's RPC already proved ownership) and is
- * strictly best-effort: any failure is logged, never surfaced — a mail hiccup
- * must not undo or block a completed payment.
+ * Render + send the RICH booking-confirmed email (bus / driver / pickup / fare /
+ * reference) for a CONFIRMED booking, to a specific recipient address.
+ *
+ * Reads with the service-role client. Called by the retry-backed email-outbox
+ * drainer for every `kind='CONFIRMED'` row (student + linked parents), so the
+ * confirmation mail is delivered reliably on any confirm path — not a one-shot.
+ *
+ * Returns `false` if the booking can't be rendered (gone / not yet CONFIRMED) so
+ * the drainer can fall back to the plain lifecycle template. A send/SMTP failure
+ * is left to throw: the drainer records it on the row and retries on a later drain.
+ *
+ * `method` (payment method label) is optional — it isn't persisted on the
+ * booking, so outbox-driven sends omit the "Paid via" line; everything else
+ * (route, bus, driver, pickup, fare, paid-on, reference) still renders.
  */
-export async function sendBookingConfirmedEmail(
+export async function sendRichConfirmationEmail(
   bookingId: string,
-  method: string,
-): Promise<void> {
-  try {
-    const db = createAdminClient();
+  toEmail: string,
+  method?: string | null,
+): Promise<boolean> {
+  const db = createAdminClient();
     const { data: b } = await db
       .from('bookings')
       .select(
@@ -47,7 +57,7 @@ export async function sendBookingConfirmedEmail(
       )
       .eq('id', bookingId)
       .maybeSingle();
-    if (!b || b.status !== 'CONFIRMED' || !b.student_email) return;
+    if (!b || b.status !== 'CONFIRMED') return false;
 
     const one = <T,>(v: T | T[] | null | undefined): T | null =>
       (Array.isArray(v) ? v[0] : v) ?? null;
@@ -91,7 +101,7 @@ export async function sendBookingConfirmedEmail(
       pickupName = (stop?.name as string) ?? null;
     }
 
-    await sendBookingConfirmationEmail(b.student_email as string, {
+    await sendBookingConfirmationEmail(toEmail, {
       studentName: (b.student_name as string) ?? null,
       institutionName: institution?.name ?? null,
       routeName: route?.name ?? null,
@@ -107,7 +117,7 @@ export async function sendBookingConfirmedEmail(
       pickupName,
       departureTime: fmtTime((route?.departure_time as string) ?? null),
       fare: fareLabel ? `${fareLabel}${periodSuffix(period)}` : null,
-      methodLabel: METHOD_LABELS[method] ?? method,
+      methodLabel: method ? (METHOD_LABELS[method] ?? method) : null,
       paidAt: b.paid_at
         ? new Intl.DateTimeFormat('en-IN', {
             dateStyle: 'medium',
@@ -117,9 +127,5 @@ export async function sendBookingConfirmedEmail(
         : null,
       bookingRef: (b.id as string).slice(0, 8).toUpperCase(),
     });
-  } catch (e) {
-    // Best-effort: the seat is confirmed regardless — but log it, otherwise a
-    // broken SMTP credential is invisible.
-    console.error('Booking-confirmation email failed to send:', e);
-  }
+  return true;
 }

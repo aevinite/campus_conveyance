@@ -1,12 +1,14 @@
 import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { roleFromClaims, type Role } from '@/lib/rbac/roles';
+import { roleFromClaims, institutionIdFromClaims, type Role } from '@/lib/rbac/roles';
 
 export type SessionClaims = {
   userId: string | null;
   role: Role | undefined;
   fullName: string | undefined;
   email: string | undefined;
+  /** Campus id for an INSTITUTION_ADMIN (from the JWT hook); null otherwise. */
+  institutionId: string | null;
 };
 
 /**
@@ -31,6 +33,7 @@ export const getSessionClaims = cache(
       role: roleFromClaims(claims?.app_metadata),
       fullName: claims?.user_metadata?.full_name,
       email: claims?.email,
+      institutionId: institutionIdFromClaims(claims?.app_metadata),
     };
   },
 );

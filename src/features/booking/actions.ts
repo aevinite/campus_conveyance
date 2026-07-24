@@ -4,8 +4,8 @@ import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { reserveSchema, cancelSchema, paySchema, studentDetailsSchema } from './schemas';
 import { reserveSeat, cancelBooking, saveStudentDetails, payBooking } from './services';
-import { sendBookingConfirmedEmail } from './confirmation-email';
 import { drainEmailOutbox } from '@/lib/email-outbox';
+import { drainPushOutbox } from '@/lib/push';
 import { toErrorResponse } from '@/lib/errors/app-error';
 
 export type ReserveState = {
@@ -28,8 +28,9 @@ export async function reserveSeatAction(
   const db = await createClient();
   try {
     const result = await reserveSeat(db, parsed.data);
-    // Flush the reserved/waitlisted emails the DB trigger just queued.
+    // Flush the reserved/waitlisted email + push the DB trigger just queued.
     after(() => drainEmailOutbox());
+    after(() => drainPushOutbox());
     revalidatePath('/student/bookings');
     revalidatePath('/student'); // home "recent trips" strip
     revalidatePath(`/student/routes/${parsed.data.routeId}`);
@@ -73,16 +74,11 @@ export async function payBookingAction(
   const db = await createClient();
   try {
     const status = await payBooking(db, parsed.data.bookingId);
-    if (status === 'CONFIRMED') {
-      // Booking-confirmed email — best-effort (logged inside) and the confirmed
-      // seat never depends on SMTP. Send it AFTER the response so a slow Gmail
-      // connection can't stall the "payment confirmed" reply. `after()` keeps the
-      // serverless function alive for it (a bare un-awaited promise would be cut
-      // off when the response ends).
-      after(() => sendBookingConfirmedEmail(parsed.data.bookingId, parsed.data.method));
-    }
-    // Flush the confirmed (parent) / any queued lifecycle emails.
+    // The CONFIRMED email (rich template) + push are enqueued by the booking_notify
+    // DB trigger and delivered by the retry-backed outbox drainers below — no
+    // one-shot send, so a transient SMTP hiccup can no longer lose the mail.
     after(() => drainEmailOutbox());
+    after(() => drainPushOutbox());
     revalidatePath('/student/bookings');
     revalidatePath('/student');
     // Refresh the route detail page too (its seat count + resume-payment panel
@@ -110,8 +106,9 @@ export async function cancelBookingAction(
     return { error: toErrorResponse(e).message };
   }
   // Cancelling frees a seat → may promote a waitlisted rider; flush both the
-  // cancel notice (to parents) and any promotion email the trigger queued.
+  // cancel notice (to parents) and any promotion email/push the trigger queued.
   after(() => drainEmailOutbox());
+  after(() => drainPushOutbox());
   revalidatePath('/student/bookings');
   revalidatePath('/student');
   // Refresh the route detail page too — cancelling frees a seat, so its seat

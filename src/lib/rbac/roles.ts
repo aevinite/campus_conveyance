@@ -42,3 +42,11 @@ export function roleFromClaims(appMetadata: unknown): Role | undefined {
   const r = (appMetadata as { role?: string } | null)?.role;
   return ROLES.includes(r as Role) ? (r as Role) : undefined;
 }
+
+// The campus an INSTITUTION_ADMIN represents — injected into app_metadata by the
+// custom access-token hook from profiles.institution_id. Null for every other
+// role (and for an institution admin not yet linked to a college).
+export function institutionIdFromClaims(appMetadata: unknown): string | null {
+  const id = (appMetadata as { institution_id?: string } | null)?.institution_id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}

@@ -7,6 +7,7 @@ import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notification-bell';
+import { PushToggle } from '@/components/push-toggle';
 import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
 
 export default async function DashboardLayout({
@@ -44,6 +45,7 @@ export default async function DashboardLayout({
           <Logo href={dashboardFor(role)} />
           <div className="flex items-center gap-2 sm:gap-2.5">
             <NotificationBell items={notifications} unread={unread} />
+            <PushToggle />
             <ThemeToggle />
             <UserMenu name={fullName ?? ''} email={email ?? ''} role={role} />
           </div>

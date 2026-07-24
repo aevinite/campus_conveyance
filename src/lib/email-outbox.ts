@@ -1,6 +1,7 @@
 import 'server-only';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendBookingLifecycleEmail } from '@/lib/mailer';
+import { sendRichConfirmationEmail } from '@/features/booking/confirmation-email';
 
 /**
  * Drain queued booking-lifecycle emails and send them over Gmail/Nodemailer.
@@ -35,9 +36,21 @@ export async function drainEmailOutbox(batchSize = 20): Promise<void> {
       to_email: string;
       title: string;
       body: string;
+      kind: string;
+      booking_id: string | null;
     }>) {
       try {
-        await sendBookingLifecycleEmail(row.to_email, row.title, row.body);
+        // CONFIRMED rows get the rich confirmation template (bus / driver /
+        // pickup / fare / reference) rendered from the booking. If it can't be
+        // rendered (booking gone), fall back to the plain lifecycle template so
+        // the recipient still gets *something*.
+        let sent = false;
+        if (row.kind === 'CONFIRMED' && row.booking_id) {
+          sent = await sendRichConfirmationEmail(row.booking_id, row.to_email);
+        }
+        if (!sent) {
+          await sendBookingLifecycleEmail(row.to_email, row.title, row.body);
+        }
         await db
           .from('email_outbox')
           .update({ sent_at: new Date().toISOString(), last_error: null })
