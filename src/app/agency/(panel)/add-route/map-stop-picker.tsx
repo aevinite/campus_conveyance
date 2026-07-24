@@ -70,6 +70,12 @@ export default function MapStopPicker({
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
+  // Manual entry — a map/geocoder-independent way to add a stop. The map search is
+  // the primary path, but it depends on Leaflet + the geocode API both loading; if
+  // either is blocked (offline, ad-blocker, CDN issue) this keeps route creation
+  // possible: paste coordinates (e.g. from Google Maps → right-click → the lat,lng).
+  const [manual, setManual] = useState({ name: '', lat: '', lng: '' });
+  const [manualErr, setManualErr] = useState<string | null>(null);
 
   function addStop(lat: number, lng: number, name?: string, address?: string | null) {
     const cur = valueRef.current;
@@ -77,6 +83,19 @@ export default function MapStopPicker({
       ...cur,
       { name: name || `Stop ${cur.length + 1}`, description: '', lat, lng, address: address ?? null },
     ]);
+  }
+
+  function addManualStop() {
+    const lat = parseFloat(manual.lat.trim());
+    const lng = parseFloat(manual.lng.trim());
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setManualErr('Enter a valid latitude (−90 to 90) and longitude (−180 to 180).');
+      return;
+    }
+    setManualErr(null);
+    addStop(lat, lng, manual.name.trim() || undefined);
+    mapRef.current?.setView([lat, lng], 15); // recenter if the map is available
+    setManual({ name: '', lat: '', lng: '' });
   }
 
   function redraw() {
@@ -299,6 +318,55 @@ export default function MapStopPicker({
         or pan/zoom the map to your city for better matches. Each result shows the area, PIN &amp; state so you can
         confirm the exact spot.
       </p>
+
+      {/* Map/geocoder-independent fallback — always works, even if the map or the
+          search can't load, so route creation is never blocked. */}
+      <details className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+          Can’t use the map? Add a stop by coordinates
+        </summary>
+        <div className="mt-2 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+            <input
+              value={manual.name}
+              onChange={(e) => setManual((m) => ({ ...m, name: e.target.value }))}
+              placeholder="Stop name (optional)"
+              aria-label="Manual stop name"
+              className={inputCls}
+            />
+            <input
+              value={manual.lat}
+              onChange={(e) => setManual((m) => ({ ...m, lat: e.target.value }))}
+              inputMode="decimal"
+              placeholder="Latitude, e.g. 23.0225"
+              aria-label="Manual stop latitude"
+              className={inputCls}
+            />
+            <input
+              value={manual.lng}
+              onChange={(e) => setManual((m) => ({ ...m, lng: e.target.value }))}
+              inputMode="decimal"
+              placeholder="Longitude, e.g. 72.5714"
+              aria-label="Manual stop longitude"
+              className={inputCls}
+            />
+            <button
+              type="button"
+              onClick={addManualStop}
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-input bg-transparent px-3 text-sm font-medium transition-colors hover:bg-muted"
+            >
+              Add stop
+            </button>
+          </div>
+          {manualErr ? (
+            <p className="text-xs text-destructive" role="alert">{manualErr}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Tip: in Google Maps, right-click the exact spot and click the “lat, lng” at the top to copy it.
+            </p>
+          )}
+        </div>
+      </details>
 
       {value.length === 0 ? (
         <p className="text-sm text-muted-foreground">No pickup stops added yet.</p>
