@@ -205,20 +205,22 @@ export async function getVehicleDetail(id: string): Promise<VehicleDetail | null
   // Live GPS (driver_locations keyed by drivers.id, which is vehicles.driver_id).
   let live = null;
   if (vehicle.driver_id) {
-    const { data: loc } = await client
+    const { data: loc, error: locErr } = await client
       .from('driver_locations')
       .select('is_online, lat, lng, updated_at')
       .eq('driver_id', vehicle.driver_id as string)
       .maybeSingle();
+    if (locErr) throw locErr;
     if (loc) live = loc as VehicleDetail['live'];
   }
 
-  const { data: chg } = await client
+  const { data: chg, error: chgErr } = await client
     .from('bus_driver_changes')
     .select('id, driver_name, driver_phone, role, reason, effective_date, created_at')
     .eq('vehicle_id', id)
     .order('created_at', { ascending: false })
     .limit(25);
+  if (chgErr) throw chgErr;
 
   return {
     vehicle,
@@ -322,12 +324,19 @@ async function countChildren(
   const out = new Map<string, number>();
   const uniq = [...new Set(parentIds.filter(Boolean))];
   if (uniq.length === 0) return out;
-  const { data, error } = await client.from(table).select(fk).in(fk, uniq);
-  if (error) throw error;
-  for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
-    const k = row[fk] as string;
-    out.set(k, (out.get(k) ?? 0) + 1);
-  }
+  // Exact per-parent head counts. A single `.in()` scan tallied in JS silently
+  // drops child rows past PostgREST's ~1000-row cap — a 50-route page can
+  // reference >1000 route_stops, so later routes read as "0 stops". head:true
+  // counts are computed in the DB, exact, and bounded (one per parent, and the
+  // parent list is already page-capped to OPS_PAGE_SIZE).
+  const results = await Promise.all(
+    uniq.map((pid) => client.from(table).select(fk, { count: 'exact', head: true }).eq(fk, pid)),
+  );
+  uniq.forEach((pid, i) => {
+    const { count, error } = results[i];
+    if (error) throw error;
+    out.set(pid, count ?? 0);
+  });
   return out;
 }
 
@@ -355,23 +364,26 @@ export async function getRouteDetail(id: string): Promise<RouteDetail | null> {
     mapByIds<{ id: string; bus_number: string | null }>(client, 'vehicles', 'id, bus_number', [route.vehicle_id as string]),
   ]);
 
-  const { data: stopData } = await client
+  const { data: stopData, error: stopErr } = await client
     .from('route_stops')
     .select('id, name, sequence, address, lat, lng')
     .eq('route_id', id)
     .order('sequence', { ascending: true });
+  if (stopErr) throw stopErr;
   const stops = (stopData ?? []) as RouteDetail['stops'];
 
   // Occupancy + riders via this route's assignment → seat allocation.
-  const { data: asg } = await client.from('route_assignments').select('id').eq('route_id', id).limit(1).maybeSingle();
+  const { data: asg, error: asgErr } = await client.from('route_assignments').select('id').eq('route_id', id).limit(1).maybeSingle();
+  if (asgErr) throw asgErr;
   let occupancy: RouteDetail['occupancy'] = null;
   let riders: SeatRider[] = [];
   if (asg?.id) {
-    const { data: alloc } = await client
+    const { data: alloc, error: allocErr } = await client
       .from('seat_allocations')
       .select('id, total_seats, reserved_seats')
       .eq('route_assignment_id', asg.id as string)
       .maybeSingle();
+    if (allocErr) throw allocErr;
     if (alloc) {
       occupancy = { totalSeats: (alloc.total_seats as number) ?? null, reservedSeats: (alloc.reserved_seats as number) ?? null };
       riders = await ridersForAllocation(client, alloc.id as string);

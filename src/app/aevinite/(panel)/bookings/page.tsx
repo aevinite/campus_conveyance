@@ -51,6 +51,7 @@ export default async function AdminBookingsPage({
           <Link
             key={f}
             href={f === 'ALL' ? '/aevinite/bookings' : `/aevinite/bookings?status=${f}`}
+            aria-current={status === f ? 'page' : undefined}
             className={cn(
               'rounded-full border px-3 py-1 text-sm transition-colors',
               status === f ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-border text-muted-foreground hover:bg-muted',

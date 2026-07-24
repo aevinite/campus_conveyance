@@ -5,7 +5,7 @@ import { setContactStatusAction } from '@/features/admin/ops-actions';
 import { DataTable } from '@/components/data-table';
 import { StatusBadge } from '@/components/status-badge';
 import { Pager, pageParams } from '@/components/pager';
-import { buttonVariants } from '@/components/ui/button';
+import { SubmitButton } from '@/components/submit-button';
 import { formatDateTime } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
@@ -48,9 +48,9 @@ export default async function AdminInquiriesPage({
             <form key="a" action={setContactStatusAction}>
               <input type="hidden" name="id" value={m.id} />
               <input type="hidden" name="status" value={handled ? 'NEW' : 'HANDLED'} />
-              <button type="submit" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+              <SubmitButton size="sm" variant="outline" pendingText={handled ? 'Reopening…' : 'Saving…'}>
                 {handled ? 'Reopen' : 'Mark handled'}
-              </button>
+              </SubmitButton>
             </form>,
           ];
         })}
