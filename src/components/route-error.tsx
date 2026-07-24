@@ -26,6 +26,25 @@ export function RouteError({
   useEffect(() => {
     // Surface for logs/monitoring; the digest ties this to the server stack trace.
     console.error(logLabel, error);
+    // A ChunkLoadError almost always means the deployed build changed (new chunk
+    // hashes) while this tab still held the old document — a common symptom right
+    // after a redeploy. Fetching the page fresh pulls the new chunks and recovers,
+    // so reload automatically instead of stranding the user on this screen. Guard
+    // with a timestamp so a genuinely-missing chunk can't loop: we only auto-reload
+    // if we haven't already done so in the last 10s.
+    if (typeof window === 'undefined') return;
+    const isChunkError =
+      error?.name === 'ChunkLoadError' ||
+      /loading chunk [\w-]+ failed|chunkloaderror|importing a module script failed/i.test(
+        error?.message ?? '',
+      );
+    if (!isChunkError) return;
+    const KEY = 'cc-chunk-reload-at';
+    const last = Number(sessionStorage.getItem(KEY) ?? 0);
+    if (Date.now() - last > 10_000) {
+      sessionStorage.setItem(KEY, String(Date.now()));
+      window.location.reload();
+    }
   }, [error, logLabel]);
 
   return (

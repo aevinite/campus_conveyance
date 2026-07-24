@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/auth/password-input';
 import { Label } from '@/components/ui/label';
-import { SelectMenu } from '@/components/ui/select-menu';
 import {
   Card,
   CardContent,
@@ -47,16 +46,31 @@ export default function RegisterPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="role">I am a</Label>
-            <SelectMenu
-              id="role"
-              name="role"
-              defaultValue="STUDENT"
-              options={[
+            {/* Native radios, not the JS SelectMenu: this is the account-type
+                gate, so it must submit the chosen value even if the client bundle
+                is slow to hydrate — a custom widget would otherwise silently
+                submit its default (registering a Parent as a Student). Reliable
+                for keyboard, screen readers and automated tests too. */}
+            <span className="text-sm font-medium">I am a</span>
+            <div role="radiogroup" aria-label="Account type" className="grid grid-cols-2 gap-2">
+              {[
                 { value: 'STUDENT', label: 'Student' },
                 { value: 'PARENT', label: 'Parent' },
-              ]}
-            />
+              ].map((o) => (
+                <label key={o.value} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="role"
+                    value={o.value}
+                    defaultChecked={o.value === 'STUDENT'}
+                    className="peer sr-only"
+                  />
+                  <span className="flex items-center justify-center rounded-lg border border-input px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/40 peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50">
+                    {o.label}
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
           {state.error && (
             <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
