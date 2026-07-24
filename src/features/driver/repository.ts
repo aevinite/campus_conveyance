@@ -40,6 +40,12 @@ export interface DriverBooking {
   college_name: string | null;
   /** Latest journey stage recorded today: BOARDED | REACHED | GOT_OFF | null. */
   current_stage: string | null;
+  /** Route the pickup belongs to — the roster is grouped by it in travel order. */
+  route_id: string | null;
+  /** This rider's pickup-stop position on the route (1-based); drives run-sheet order. */
+  pickup_sequence: number | null;
+  /** Today's status of this pickup stop: NEXT | SKIPPED | null (route_stop_progress). */
+  pickup_status: string | null;
 }
 
 export interface DriverRouteStop {
