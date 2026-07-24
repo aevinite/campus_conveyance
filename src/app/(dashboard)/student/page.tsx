@@ -105,30 +105,21 @@ export default async function StudentHome() {
   return (
     <div className="space-y-8">
       {/* Greeting hero */}
-      <section className="relative overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm sm:p-10">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10"
-          style={{
-            background:
-              'radial-gradient(80% 130% at 100% 0%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 62%)',
-          }}
-        />
-        <div aria-hidden className="pointer-events-none absolute -right-10 -bottom-16 -z-10 opacity-[0.07]">
-          <Bus className="size-64" />
+      <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary shadow-xs">
+            <Sparkles className="size-3.5" />
+            <span className="tnum">{formatWeekdayDate(new Date())}</span>
+          </div>
+          <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
+            Welcome back, <span className="text-gradient">{name}</span>.
+          </h1>
+          <p className="mt-3 max-w-xl text-muted-foreground">
+            Browse your campus, choose a bus or van from a verified agency, and
+            reserve your seat for the daily route to class.
+          </p>
         </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-primary shadow-xs">
-          <Sparkles className="size-3.5" />
-          <span className="tnum">{formatWeekdayDate(new Date())}</span>
-        </div>
-        <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
-          Welcome back, <span className="text-gradient">{name}</span>.
-        </h1>
-        <p className="mt-3 max-w-xl text-muted-foreground">
-          Browse your campus, choose a bus or van from a verified agency, and
-          reserve your seat for the daily route to class.
-        </p>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
           <Link
             href="/student/schools"
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
