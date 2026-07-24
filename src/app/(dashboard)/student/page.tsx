@@ -84,7 +84,7 @@ export default async function StudentHome() {
     listRecentBookings(db, 8),
     myBookingStatusCounts(db),
     institutionKindCounts(db),
-    listFeaturedInstitutions(db, 3),
+    listFeaturedInstitutions(db, 12),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
 
