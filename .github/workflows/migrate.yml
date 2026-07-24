@@ -1,0 +1,42 @@
+name: Apply DB migrations
+
+# Permanently fixes the repo-vs-live drift: whenever a migration is committed to
+# master, run it against the live Supabase DB so the database always matches the
+# repo. Migrations are idempotent, so this is safe to re-run.
+#
+# ONE-TIME SETUP: add two repository secrets (Settings → Secrets and variables →
+# Actions → New repository secret):
+#   • SUPABASE_ACCESS_TOKEN  — a personal access token (starts with sbp_)
+#   • SUPABASE_PROJECT_REF   — the project ref
+# Until both are set the apply step is skipped (the job still passes), so this
+# never blocks anything; it starts applying migrations automatically once they
+# exist. (The Vercel deploy is separate and unaffected either way.)
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'supabase/migrations/**'
+      - 'scripts/migrate.mjs'
+      - '.github/workflows/migrate.yml'
+  workflow_dispatch: {}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # migrate.mjs uses only Node built-ins (fs, path, fetch) — no install needed.
+      # Skipped (job still green) until the two secrets above are configured.
+      - name: Apply migrations to live Supabase
+        if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
+        run: node scripts/migrate.mjs
+      - name: Note if secrets are missing
+        if: env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == ''
+        run: echo "::notice::Add SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF repo secrets to enable automatic migrations."

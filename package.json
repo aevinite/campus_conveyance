@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:provision": "node scripts/provision.mjs"
+    "db:provision": "node scripts/provision.mjs",
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
