@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "npm run clean && next dev",
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",
+    "preview": "npm run clean && next build && next start",
     "lint": "eslint",
     "db:provision": "node scripts/provision.mjs",
     "db:migrate": "node scripts/migrate.mjs"
