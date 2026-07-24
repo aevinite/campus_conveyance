@@ -1007,3 +1007,58 @@ export async function getDriverDetail(id: string): Promise<DriverDetail | null> 
     changes: (chg ?? []) as DriverDetail['changes'],
   };
 }
+
+// ---- Reviews (moderation) -------------------------------------------------
+
+export interface OpsReviewRow {
+  id: string;
+  rating: number;
+  comment: string | null;
+  is_hidden: boolean;
+  created_at: string;
+  agencyName: string;
+  reviewer: string;
+}
+
+/**
+ * All agency reviews (incl. hidden) for the moderation console. Service-role
+ * read; resolves the agency name and the reviewer's name (from the qualifying
+ * booking's student_name) in JS to avoid fragile multi-FK embeds.
+ */
+export async function listReviews(opts: PageOpts = {}): Promise<Paged<OpsReviewRow>> {
+  const client = db();
+  let q = client
+    .from('reviews')
+    .select('id, rating, comment, is_hidden, created_at, agency_id, booking_id', { count: 'exact' })
+    .order('created_at', { ascending: false });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  if (rows.length === 0) return { rows: [], total: count ?? 0 };
+
+  const agencies = await mapByIds<{ id: string; name: string | null }>(
+    client,
+    'agencies',
+    'id, name',
+    rows.map((r) => r.agency_id as string),
+  );
+  const bookings = await mapByIds<{ id: string; student_name: string | null }>(
+    client,
+    'bookings',
+    'id, student_name',
+    rows.map((r) => r.booking_id as string | null),
+  );
+  return {
+    rows: rows.map((r) => ({
+      id: r.id as string,
+      rating: r.rating as number,
+      comment: (r.comment as string) ?? null,
+      is_hidden: !!r.is_hidden,
+      created_at: r.created_at as string,
+      agencyName: agencies.get(r.agency_id as string)?.name ?? '—',
+      reviewer: (r.booking_id ? bookings.get(r.booking_id as string)?.student_name : null) ?? 'Rider',
+    })),
+    total: count ?? 0,
+  };
+}

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getAgencyRatings } from '@/features/reviews/repository';
 
 export type Kind = 'SCHOOL' | 'COLLEGE';
 export type VehicleType = 'BUS' | 'VAN';
@@ -130,6 +131,9 @@ export interface CampusRoute {
   name: string;
   vehicleType: VehicleType;
   agencyName: string | null;
+  /** Aggregate agency rating (0 if none yet) + how many reviews it's based on. */
+  agencyRating: number;
+  agencyReviewCount: number;
   busNumber: string | null;
   isAc: boolean | null;
   departureTime: string | null;
@@ -172,18 +176,45 @@ export async function listInstitutionRoutes(
     departure_time: string | null; price_cents: number | null;
     total: number | null; available: number | null;
   };
-  return ((data ?? []) as Row[]).map((r) => ({
-    id: r.id,
-    name: r.name,
-    vehicleType: (r.vehicle_type as VehicleType) ?? 'BUS',
-    agencyName: r.agency_name ?? null,
-    busNumber: r.bus_number ?? null,
-    isAc: r.is_ac ?? null,
-    departureTime: r.departure_time ?? null,
-    price_cents: r.price_cents ?? null,
-    total: r.total ?? 0,
-    available: r.available ?? 0,
-  }));
+  const rows = (data ?? []) as Row[];
+
+  // The RPC returns agency_name but not id/rating, so look up the aggregate
+  // rating for this page's routes in one extra round-trip (routes + agencies are
+  // both world-readable to signed-in users). Keeps the marketplace RPC untouched.
+  const ratingByRoute = new Map<string, { avg: number; count: number }>();
+  if (rows.length > 0) {
+    const { data: routeAgencies } = await db
+      .from('routes')
+      .select('id, agency_id')
+      .in('id', rows.map((r) => r.id));
+    const agencyByRoute = new Map<string, string>();
+    for (const ra of routeAgencies ?? []) {
+      if (ra.agency_id) agencyByRoute.set(ra.id as string, ra.agency_id as string);
+    }
+    const ratings = await getAgencyRatings(db, [...agencyByRoute.values()]);
+    for (const [routeId, agencyId] of agencyByRoute) {
+      const r = ratings.get(agencyId);
+      if (r) ratingByRoute.set(routeId, r);
+    }
+  }
+
+  return rows.map((r) => {
+    const rating = ratingByRoute.get(r.id);
+    return {
+      id: r.id,
+      name: r.name,
+      vehicleType: (r.vehicle_type as VehicleType) ?? 'BUS',
+      agencyName: r.agency_name ?? null,
+      agencyRating: rating?.avg ?? 0,
+      agencyReviewCount: rating?.count ?? 0,
+      busNumber: r.bus_number ?? null,
+      isAc: r.is_ac ?? null,
+      departureTime: r.departure_time ?? null,
+      price_cents: r.price_cents ?? null,
+      total: r.total ?? 0,
+      available: r.available ?? 0,
+    };
+  });
 }
 
 /** Total routes serving a campus matching the same search/type filters — the

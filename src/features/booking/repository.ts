@@ -81,6 +81,9 @@ export interface BookingRow {
   driver_name: string | null;
   driver_phone: string | null;
   driver_changed: boolean;
+  /** The agency operating this route — for the "rate this agency" widget. */
+  agencyId: string | null;
+  agencyName: string | null;
 }
 
 /**
@@ -310,7 +313,7 @@ export async function listMyBookings(
   let q = db
     .from('bookings')
     .select(
-      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, vehicles(id, bus_number, driver_name, driver_phone))',
+      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, agency_id, agencies(name), vehicles(id, bus_number, driver_name, driver_phone))',
     )
     // Cancelled bookings are hidden from the student panel entirely
     // (user decision 2026-07-18) — whatever the cancel reason.
@@ -324,9 +327,12 @@ export async function listMyBookings(
   if (error) throw error;
 
   type VehRef = { id: string; bus_number: string | null; driver_name: string | null; driver_phone: string | null };
+  type AgencyRef = { name: string | null };
   type RouteRef = {
     id: string; name: string; price_cents: number | null;
     price_monthly_cents: number | null; price_semester_cents: number | null; price_yearly_cents: number | null;
+    agency_id: string | null;
+    agencies: AgencyRef | AgencyRef[] | null;
     vehicles: VehRef | VehRef[] | null;
   };
 
@@ -335,6 +341,8 @@ export async function listMyBookings(
     const route = Array.isArray(routes) ? routes[0] : routes;
     const veh = route?.vehicles as VehRef | VehRef[] | null | undefined;
     const vehicle = (Array.isArray(veh) ? veh[0] : veh) ?? null;
+    const ag = route?.agencies as AgencyRef | AgencyRef[] | null | undefined;
+    const agency = (Array.isArray(ag) ? ag[0] : ag) ?? null;
     const period = ((b.billing_period as string) ?? null) as BillingPeriod | null;
     // Show what the student actually committed to: the price of their chosen plan,
     // falling back to the legacy flat fare for older bookings.
@@ -356,6 +364,8 @@ export async function listMyBookings(
       driver_name: vehicle?.driver_name ?? null,
       driver_phone: vehicle?.driver_phone ?? null,
       driver_changed: false,
+      agencyId: route?.agency_id ?? null,
+      agencyName: agency?.name ?? null,
     };
   });
 

@@ -12,6 +12,7 @@ const ITEMS: SidebarItem[] = [
   { label: 'Deleted Students', href: '/agency/deleted-students', icon: 'UserMinus' },
   { label: 'Manage Booking', href: '/agency/bookings', icon: 'ClipboardList' },
   { label: 'View Booking', href: '/agency/view-bookings', icon: 'Eye' },
+  { label: 'Reviews', href: '/agency/reviews', icon: 'Star' },
   { label: 'Add Bus', href: '/agency/add-bus', icon: 'Bus' },
   { label: 'Manage Buses', href: '/agency/buses', icon: 'BusFront' },
   { label: 'Add Route', href: '/agency/add-route', icon: 'MapPlus' },

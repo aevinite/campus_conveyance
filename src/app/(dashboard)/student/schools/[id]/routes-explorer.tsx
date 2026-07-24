@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Search, ArrowRight, ArrowLeft, Bus, Truck, Clock, IdCard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { StarRating } from '@/components/ui/star-rating';
 import type { CampusRoute, VehicleType } from '@/features/catalog/repository';
 
 type Filter = 'ALL' | VehicleType;
@@ -163,6 +164,9 @@ export function RoutesExplorer({
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
                     {r.agencyName && <span>{r.agencyName}</span>}
+                    {r.agencyReviewCount > 0 && (
+                      <StarRating value={r.agencyRating} count={r.agencyReviewCount} size={13} />
+                    )}
                     {r.busNumber && (
                       <span className="inline-flex items-center gap-1">
                         <IdCard className="size-3.5" /> Bus {r.busNumber}

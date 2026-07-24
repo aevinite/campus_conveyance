@@ -7,6 +7,8 @@ import { listMyBookings, countMyBookings, type BookingRow } from '@/features/boo
 import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
+import { AgencyReviewWidget } from './agency-review-widget';
+import { getMyReviews } from '@/features/reviews/repository';
 import { formatTime } from '@/lib/format-date';
 import { periodSuffix } from '@/lib/billing';
 
@@ -152,9 +154,10 @@ export default async function BookingsPage({
   // Lapsed holds are swept by the pg_cron 'expire-stale-holds' job (migration
   // 0052), not per request, so this page no longer issues a table UPDATE on load.
   // Paginated so the timeline doesn't fetch the student's entire history at once.
-  const [bookings, total] = await Promise.all([
+  const [bookings, total, myReviews] = await Promise.all([
     listMyBookings(db, { limit: PAGE_SIZE, offset }),
     countMyBookings(db),
+    getMyReviews(db),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (total > 0 && page > totalPages) redirect(`/student/bookings?page=${totalPages}`);
@@ -271,6 +274,15 @@ export default async function BookingsPage({
                     >
                       <AlertTriangle className="size-4" /> Pay now to confirm your seat
                     </Link>
+                  )}
+
+                  {/* Only a real rider (confirmed booking) can rate the agency. */}
+                  {b.status === 'CONFIRMED' && b.agencyId && b.agencyName && (
+                    <AgencyReviewWidget
+                      agencyId={b.agencyId}
+                      agencyName={b.agencyName}
+                      existing={myReviews.get(b.agencyId) ?? null}
+                    />
                   )}
                 </CardContent>
               </Card>

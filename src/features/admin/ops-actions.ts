@@ -39,3 +39,34 @@ export async function setContactStatusAction(formData: FormData): Promise<void> 
   }
   revalidatePath('/aevinite/inquiries');
 }
+
+// Review moderation: hide (or restore) an abusive agency review. Hiding drops it
+// from public browsing + the agency's list and excludes it from the aggregate
+// (the reviews_recount trigger recomputes on the is_hidden UPDATE).
+export async function setReviewHiddenAction(formData: FormData): Promise<void> {
+  const db = await createClient();
+  const role = await getSessionRole(db);
+  if (role !== 'SUPER_ADMIN') return;
+
+  const id = String(formData.get('id') ?? '');
+  const hide = String(formData.get('hide') ?? '') === 'true';
+  if (!UUID_RE.test(id)) return;
+
+  const admin = createAdminClient();
+  const { error } = await admin.from('reviews').update({ is_hidden: hide }).eq('id', id);
+  if (error) throw error;
+
+  try {
+    const { data } = await db.auth.getClaims();
+    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    await db.from('audit_logs').insert({
+      actor_id: actorId,
+      action: hide ? 'REVIEW_HIDDEN' : 'REVIEW_RESTORED',
+      entity: 'reviews',
+      entity_id: id,
+    });
+  } catch {
+    /* logging is best-effort */
+  }
+  revalidatePath('/aevinite/reviews');
+}

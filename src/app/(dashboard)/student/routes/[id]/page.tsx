@@ -10,6 +10,9 @@ import {
   getMyActiveBooking,
 } from '@/features/booking/repository';
 import { getStudentDetails } from '@/features/booking/services';
+import { getRouteAgencyReviews } from '@/features/reviews/repository';
+import { StarRating } from '@/components/ui/star-rating';
+import { formatCompactDateTime } from '@/lib/format-date';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { BookingSteps } from '../../booking-steps';
 import { ReserveForm } from './reserve-form';
@@ -49,11 +52,12 @@ export default async function RouteDetailPage({
   // single active booking (one bus at a time — on this route it resumes/reports,
   // on another it locks booking here). All key only off id/the caller, so fetch
   // together rather than in two sequential batches.
-  const [data, details, availability, currentBooking] = await Promise.all([
+  const [data, details, availability, currentBooking, agencyReviews] = await Promise.all([
     getRouteWithStops(db, id),
     getStudentDetails(db),
     getAvailability(db, id),
     getMyActiveBooking(db),
+    getRouteAgencyReviews(db, id),
   ]);
   if (!data) notFound();
 
@@ -365,6 +369,41 @@ export default async function RouteDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Agency rating & recent reviews — helps the student choose. */}
+      {agencyReviews && (agencyReviews.rating.count > 0 || agencyReviews.reviews.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Ratings for {agencyReviews.agencyName}
+            </CardTitle>
+            <div className="flex items-center gap-2 pt-1">
+              <StarRating value={agencyReviews.rating.avg} size={16} />
+              <span className="text-sm text-muted-foreground">
+                {agencyReviews.rating.avg.toFixed(1)} · {agencyReviews.rating.count} review
+                {agencyReviews.rating.count === 1 ? '' : 's'}
+              </span>
+            </div>
+          </CardHeader>
+          {agencyReviews.reviews.length > 0 && (
+            <CardContent className="space-y-3">
+              {agencyReviews.reviews.map((rv) => (
+                <div key={rv.id} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <StarRating value={rv.rating} size={14} />
+                    <span className="text-xs text-muted-foreground">
+                      {formatCompactDateTime(rv.created_at)}
+                    </span>
+                  </div>
+                  {rv.comment && (
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{rv.comment}</p>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
         </div>
 
         {/* Right: reserve panel (sticky on desktop) */}

@@ -12,6 +12,7 @@ const ITEMS: SidebarItem[] = [
   { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },
   { label: 'Notifications', href: '/aevinite/notifications', icon: 'Bell' },
   { label: 'Contact Inquiries', href: '/aevinite/inquiries', icon: 'Mail' },
+  { label: 'Agency Reviews', href: '/aevinite/reviews', icon: 'Star' },
   // Marketplace governance.
   { label: 'Service Provider Requests', href: '/aevinite/requests', icon: 'Inbox' },
   { label: 'Service Area Requests', href: '/aevinite/service-requests', icon: 'ClipboardList' },

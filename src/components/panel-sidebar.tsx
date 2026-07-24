@@ -34,6 +34,7 @@ import {
   Settings,
   History,
   Trash2,
+  Star,
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -69,6 +70,7 @@ const ICONS = {
   Settings,
   History,
   Trash2,
+  Star,
 } as const;
 
 export type SidebarIcon = keyof typeof ICONS;
