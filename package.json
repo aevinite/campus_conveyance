@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "free-port": "node scripts/free-port.mjs",
     "dev": "next dev",
-    "dev:clean": "npm run clean && next dev",
+    "dev:clean": "npm run free-port && npm run clean && next dev",
     "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",
-    "preview": "npm run clean && next build && next start",
+    "start:clean": "npm run free-port && next start",
+    "restart": "npm run free-port && npm run clean && next build && next start",
+    "preview": "npm run free-port && npm run clean && next build && next start",
     "lint": "eslint",
     "db:provision": "node scripts/provision.mjs",
     "db:migrate": "node scripts/migrate.mjs"
