@@ -36,6 +36,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#f4a521",
+  // Draw into the display cutout / status-bar area (the native app is
+  // edge-to-edge). This is what makes `env(safe-area-inset-*)` resolve to the
+  // real device insets so UI can be padded clear of the status bar and gesture
+  // bar. In a normal browser the insets are 0, so nothing changes there.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

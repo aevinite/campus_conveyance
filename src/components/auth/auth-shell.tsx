@@ -14,8 +14,11 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-95" />
       <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(80%_60%_at_50%_0%,black,transparent)]" />
-      {/* Theme switch pinned to the top-right corner of the screen. */}
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
+      {/* Theme switch pinned to the top-right corner. `top` includes the
+          device's safe-area inset so it always sits BELOW the status bar
+          (clock/battery) on the native app — and stays put in a browser where
+          the inset is 0. Responsive across notches, punch-holes and pill bars. */}
+      <div className="absolute right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-20 sm:right-6">
         <ThemeToggle />
       </div>
       {/* One centered column: logo on top, the page's card below it. Each page's

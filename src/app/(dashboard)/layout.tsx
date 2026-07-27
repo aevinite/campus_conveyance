@@ -44,7 +44,11 @@ export default async function DashboardLayout({
   const showBottomNav = app && (role === 'STUDENT' || role === 'PARENT');
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="dark sticky top-0 z-20 border-b border-sidebar-border bg-sidebar/95 text-sidebar-foreground backdrop-blur-xl">
+      <header
+        className="dark sticky top-0 z-20 border-b border-sidebar-border bg-sidebar/95 text-sidebar-foreground backdrop-blur-xl"
+        // Clear the native app's status bar (edge-to-edge). 0 in a browser.
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           {/* Home link points at the viewer's own dashboard (student/parent/
               institution), not a hardcoded /student that bounces other roles. */}
