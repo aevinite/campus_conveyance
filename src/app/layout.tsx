@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { NativeAuthListener } from "@/components/auth/native-auth-listener";
+import { AppSplash } from "@/components/app-splash";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -56,6 +57,7 @@ export default function RootLayout({
       className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <AppSplash />
         <ServiceWorkerRegister />
         <NativeAuthListener />
         <Providers>{children}</Providers>
