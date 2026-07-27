@@ -8,6 +8,8 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notification-bell';
 import { PushToggle } from '@/components/push-toggle';
+import { AppBottomNav } from '@/components/app-bottom-nav';
+import { isAppRequest } from '@/lib/app-context';
 import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
 
 export default async function DashboardLayout({
@@ -36,6 +38,10 @@ export default async function DashboardLayout({
     listNotifications(db),
     unreadNotificationCount(db),
   ]);
+  // Inside the native app, give the user/parent area a bottom tab bar (native
+  // app feel). Only STUDENT/PARENT reach this layout with a tab set.
+  const app = await isAppRequest();
+  const showBottomNav = app && (role === 'STUDENT' || role === 'PARENT');
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="dark sticky top-0 z-20 border-b border-sidebar-border bg-sidebar/95 text-sidebar-foreground backdrop-blur-xl">
@@ -51,7 +57,10 @@ export default async function DashboardLayout({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">{children}</main>
+      <main className={`mx-auto max-w-6xl p-4 sm:p-6 lg:p-8${showBottomNav ? ' pb-28' : ''}`}>
+        {children}
+      </main>
+      {showBottomNav && <AppBottomNav role={role as 'STUDENT' | 'PARENT'} />}
     </div>
   );
 }

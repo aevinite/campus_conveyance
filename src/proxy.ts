@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 import { isMaintenanceOn } from '@/lib/maintenance';
+import { dashboardFor } from '@/lib/rbac/roles';
+
+// Kept in sync with APP_UA_MARKER in '@/lib/app-context'. Inlined here rather
+// than imported because that module pulls in next/headers, which is not
+// available in the middleware/proxy runtime.
+const APP_UA_MARKER = 'CampusConveyanceApp';
 
 const PUBLIC = [
   '/', '/login', '/register', '/verify', '/forgot', '/reset', '/auth',
@@ -23,6 +29,14 @@ export async function proxy(request: NextRequest) {
   const { response, user, role } = await updateSession(request);
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+
+  // Inside the native app we skip the public marketing landing entirely: opening
+  // the app should go straight to the login chooser (or the viewer's dashboard
+  // if already signed in). In a browser, '/' still shows the full landing page.
+  const isApp = (request.headers.get('user-agent') ?? '').includes(APP_UA_MARKER);
+  if (isApp && path === '/') {
+    return NextResponse.redirect(new URL(user ? dashboardFor(role) : '/login', request.url));
+  }
 
   // Maintenance mode: block everyone except the admin (who needs the panel to
   // turn it back off). The admin area and the maintenance page stay reachable.
