@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles, History, ArrowRight } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { getSessionClaims } from '@/features/auth/session';
 import { listChildren, listChildrenBookings } from '@/features/parent/repository';
 import RouteStopsMap, {
@@ -32,10 +33,11 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function ParentDashboard() {
   await requireRole('PARENT');
   const db = await createClient();
-  const [{ fullName }, children, bookings] = await Promise.all([
+  const [{ fullName }, children, bookings, app] = await Promise.all([
     getSessionClaims(db),
     listChildren(db),
     listChildrenBookings(db),
+    isAppRequest(),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
 
@@ -84,6 +86,170 @@ export default async function ParentDashboard() {
       list.push({ name: s.name, lat: s.lat, lng: s.lng, description: s.description, address: s.address });
       stopsByRoute.set(s.route_id, list);
     }
+  }
+
+  // Native app: a compact, action-first parent hub (no marketing hero).
+  if (app) {
+    return (
+      <div className="space-y-7 pb-2">
+        {/* Greeting */}
+        <section>
+          <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+            <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+            Parent
+          </div>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+            Hi <span className="text-gradient">{name}</span> 👋
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {children.length === 0
+              ? 'Link a child to follow their daily commute.'
+              : `Following ${children.length} ${children.length === 1 ? 'child' : 'children'}.`}
+          </p>
+        </section>
+
+        <LinkChildForm />
+
+        {/* Track their bus — one live map per active route, full width. */}
+        {trackable.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <MapPin className="size-5 text-primary" /> Track their bus
+            </h2>
+            <div className="space-y-4">
+              {[...trackableRoutes.values()].map((g) => (
+                <div
+                  key={g.route_id}
+                  className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{g.students.join(', ')}</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {[g.route_name, g.institution_name].filter(Boolean).join(' → ')}
+                      </p>
+                    </div>
+                    {g.bus_number && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        <Bus className="size-3.5" /> Bus {g.bus_number}
+                      </span>
+                    )}
+                  </div>
+                  <RouteStopsMap stops={stopsByRoute.get(g.route_id) ?? []} liveRouteId={g.route_id} />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Children */}
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold">Your children</h2>
+          {children.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No children linked yet — enter the 6-digit code from your child&apos;s
+              student profile above.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {children.map((c) => (
+                <div key={c.student_id} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                        <GraduationCap className="size-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{c.full_name ?? 'Student'}</p>
+                        <p className="truncate text-sm text-muted-foreground">{c.email}</p>
+                        {(c.grade || c.phone) && (
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                            {c.grade && <span>Class {c.grade}</span>}
+                            {c.phone && (
+                              <span className="inline-flex items-center gap-1">
+                                <Phone className="size-3" /> {c.phone}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <UnlinkChildButton studentId={c.student_id} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Bookings */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold">Their bookings</h2>
+            <Link
+              href="/parent/history"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-primary"
+            >
+              <History className="size-4" /> History <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          {bookings.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-10 text-center">
+              <span className="grid size-11 place-items-center rounded-full bg-secondary text-muted-foreground">
+                <Ticket className="size-5" />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                {children.length === 0
+                  ? 'Bookings will appear here once you link a child.'
+                  : 'No bookings yet — they appear as soon as your child reserves a seat.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bookings.map((b) => (
+                <div key={b.booking_id} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+                  <p className="flex flex-wrap items-center gap-x-2 font-medium">
+                    <span className="truncate">{b.route_name ?? 'Route'}</span>
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                        STATUS_PILL[b.status] ?? STATUS_PILL.PENDING
+                      }`}
+                    >
+                      {STATUS_LABEL[b.status] ?? b.status}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {[
+                      b.student_name,
+                      b.institution_name,
+                      b.pickup_name && `Pickup: ${b.pickup_name}`,
+                      `Booked ${formatShortDate(b.created_at)}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  {(b.bus_number || b.driver_name) && (
+                    <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+                      {b.bus_number && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Bus className="size-3.5" /> Bus {b.bus_number}
+                        </span>
+                      )}
+                      {b.driver_name && <span>Driver: {b.driver_name}</span>}
+                      {b.driver_changed && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                          Driver changed today
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
   }
 
   return (

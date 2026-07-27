@@ -401,6 +401,7 @@ export interface RecentBooking {
   status: string;
   routeName: string;
   created_at: string;
+  route_id: string | null;
 }
 export async function listRecentBookings(
   db: SupabaseClient,
@@ -408,7 +409,7 @@ export async function listRecentBookings(
 ): Promise<RecentBooking[]> {
   const { data, error } = await db
     .from('bookings')
-    .select('id, status, created_at, routes(name)')
+    .select('id, status, created_at, route_id, routes(name)')
     // "Recent trips" shows only rides that exist or may happen — never
     // cancelled or rejected ones.
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
@@ -422,6 +423,7 @@ export async function listRecentBookings(
       id: b.id as string,
       status: b.status as string,
       created_at: b.created_at as string,
+      route_id: (b.route_id as string | null) ?? null,
       routeName: route?.name ?? 'Route',
     };
   });

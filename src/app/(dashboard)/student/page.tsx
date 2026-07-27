@@ -18,6 +18,7 @@ import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/re
 import { listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { AppStudentHome } from '@/components/app-student-home';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
 
 const STATUS_META: Record<
@@ -101,6 +102,34 @@ export default async function StudentHome() {
     .map((s) => ({ status: s, count: statusCounts[s] ?? 0 }))
     .filter((x) => x.count > 0);
   const totalBookings = breakdown.reduce((a, b) => a + b.count, 0);
+
+  // Native app gets a compact, action-first home hub; the website keeps the
+  // full dashboard below.
+  if (app) {
+    return (
+      <AppStudentHome
+        name={name}
+        dateLabel={formatWeekdayDate(new Date())}
+        active={
+          nextTrip
+            ? {
+                routeName: nextTrip.routeName,
+                status: nextTrip.status,
+                created_at: nextTrip.created_at,
+                route_id: nextTrip.route_id,
+              }
+            : null
+        }
+        campuses={featured.map((i) => ({
+          id: i.id,
+          name: i.name,
+          kind: i.kind,
+          image_url: i.image_url,
+          is_verified: i.is_verified,
+        }))}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
