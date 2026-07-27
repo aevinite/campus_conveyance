@@ -1,6 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { registerSchema, loginSchema, forgotSchema, resetSchema, changePasswordSchema, profileSchema } from './schemas';
@@ -190,10 +191,19 @@ export async function forgotAction(
 
 export async function googleLoginAction() {
   const db = await createClient();
-  const site = process.env.NEXT_PUBLIC_SITE_URL!;
+  // Build the callback origin from the ACTUAL request rather than a build-time
+  // env var, so the OAuth round-trip returns to wherever the app is really being
+  // used (localhost in dev, the Vercel URL from the website AND the native app —
+  // both are on Supabase's redirect allow-list). Relying on NEXT_PUBLIC_SITE_URL
+  // sent everyone to whatever that was baked to (localhost), which is why Google
+  // sign-in "went somewhere else".
+  const h = await headers();
+  const proto = h.get('x-forwarded-proto') ?? 'https';
+  const host = h.get('x-forwarded-host') ?? h.get('host');
+  const origin = host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_SITE_URL!;
   const { data, error } = await db.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${site}/auth/callback` },
+    options: { redirectTo: `${origin}/auth/callback` },
   });
   if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
   if (data?.url) redirect(data.url);

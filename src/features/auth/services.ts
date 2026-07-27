@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LoginInput } from './schemas';
 import { getSessionClaims } from './session';
@@ -36,7 +37,10 @@ export async function signInAndRoute(db: SupabaseClient, input: LoginInput): Pro
   } catch (e) {
     return toErrorResponse(e).message; // attempt already counted atomically
   }
-  await clearLoginFailures(subject); // successful login resets the counter
+  // Resetting the failed-attempt counter is bookkeeping, not a gate — run it
+  // AFTER the response is sent so it doesn't add a Supabase round-trip to the
+  // time the user waits before the redirect. (after() still runs on redirect.)
+  after(() => clearLoginFailures(subject));
   const { userId, role } = await getSessionClaims(db);
   if (userId && (await isAccountDeactivated(db, userId, role))) {
     await db.auth.signOut();
