@@ -1,46 +1,28 @@
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { buttonVariants } from '@/components/ui/button';
 
 /**
  * Shared backdrop for every auth portal (student, agency, driver, admin) so the
  * sign-in surfaces are visually identical: a premium dark "ink" canvas with a
- * warm yellow aurora glow, a masked grid, a centered brand mark and a theme
- * toggle. A "Back" button sits in the very top-left corner so it's always easy
- * to leave any login / forgot-password screen and return to the home page.
+ * warm yellow aurora glow and a masked grid. The brand mark is centered ABOVE
+ * the sign-in surface (and, on the app's User / Agency chooser, above that
+ * toggle), and the light/dark theme switch sits BELOW the card — there is no top
+ * navbar and no "Back" button, so the whole screen reads as one centered stack.
  */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="dark relative flex min-h-screen flex-col overflow-x-hidden bg-background text-foreground">
       <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-95" />
       <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-30 [mask-image:radial-gradient(80%_60%_at_50%_0%,black,transparent)]" />
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-6">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            href="/"
-            aria-label="Back to home"
-            className={buttonVariants({
-              variant: 'ghost',
-              size: 'sm',
-              className: 'gap-1.5 text-muted-foreground hover:text-foreground',
-            })}
-          >
-            <ArrowLeft className="size-4" />
-            Back
-          </Link>
-          <Logo />
-        </div>
-        <ThemeToggle />
-      </div>
-      {/* Each page's Card sets its own max width (e.g. max-w-sm for login,
-          max-w-4xl for the wide agency application). `my-auto` centers a short
-          card vertically, but a form taller than the viewport falls back to the
-          top padding (clearing the header) and the page scrolls — so nothing is
-          ever pushed up underneath the header. */}
-      <div className="my-auto flex w-full justify-center px-4 pt-28 pb-12 sm:pt-32">
+      {/* One centered column: logo on top, the page's card in the middle, the
+          theme toggle underneath. Each page's Card sets its own max width (e.g.
+          max-w-sm for login, max-w-4xl for the wide agency application).
+          `my-auto` centers a short stack vertically; a stack taller than the
+          viewport falls back to the top/bottom padding and the page scrolls. */}
+      <div className="my-auto flex w-full flex-col items-center gap-6 px-4 py-12">
+        <Logo className="justify-center" />
         {children}
+        <ThemeToggle />
       </div>
     </div>
   );

@@ -40,7 +40,10 @@ export async function proxy(request: NextRequest) {
 
   // Maintenance mode: block everyone except the admin (who needs the panel to
   // turn it back off). The admin area and the maintenance page stay reachable.
-  if (role !== 'SUPER_ADMIN' && (await isMaintenanceOn())) {
+  // The Website and App switches are independent: the native app is recognised
+  // by its User-Agent marker (see isApp above), so we gate only that audience.
+  const clientKind = isApp ? 'app' : 'website';
+  if (role !== 'SUPER_ADMIN' && (await isMaintenanceOn(clientKind))) {
     const allowed =
       path === '/maintenance' ||
       path === '/aevinite/login' ||
