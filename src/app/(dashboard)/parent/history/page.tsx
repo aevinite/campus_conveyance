@@ -16,7 +16,7 @@ export default async function ParentHistoryPage() {
         </p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Trip History</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every confirmed ride for your linked children, with receipts and boarding timelines.
+          Every ride your linked children have taken — with the date and time they boarded, newest first.
         </p>
       </div>
       <RideHistory rows={rows} />

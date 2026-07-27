@@ -14,7 +14,7 @@ export default async function StudentHistoryPage() {
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">Your rides</p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Trip History</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every confirmed ride with its receipt and boarding timeline.
+          Every ride you&apos;ve taken — the date and time you boarded the bus, newest first.
         </p>
       </div>
       <RideHistory rows={rows} />

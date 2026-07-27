@@ -1,29 +1,13 @@
-import { Bus, MapPin, Receipt, LogIn, Flag, LogOut, Clock3, Ticket } from 'lucide-react';
+import { Bus, MapPin, Flag, LogOut, LogIn, Ticket } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { periodSuffix } from '@/lib/billing';
-import { formatCompactDateTime, formatShortDate } from '@/lib/format-date';
+import { formatDateMedium, formatTime } from '@/lib/format-date';
 import type { RideHistoryRow } from '@/features/history/repository';
 
-const inr = (cents: number | null) =>
-  cents == null || cents === 0
-    ? null
-    : `₹${Math.round(cents / 100).toLocaleString('en-IN')}`;
-
-const STAGE: Record<string, { label: string; Icon: typeof LogIn; cls: string }> = {
-  BOARDED: { label: 'Boarded the bus', Icon: LogIn, cls: 'text-primary' },
-  REACHED: { label: 'Reached campus', Icon: Flag, cls: 'text-success' },
-  GOT_OFF: { label: 'Got off', Icon: LogOut, cls: 'text-muted-foreground' },
-};
-
-const STATUS_PILL: Record<string, string> = {
-  CONFIRMED: 'border-success/30 bg-success/10 text-success',
-  CANCELLED: 'border-border bg-muted text-muted-foreground',
-};
-
 /**
- * Family-facing trip history: one card per booking with its receipt (route, bus,
- * pickup, fare, paid date, reference) and the ride-event timeline. Shared by the
- * student and parent history pages. Purely presentational (server component).
+ * Family-facing trip history: one card per ride the student actually took —
+ * anchored on the date + time the driver marked them boarded — newest first.
+ * Cancelled / never-ridden bookings never appear (filtered in SQL). Shared by
+ * the student and parent history pages. Purely presentational (server component).
  */
 export function RideHistory({ rows }: { rows: RideHistoryRow[] }) {
   if (rows.length === 0) {
@@ -34,8 +18,8 @@ export function RideHistory({ rows }: { rows: RideHistoryRow[] }) {
         </span>
         <p className="font-semibold">No rides yet</p>
         <p className="max-w-xs text-sm text-muted-foreground">
-          Once a booking is confirmed and the ride happens, it&apos;ll show up here with a receipt
-          and the boarding timeline.
+          Once you board a bus and the driver marks you boarded, that ride shows
+          up here with its date and time.
         </p>
       </div>
     );
@@ -43,91 +27,69 @@ export function RideHistory({ rows }: { rows: RideHistoryRow[] }) {
 
   return (
     <div className="space-y-4">
-      {rows.map((b) => {
-        const fare = inr(b.price_cents);
-        const events = b.events.slice(0, 8);
-        return (
-          <Card key={b.booking_id}>
-            <CardContent className="space-y-4 py-5">
-              {/* Header: route + status */}
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold">
-                    {b.route_name ?? 'Route'}
-                    {b.college_name ? (
-                      <span className="text-muted-foreground"> → {b.college_name}</span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {[b.student_name, b.agency_name].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                    STATUS_PILL[b.status] ?? 'border-border bg-muted text-muted-foreground'
-                  }`}
-                >
-                  {b.status === 'CONFIRMED' ? 'Confirmed' : 'Cancelled'}
-                </span>
-              </div>
-
-              {/* Receipt */}
-              <div className="grid gap-x-6 gap-y-1.5 rounded-xl bg-muted/30 p-3 text-sm sm:grid-cols-2">
-                {b.bus_number && (
-                  <p className="flex items-center gap-1.5 text-muted-foreground">
-                    <Bus className="size-3.5 shrink-0" /> Bus {b.bus_number}
-                  </p>
-                )}
-                {b.pickup_name && (
-                  <p className="flex items-center gap-1.5 text-muted-foreground">
-                    <MapPin className="size-3.5 shrink-0" /> {b.pickup_name}
-                  </p>
-                )}
-                {fare && (
-                  <p className="flex items-center gap-1.5 text-muted-foreground">
-                    <Receipt className="size-3.5 shrink-0" />
-                    <span className="tnum font-medium text-foreground">
-                      {fare}
-                      {periodSuffix(b.billing_period)}
-                    </span>
-                    {b.paid_at && <span>· paid {formatShortDate(b.paid_at)}</span>}
-                  </p>
-                )}
-                <p className="flex items-center gap-1.5 text-muted-foreground">
-                  <Ticket className="size-3.5 shrink-0" />
-                  Ref {b.booking_id.slice(0, 8).toUpperCase()}
+      {rows.map((t) => (
+        <Card key={t.ride_id}>
+          <CardContent className="space-y-3 py-5">
+            {/* Boarding date + time — the anchor of the trip. */}
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <LogIn className="size-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold tnum">{formatDateMedium(t.boarded_at)}</p>
+                <p className="text-sm text-muted-foreground">
+                  Boarded at <span className="tnum font-medium text-foreground">{formatTime(t.boarded_at)}</span>
                 </p>
               </div>
+            </div>
 
-              {/* Ride-event timeline */}
-              {events.length > 0 ? (
-                <ol className="space-y-2 text-sm">
-                  {events.map((e, i) => {
-                    const s = STAGE[e.stage] ?? {
-                      label: e.stage,
-                      Icon: Clock3,
-                      cls: 'text-muted-foreground',
-                    };
-                    return (
-                      <li key={i} className="flex items-center gap-2.5">
-                        <s.Icon className={`size-4 shrink-0 ${s.cls}`} />
-                        <span className="font-medium">{s.label}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {formatCompactDateTime(e.at)}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No boarding activity recorded for this ride yet.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+            {/* Route → college */}
+            <p className="text-sm font-medium">
+              {t.route_name ?? 'Route'}
+              {t.college_name ? <span className="text-muted-foreground"> → {t.college_name}</span> : null}
+            </p>
+            {(t.student_name || t.agency_name) && (
+              <p className="-mt-2 text-xs text-muted-foreground">
+                {[t.student_name, t.agency_name].filter(Boolean).join(' · ')}
+              </p>
+            )}
+
+            {/* Bus + pickup */}
+            {(t.bus_number || t.pickup_name) && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {t.bus_number && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Bus className="size-3.5 shrink-0" /> Bus {t.bus_number}
+                  </span>
+                )}
+                {t.pickup_name && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="size-3.5 shrink-0" /> {t.pickup_name}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* That day's reached / got-off times (if the driver recorded them). */}
+            {(t.reached_at || t.got_off_at) && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-sm">
+                {t.reached_at && (
+                  <span className="inline-flex items-center gap-1.5 text-success">
+                    <Flag className="size-3.5 shrink-0" /> Reached{' '}
+                    <span className="tnum font-medium">{formatTime(t.reached_at)}</span>
+                  </span>
+                )}
+                {t.got_off_at && (
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <LogOut className="size-3.5 shrink-0" /> Got off{' '}
+                    <span className="tnum font-medium">{formatTime(t.got_off_at)}</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
