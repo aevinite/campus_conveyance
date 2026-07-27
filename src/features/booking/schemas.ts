@@ -10,7 +10,17 @@ export const reserveSchema = z.object({
   // for legacy clients — reserve_seat falls back to the route's primary plan.
   billingPeriod: z.enum(['MONTHLY', 'SEMESTER', 'YEARLY']).optional(),
 });
-export const cancelSchema = z.object({ bookingId: z.string().uuid() });
+export const cancelSchema = z.object({
+  bookingId: z.string().uuid(),
+  // Why the student is cancelling / leaving the agency.
+  reason: z.string().trim().max(600).optional(),
+  // Where to send a refund (only collected for a paid booking).
+  refundMethod: z.enum(['UPI', 'BANK']).optional(),
+  upiId: z.string().trim().max(120).optional(),
+  accountName: z.string().trim().max(120).optional(),
+  accountNumber: z.string().trim().max(40).optional(),
+  ifsc: z.string().trim().max(20).optional(),
+});
 // Cash-on-board was removed: the agency can only confirm PAID bookings, and
 // without a gateway every online method completes the mock payment instantly.
 export const paySchema = z.object({

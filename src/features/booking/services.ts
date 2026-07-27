@@ -102,7 +102,13 @@ export async function reserveSeat(
 export async function cancelBooking(
   db: SupabaseClient,
   bookingId: string,
+  reason: string | null = null,
+  refund: Record<string, string> | null = null,
 ): Promise<void> {
-  const { error } = await db.rpc('cancel_booking', { p_booking_id: bookingId });
+  const { error } = await db.rpc('cancel_booking', {
+    p_booking_id: bookingId,
+    p_reason: reason,
+    p_refund: refund,
+  });
   if (error) throw new AppError('BOOKING', error.message);
 }

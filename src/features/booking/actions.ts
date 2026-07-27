@@ -98,9 +98,22 @@ export async function cancelBookingAction(
 ): Promise<CancelState> {
   const parsed = cancelSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: 'Could not identify that booking.' };
+  const d = parsed.data;
+  // Build the refund payout object from whichever method the student chose.
+  let refund: Record<string, string> | null = null;
+  if (d.refundMethod === 'UPI' && d.upiId) {
+    refund = { method: 'UPI', upi_id: d.upiId };
+  } else if (d.refundMethod === 'BANK' && (d.accountNumber || d.accountName)) {
+    refund = {
+      method: 'BANK',
+      account_name: d.accountName ?? '',
+      account_number: d.accountNumber ?? '',
+      ifsc: d.ifsc ?? '',
+    };
+  }
   const db = await createClient();
   try {
-    await cancelBooking(db, parsed.data.bookingId);
+    await cancelBooking(db, d.bookingId, d.reason ?? null, refund);
   } catch (e) {
     // Surface the failure to the user instead of crashing the page.
     return { error: toErrorResponse(e).message };
