@@ -272,8 +272,11 @@ export async function getAvailability(
 ): Promise<Availability> {
   const { data: alloc, error: allocErr } = await db
     .from('seat_allocations')
-    .select('id, total_seats, route_assignments!inner(route_id)')
+    .select('id, total_seats, created_at, route_assignments!inner(route_id)')
+    // Pick the SAME allocation reserve_seat locks + the campus list counts
+    // (oldest by created_at) so all three agree when a route has >1 allocation.
     .eq('route_assignments.route_id', routeId)
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
   if (allocErr) throw allocErr; // don't mask a transient error as "not bookable"
