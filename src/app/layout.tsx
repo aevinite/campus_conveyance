@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { NativeAuthListener } from "@/components/auth/native-auth-listener";
+import { NativeBackButton } from "@/components/native-back-button";
 import { AppSplash } from "@/components/app-splash";
 
 const inter = Inter({
@@ -60,6 +61,7 @@ export default function RootLayout({
         <AppSplash />
         <ServiceWorkerRegister />
         <NativeAuthListener />
+        <NativeBackButton />
         <Providers>{children}</Providers>
       </body>
     </html>
