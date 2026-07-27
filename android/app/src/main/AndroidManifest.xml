@@ -18,6 +18,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Deep link that finishes Google sign-in: after the user authenticates
+                 in the system browser, Supabase redirects to
+                 campusconveyance://auth/callback and Android hands it back to the app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="campusconveyance" android:host="auth" />
+            </intent-filter>
         </activity>
 
         <provider

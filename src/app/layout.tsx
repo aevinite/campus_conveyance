@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/sw-register";
+import { NativeAuthListener } from "@/components/auth/native-auth-listener";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -56,6 +57,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
+        <NativeAuthListener />
         <Providers>{children}</Providers>
       </body>
     </html>
