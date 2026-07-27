@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { getSessionClaims } from '@/features/auth/session';
 import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/repository';
 import { listFeaturedInstitutions } from '@/features/catalog/repository';
@@ -77,6 +78,8 @@ const STEPS = [
 export default async function StudentHome() {
   await requireRole('STUDENT');
   const db = await createClient();
+  // In the native app the hero subtitle is dropped (kept for the website only).
+  const app = await isAppRequest();
   const [{ fullName }, recentRows, statusCounts, featured] = await Promise.all([
     getSessionClaims(db),
     // Only the few rows the home actually shows, not the whole history + driver
@@ -112,10 +115,12 @@ export default async function StudentHome() {
           <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
             Welcome back, <span className="text-gradient">{name}</span>.
           </h1>
-          <p className="mt-3 max-w-xl text-muted-foreground">
-            Browse your campus, choose a bus or van from a verified agency, and
-            reserve your seat for the daily route to class.
-          </p>
+          {!app && (
+            <p className="mt-3 max-w-xl text-muted-foreground">
+              Browse your campus, choose a bus or van from a verified agency, and
+              reserve your seat for the daily route to class.
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
           <Link

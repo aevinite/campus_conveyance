@@ -49,10 +49,13 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex items-center gap-2 rounded-full border border-border bg-background/60 py-1 pr-2.5 pl-1 text-sm font-medium transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-[popup-open]:bg-secondary"
+        // On mobile it's a clean, symmetric circle (just the avatar); on wider
+        // screens it expands into a pill with the first name. Keeping the padding
+        // even on mobile stops the avatar looking off-centre inside the ring.
+        className="flex items-center gap-2 rounded-full border border-border bg-background/60 p-1 text-sm font-medium transition-colors hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-[popup-open]:bg-secondary sm:pr-2.5"
         aria-label="Open profile menu"
       >
-        <span className="grid size-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
           {initialsOf(display)}
         </span>
         <span className="hidden max-w-[8rem] truncate sm:inline">
