@@ -25,6 +25,22 @@ const config: CapacitorConfig = {
     // Kept in sync with APP_UA_MARKER in src/lib/app-context.ts.
     appendUserAgent: 'CampusConveyanceApp',
   },
+  plugins: {
+    // Native splash shows the INSTANT the icon is tapped (it's part of the APK,
+    // no network), covering the gap while the WebView fetches the remote site.
+    // We don't auto-hide it on a timer — the web app calls SplashScreen.hide()
+    // the moment its own UI has painted (see components/app-splash.tsx), so the
+    // loader is on screen immediately on open and disappears exactly when the
+    // page is ready. On a warm resume of an already-loaded app it doesn't show.
+    SplashScreen: {
+      launchShowDuration: 0,
+      launchAutoHide: false,
+      backgroundColor: '#1c1917',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+      splashImmersive: false,
+    },
+  },
 };
 
 export default config;
