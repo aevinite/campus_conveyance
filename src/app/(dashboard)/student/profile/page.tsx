@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, Mail, Phone, ShieldCheck, CalendarDays } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
@@ -13,6 +14,7 @@ const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function StudentProfilePage() {
   await requireRole('STUDENT');
+  const app = await isAppRequest();
   const db = await createClient();
   const {
     data: { user },
@@ -56,17 +58,21 @@ export default async function StudentProfilePage() {
   return (
     <section className="space-y-8">
       <div>
-        <Link
-          href="/student"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Back to dashboard
-        </Link>
-        <h1 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">Profile &amp; settings</h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage your account details, contact info, and password.
-        </p>
+        {!app && (
+          <Link
+            href="/student"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Back to dashboard
+          </Link>
+        )}
+        <h1 className={`${app ? '' : 'mt-3'} text-2xl font-bold tracking-tight sm:text-3xl`}>Profile &amp; settings</h1>
+        {!app && (
+          <p className="mt-1 text-muted-foreground">
+            Manage your account details, contact info, and password.
+          </p>
+        )}
       </div>
 
       {/* Identity banner */}

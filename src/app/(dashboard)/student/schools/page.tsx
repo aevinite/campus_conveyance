@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { searchInstitutions, countInstitutions, type KindFilter } from '@/features/catalog/repository';
 import { pageParams } from '@/components/pager';
 import { BookingSteps } from '../booking-steps';
@@ -23,9 +24,10 @@ export default async function SchoolsPage({
   const db = await createClient();
   // Filtered + sorted + paginated in the DB — the browser only ever gets one
   // page of campuses, not the whole (unbounded) catalog.
-  const [institutions, total] = await Promise.all([
+  const [institutions, total, app] = await Promise.all([
     searchInstitutions(db, { query, kind, sort, limit: PAGE_SIZE, offset }),
     countInstitutions(db, { query, kind }),
+    isAppRequest(),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (total > 0 && page > totalPages) {
@@ -40,18 +42,22 @@ export default async function SchoolsPage({
 
   return (
     <section className="space-y-6">
-      <div className="space-y-4">
-        <BookingSteps active={1} />
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Step 1 · Campus
-          </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Pick your campus</h1>
-          <p className="mt-1 text-muted-foreground">
-            Choose your school or college — you&apos;ll see every bus and van that
-            runs there for the daily commute.
-          </p>
-        </div>
+      <div className={app ? 'space-y-3' : 'space-y-4'}>
+        <BookingSteps active={1} compact={app} />
+        {app ? (
+          <h1 className="text-2xl font-bold tracking-tight">Pick your campus</h1>
+        ) : (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+              Step 1 · Campus
+            </p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Pick your campus</h1>
+            <p className="mt-1 text-muted-foreground">
+              Choose your school or college — you&apos;ll see every bus and van that
+              runs there for the daily commute.
+            </p>
+          </div>
+        )}
       </div>
       <CatalogBrowser
         institutions={institutions}
@@ -60,6 +66,7 @@ export default async function SchoolsPage({
         sort={sort}
         page={page}
         totalPages={totalPages}
+        app={app}
       />
     </section>
   );

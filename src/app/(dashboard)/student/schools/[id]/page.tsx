@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { Ticket } from 'lucide-react';
+import { Ticket, ArrowLeft } from 'lucide-react';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import {
   getInstitution,
   listInstitutionRoutes,
@@ -42,11 +43,12 @@ export default async function SchoolDetailPage({
   // Lapsed holds are swept by the pg_cron 'expire-stale-holds' job (migration
   // 0052); seat counts here tolerate <=60s of staleness. Routes are searched +
   // paginated in the DB (migration 0068) — one page, not every campus route.
-  const [inst, routes, total, currentBooking] = await Promise.all([
+  const [inst, routes, total, currentBooking, app] = await Promise.all([
     getInstitution(db, id),
     listInstitutionRoutes(db, id, { query, vehicleType, limit: PAGE_SIZE, offset }),
     countInstitutionRoutes(db, id, { query, vehicleType }),
     getMyActiveBooking(db),
+    isAppRequest(),
   ]);
   if (!inst) notFound();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -61,55 +63,85 @@ export default async function SchoolDetailPage({
 
   return (
     <section className="space-y-6">
-      <div className="space-y-4">
-        <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-          ← All campuses
-        </Link>
-        <BookingSteps active={2} />
-        <div className="overflow-hidden rounded-3xl border border-border bg-card">
-          <div
-            className="relative h-24 sm:h-28"
-            style={{
-              background:
-                'linear-gradient(135deg, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--chart-5) 28%, transparent))',
-            }}
-          >
-            <div aria-hidden className="absolute inset-0 opacity-60 bg-grid" />
-          </div>
-          <div className="px-6 pb-6">
-            <div className="-mt-12 flex items-end gap-4">
-              <InstitutionLogo
-                name={inst.name}
-                kind={inst.kind}
-                imageUrl={inst.image_url}
-                className="size-24 ring-2 ring-background"
-                iconClassName="size-10"
-              />
-              <span className="mb-1 inline-flex items-center rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      {app ? (
+        <div className="space-y-3">
+          <Link href="/student/schools" className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+            <ArrowLeft className="size-4" /> Campuses
+          </Link>
+          <BookingSteps active={2} compact />
+          {/* Compact campus header — logo tile + name inline, no gradient hero. */}
+          <div className="flex items-center gap-3">
+            <InstitutionLogo
+              name={inst.name}
+              kind={inst.kind}
+              imageUrl={inst.image_url}
+              className="size-14 shrink-0"
+              iconClassName="size-6"
+            />
+            <div className="min-w-0">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                 {inst.kind === 'COLLEGE' ? 'College' : 'School'}
               </span>
+              <h1 className="flex items-center gap-1.5 text-xl font-bold tracking-tight">
+                <span className="truncate">{inst.name}</span>
+                <VerifiedBadge verified={inst.is_verified} />
+              </h1>
             </div>
-            <h1 className="mt-4 flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
-              {inst.name}
-              <VerifiedBadge verified={inst.is_verified} className="text-[1.25rem]" />
-            </h1>
-            <p className="mt-1.5 max-w-2xl leading-relaxed text-muted-foreground">
-              {inst.description}
-            </p>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="space-y-4">
+            <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              ← All campuses
+            </Link>
+            <BookingSteps active={2} />
+            <div className="overflow-hidden rounded-3xl border border-border bg-card">
+              <div
+                className="relative h-24 sm:h-28"
+                style={{
+                  background:
+                    'linear-gradient(135deg, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--chart-5) 28%, transparent))',
+                }}
+              >
+                <div aria-hidden className="absolute inset-0 opacity-60 bg-grid" />
+              </div>
+              <div className="px-6 pb-6">
+                <div className="-mt-12 flex items-end gap-4">
+                  <InstitutionLogo
+                    name={inst.name}
+                    kind={inst.kind}
+                    imageUrl={inst.image_url}
+                    className="size-24 ring-2 ring-background"
+                    iconClassName="size-10"
+                  />
+                  <span className="mb-1 inline-flex items-center rounded-full border border-border bg-secondary px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {inst.kind === 'COLLEGE' ? 'College' : 'School'}
+                  </span>
+                </div>
+                <h1 className="mt-4 flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                  {inst.name}
+                  <VerifiedBadge verified={inst.is_verified} className="text-[1.25rem]" />
+                </h1>
+                <p className="mt-1.5 max-w-2xl leading-relaxed text-muted-foreground">
+                  {inst.description}
+                </p>
+              </div>
+            </div>
+          </div>
 
-      <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-          Step 2 · Choose a ride
-        </p>
-        <h2 className="text-xl font-bold tracking-tight">Pick your bus</h2>
-        <p className="text-sm text-muted-foreground">
-          Every ride to {inst.name} — compare fares, timings and live seats, then
-          tap one to reserve.
-        </p>
-      </div>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+              Step 2 · Choose a ride
+            </p>
+            <h2 className="text-xl font-bold tracking-tight">Pick your bus</h2>
+            <p className="text-sm text-muted-foreground">
+              Every ride to {inst.name} — compare fares, timings and live seats, then
+              tap one to reserve.
+            </p>
+          </div>
+        </>
+      )}
       {/* One bus at a time: browsing stays open, booking is locked. */}
       {currentBooking && (
         <div className="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/[0.06] px-4 py-3 text-sm">

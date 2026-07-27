@@ -2,10 +2,11 @@
 import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Search, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Search, ArrowRight, ArrowLeft, ChevronRight, ArrowDownUp } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { cn } from '@/lib/utils';
 import type { Institution, KindFilter } from '@/features/catalog/repository';
 
 const TABS: { key: KindFilter; label: string }[] = [
@@ -24,6 +25,7 @@ export function CatalogBrowser({
   sort,
   page,
   totalPages,
+  app = false,
 }: {
   institutions: Institution[];
   query: string;
@@ -31,6 +33,7 @@ export function CatalogBrowser({
   sort: 'asc' | 'desc';
   page: number;
   totalPages: number;
+  app?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -69,44 +72,87 @@ export function CatalogBrowser({
 
   return (
     <div className={`space-y-6 transition-opacity ${isPending ? 'opacity-60' : ''}`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Search schools & colleges…"
-            aria-label="Search schools and colleges"
-            className="pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border p-0.5">
+      {app ? (
+        // App: a full-width search field with a horizontal chip row of filters
+        // underneath — reads like a native browse screen, not a desktop toolbar.
+        <div className="space-y-3">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Search schools & colleges…"
+              aria-label="Search schools and colleges"
+              className="h-11 pl-9"
+            />
+          </div>
+          <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 type="button"
                 aria-pressed={kind === t.key}
                 onClick={() => go({ kind: t.key, page: 1 })}
-                className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                className={cn(
+                  'shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
                   kind === t.key
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card text-muted-foreground',
+                )}
               >
                 {t.label}
               </button>
             ))}
+            <button
+              onClick={() => go({ sort: sort === 'asc' ? 'desc' : 'asc', page: 1 })}
+              className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium text-muted-foreground"
+              title="Toggle sort order"
+            >
+              <ArrowDownUp className="size-3.5" />
+              {sort === 'asc' ? 'A→Z' : 'Z→A'}
+            </button>
           </div>
-          <button
-            onClick={() => go({ sort: sort === 'asc' ? 'desc' : 'asc', page: 1 })}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-            title="Toggle sort order"
-          >
-            {sort === 'asc' ? 'A→Z' : 'Z→A'}
-          </button>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Search schools & colleges…"
+              aria-label="Search schools and colleges"
+              className="pl-9"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-border p-0.5">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={kind === t.key}
+                  onClick={() => go({ kind: t.key, page: 1 })}
+                  className={`rounded-md px-3 py-1 text-sm transition-colors ${
+                    kind === t.key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => go({ sort: sort === 'asc' ? 'desc' : 'asc', page: 1 })}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+              title="Toggle sort order"
+            >
+              {sort === 'asc' ? 'A→Z' : 'Z→A'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {institutions.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
@@ -117,6 +163,38 @@ export function CatalogBrowser({
           <p className="max-w-xs text-sm text-muted-foreground">
             No schools or colleges match your search — try a different name or clear the filters.
           </p>
+        </div>
+      ) : app ? (
+        // App: a compact single-column list — logo tile, name/kind, chevron.
+        <div className="space-y-3">
+          {institutions.map((i) => (
+            <Link
+              key={i.id}
+              href={`/student/schools/${i.id}`}
+              className="flex items-center gap-3.5 rounded-2xl border border-border bg-card p-3.5 shadow-xs transition-colors active:bg-secondary"
+            >
+              <InstitutionLogo
+                name={i.name}
+                kind={i.kind}
+                imageUrl={i.image_url}
+                className="size-14 shrink-0"
+                iconClassName="size-6"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {i.kind === 'COLLEGE' ? 'College' : 'School'}
+                </span>
+                <h2 className="flex items-center gap-1.5 font-semibold">
+                  <span className="truncate">{i.name}</span>
+                  <VerifiedBadge verified={i.is_verified} />
+                </h2>
+                {i.description && (
+                  <p className="line-clamp-1 text-sm text-muted-foreground">{i.description}</p>
+                )}
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+            </Link>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

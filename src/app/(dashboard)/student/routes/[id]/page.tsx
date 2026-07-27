@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { Bus, CheckCircle2, Clock3, IdCard, Phone, ShieldCheck, User } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import {
   getRouteWithStops,
   getAvailability,
@@ -52,12 +53,13 @@ export default async function RouteDetailPage({
   // single active booking (one bus at a time — on this route it resumes/reports,
   // on another it locks booking here). All key only off id/the caller, so fetch
   // together rather than in two sequential batches.
-  const [data, details, availability, currentBooking, agencyReviews] = await Promise.all([
+  const [data, details, availability, currentBooking, agencyReviews, app] = await Promise.all([
     getRouteWithStops(db, id),
     getStudentDetails(db),
     getAvailability(db, id),
     getMyActiveBooking(db),
     getRouteAgencyReviews(db, id),
+    isAppRequest(),
   ]);
   if (!data) notFound();
 
@@ -99,16 +101,18 @@ export default async function RouteDetailPage({
 
   return (
     <section className="space-y-6">
-      <div className="space-y-4">
+      <div className={app ? 'space-y-3' : 'space-y-4'}>
         <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
           ← Back to campuses
         </Link>
-        <BookingSteps active={3} />
+        <BookingSteps active={3} compact={app} />
         <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-          Step 3 · Reserve &amp; pay
-        </p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{data.route.name}</h1>
+        {!app && (
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Step 3 · Reserve &amp; pay
+          </p>
+        )}
+        <h1 className={`${app ? '' : 'mt-2'} text-2xl font-bold tracking-tight sm:text-3xl`}>{data.route.name}</h1>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           {notBookable ? (
             <span className="font-medium text-warning">Not accepting bookings</span>
@@ -130,8 +134,9 @@ export default async function RouteDetailPage({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-        {/* Left: bus/driver + route map & stops */}
-        <div className="space-y-6 lg:col-span-2">
+        {/* Left: bus/driver + route map & stops. In the app the reserve panel is
+            pulled above this block (order) so booking is the first thing seen. */}
+        <div className={`space-y-6 lg:col-span-2 ${app ? 'order-2 lg:order-none' : ''}`}>
       {v && (v.bus_number || v.image_url || v.driver_name || v.conductor_name || data.conductorChange) && (
         <Card>
           <CardHeader>
@@ -414,8 +419,8 @@ export default async function RouteDetailPage({
       )}
         </div>
 
-        {/* Right: reserve panel (sticky on desktop) */}
-        <div className="space-y-6 lg:sticky lg:top-24">
+        {/* Right: reserve panel (sticky on desktop; pulled to top in the app) */}
+        <div className={`space-y-6 lg:sticky lg:top-24 ${app ? 'order-1 lg:order-none' : ''}`}>
           {/* View-only seat layout: how full is this bus right now. */}
           {availability.total > 0 && (
             <Card>
