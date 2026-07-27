@@ -65,6 +65,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Exclude PWA assets (manifest + service worker) and static images so they
+    // are served directly. Without this, a logged-out visitor's request for the
+    // manifest or sw.js is redirected to /login (returning HTML), which breaks
+    // install / PWABuilder detection and public-page push registration.
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
   ],
 };
