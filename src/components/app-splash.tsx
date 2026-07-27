@@ -17,42 +17,30 @@ export function AppSplash() {
   const [gone, setGone] = useState(false);
 
   useEffect(() => {
-    // Inside the native app the NATIVE splash (Capacitor) is already on screen
-    // from the instant the icon was tapped — so it, not this web overlay, is the
-    // loader the user sees immediately. Drop this web overlay (it's hidden behind
-    // the native splash anyway) and hide the native splash the moment the page is
-    // ready, sending the user straight to the loaded page.
+    // This web loader ALWAYS shows (website and app) — it's the loader the user
+    // sees. Inside the native app there is ALSO a native splash (after the app is
+    // rebuilt) that appears the instant the icon is tapped; we just hide that one
+    // once the page is ready so it hands off to this overlay instead of lingering.
+    // If the native splash isn't present yet, hiding it is a harmless no-op.
     const isNativeApp =
       typeof navigator !== 'undefined' && navigator.userAgent.includes('CampusConveyanceApp');
-
-    if (isNativeApp) {
-      setGone(true);
-      let done = false;
-      const hideNative = () => {
-        if (done) return;
-        done = true;
-        import('@capacitor/splash-screen')
-          .then(({ SplashScreen }) => SplashScreen.hide({ fadeOutDuration: 250 }))
-          .catch(() => {});
-      };
-      if (document.readyState === 'complete') hideNative();
-      else window.addEventListener('load', hideNative, { once: true });
-      // Safety net: never leave the user stuck on the splash if `load` never fires.
-      const cap = window.setTimeout(hideNative, 10000);
-      return () => {
-        window.removeEventListener('load', hideNative);
-        window.clearTimeout(cap);
-      };
-    }
 
     const MIN = 700; // keep the logo animation visible at least this long
     const MAX = 4000; // safety: never keep the user behind the splash longer
     const start = performance.now();
     let done = false;
 
+    const hideNativeSplash = () => {
+      if (!isNativeApp) return;
+      import('@capacitor/splash-screen')
+        .then(({ SplashScreen }) => SplashScreen.hide({ fadeOutDuration: 250 }))
+        .catch(() => {});
+    };
+
     const finish = () => {
       if (done) return;
       done = true;
+      hideNativeSplash();
       const wait = Math.max(0, MIN - (performance.now() - start));
       window.setTimeout(() => setHide(true), wait);
     };
