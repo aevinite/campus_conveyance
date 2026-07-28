@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Bus, MapPin, Route as RouteIcon, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import {
   getDriverProfile,
   listDriverBuses,
@@ -10,10 +11,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default async function DriverDashboard() {
   const db = await createClient();
-  const [me, buses, riders] = await Promise.all([
+  const [me, buses, riders, app] = await Promise.all([
     getDriverProfile(db),
     listDriverBuses(db),
     countDriverBookings(db),
+    isAppRequest(),
   ]);
   // driver_buses is one row PER ROUTE, so a bus on two routes appears twice —
   // count DISTINCT vehicles for "Buses assigned".
@@ -28,37 +30,59 @@ export default async function DriverDashboard() {
   return (
     <section className="space-y-6 sm:space-y-8">
       <div className="space-y-1">
-        <p className="text-xs font-semibold tracking-wider text-primary uppercase">
-          Driver dashboard
-        </p>
+        {!app && (
+          <p className="text-xs font-semibold tracking-wider text-primary uppercase">
+            Driver dashboard
+          </p>
+        )}
         <h1 className="text-2xl font-heading font-bold tracking-tight sm:text-3xl">
           Welcome{me?.name ? `, ${me.name}` : ''}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground sm:text-base">
           {me?.agency_name ? `Driver at ${me.agency_name}.` : 'Your driving overview.'}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <Link key={c.label} href={c.href} className="group block">
-              <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
-                <CardContent className="flex items-center gap-4 py-6">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                    <Icon className="size-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="tnum text-3xl font-bold tracking-tight">{c.value}</p>
-                    <p className="mt-0.5 text-sm text-muted-foreground">{c.label}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
+      {app ? (
+        // Compact 3-up stat chips (stacked-card grid is too tall on a phone).
+        <div className="grid grid-cols-3 gap-3">
+          {cards.map((c) => {
+            const Icon = c.icon;
+            return (
+              <Link key={c.label} href={c.href} className="block">
+                <Card className="h-full">
+                  <CardContent className="flex flex-col items-center gap-1 px-2 py-4 text-center">
+                    <Icon className="size-5 text-primary" />
+                    <p className="tnum text-2xl font-bold leading-none">{c.value}</p>
+                    <p className="text-[11px] leading-tight text-muted-foreground">{c.label}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {cards.map((c) => {
+            const Icon = c.icon;
+            return (
+              <Link key={c.label} href={c.href} className="group block">
+                <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+                  <CardContent className="flex items-center gap-4 py-6">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                      <Icon className="size-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="tnum text-3xl font-bold tracking-tight">{c.value}</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">{c.label}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
