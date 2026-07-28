@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { NativeAuthListener } from "@/components/auth/native-auth-listener";
 import { NativeBackButton } from "@/components/native-back-button";
+import { AppClass } from "@/components/app-class";
 import { AppSplash } from "@/components/app-splash";
 
 const inter = Inter({
@@ -59,6 +60,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AppSplash />
+        <AppClass />
         <ServiceWorkerRegister />
         <NativeAuthListener />
         <NativeBackButton />

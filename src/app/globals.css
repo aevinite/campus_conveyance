@@ -378,6 +378,25 @@ input[type="password"]::-ms-clear {
   color: #b4700a !important;
 }
 
+/* ---- App-only softer light mode ----
+   The website's light mode is a bright near-white; inside the native app that
+   reads as harsh/glary. When running in the app (html.is-app, set by AppClass)
+   AND in light mode (not .dark), warm the whites down a touch so large surfaces
+   are gentler on the eyes. Text/foreground is unchanged, so contrast stays
+   strong. The website and the app's dark mode are untouched. */
+html.is-app:not(.dark) {
+  --background: oklch(0.966 0.007 85);
+  --card: oklch(0.992 0.004 88);
+  --card-foreground: oklch(0.23 0.02 66);
+  --popover: oklch(0.992 0.004 88);
+  --secondary: oklch(0.942 0.011 84);
+  --muted: oklch(0.942 0.009 84);
+  --accent: oklch(0.935 0.045 88);
+  --border: oklch(0.89 0.013 84);
+  --input: oklch(0.89 0.013 84);
+  --sidebar: oklch(0.966 0.009 86);
+}
+
 /* ---- App boot splash: animated brand loader shown until the page loads ----
    Server-rendered into <body> so it paints on the very first frame (no white
    flash while the native app's WebView / the site loads). A client component

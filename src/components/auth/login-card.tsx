@@ -51,6 +51,13 @@ export function LoginCard({
   backHref?: string;
 }) {
   const [showPassword, setShowPassword] = useState(false);
+  // Keep the email as controlled state so a failed sign-in doesn't wipe it — on
+  // submit React resets the (uncontrolled) form, which clears the password field
+  // (what we want: retype the password), while the controlled email persists so
+  // the user never has to re-enter it. (We can't securely tell a wrong email
+  // from a wrong password — Supabase returns one generic error to avoid leaking
+  // which emails are registered — so the email is always kept.)
+  const [email, setEmail] = useState('');
   return (
     <Card className="w-full max-w-sm shadow-lg">
       <CardHeader>
@@ -93,6 +100,8 @@ export function LoginCard({
               type="email"
               autoComplete="off"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div className="space-y-2">
