@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Bus, ClipboardList, IndianRupee, Route, TrendingUp, Users, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { getMyAgency, getAgencyReport } from '@/features/agency/repository';
 import { formatDateTime } from '@/lib/format-date';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import { DownloadReportButton } from '@/components/download-report-button';
 
 export default async function AgencyDashboard() {
   const db = await createClient();
-  const agency = await getMyAgency(db);
+  const [agency, app] = await Promise.all([getMyAgency(db), isAppRequest()]);
   const report = agency
     ? await getAgencyReport(agency.id)
     : {
@@ -103,6 +104,23 @@ export default async function AgencyDashboard() {
               <p className="text-sm text-muted-foreground">
                 No confirmed bookings yet — accept a booking in Manage Booking to earn revenue.
               </p>
+            ) : app ? (
+              // App: stacked rows instead of a horizontally-scrolling table.
+              <ul className="divide-y divide-border rounded-xl border border-border">
+                {revenue.byRoute.map((r) => (
+                  <li key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{r.name}</p>
+                      <p className="tnum text-xs text-muted-foreground">{r.bookings} confirmed</p>
+                    </div>
+                    <p className="tnum shrink-0 text-sm font-semibold">{inr(r.revenueCents)}</p>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between gap-3 px-4 py-3 font-semibold">
+                  <span>Total</span>
+                  <span className="tnum">{inr(revenue.totalCents)}</span>
+                </li>
+              </ul>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-border">
                 <table className="w-full text-sm">
@@ -217,6 +235,25 @@ export default async function AgencyDashboard() {
             <p className="text-sm text-muted-foreground">
               No routes yet. Add a route to a college and it will appear here.
             </p>
+          ) : app ? (
+            // App: stacked rows instead of a horizontally-scrolling table.
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {fleetByCollege.map((c) => (
+                <li key={c.name} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <p className="min-w-0 truncate text-sm font-medium">{c.name}</p>
+                  <p className="tnum shrink-0 text-xs text-muted-foreground">
+                    {c.buses} bus · {c.vans} van ·{' '}
+                    <span className="font-semibold text-foreground">{c.buses + c.vans}</span>
+                  </p>
+                </li>
+              ))}
+              <li className="flex items-center justify-between gap-3 px-4 py-3 font-semibold">
+                <span>Total</span>
+                <span className="tnum">
+                  {fleetByCollege.reduce((s, c) => s + c.buses + c.vans, 0)}
+                </span>
+              </li>
+            </ul>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border">
               <table className="w-full text-sm">
