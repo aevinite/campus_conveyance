@@ -13,6 +13,7 @@ import {
   type LatLng,
 } from '@/lib/bus-marker';
 import { escapeHtml } from '@/lib/escape-html';
+import { cn } from '@/lib/utils';
 
 const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 // Below this, treat the fix as jitter (bus stationary) — don't rotate or speed.
@@ -31,7 +32,17 @@ export interface SimpleStop {
  * server round-trip — it's the driver's device). The map auto-follows the bus,
  * the icon rotates to the heading, and speed + current area are shown live.
  */
-export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
+export function DriverLiveMap({
+  stops,
+  heightClass = 'h-[72vh]',
+  bleed = false,
+}: {
+  stops: SimpleStop[];
+  /** Map height (bigger + full-bleed in the native app). */
+  heightClass?: string;
+  /** Full-width edge-to-edge map (drops side border + rounding) for the app. */
+  bleed?: boolean;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
@@ -242,7 +253,11 @@ export function DriverLiveMap({ stops }: { stops: SimpleStop[] }) {
 
       <div
         ref={containerRef}
-        className="relative z-0 isolate h-[72vh] w-full overflow-hidden rounded-2xl border border-border shadow-sm ring-1 ring-black/5"
+        className={cn(
+          'relative z-0 isolate w-full overflow-hidden border-border shadow-sm ring-1 ring-black/5',
+          bleed ? 'border-y' : 'rounded-2xl border',
+          heightClass,
+        )}
       />
     </div>
   );

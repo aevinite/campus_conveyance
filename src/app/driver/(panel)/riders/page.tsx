@@ -1,7 +1,8 @@
 import { Fragment } from 'react';
 import { redirect } from 'next/navigation';
-import { Bus, MapPin, Navigation, Route as RouteIcon, SkipForward, Users } from 'lucide-react';
+import { Bus, MapPin, Navigation, Phone, Route as RouteIcon, SkipForward, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { listDriverBookings, countDriverBookings } from '@/features/driver/repository';
 import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
@@ -31,9 +32,10 @@ export default async function DriverRidersPage({
   const db = await createClient();
   // Paginate: the roster is CONFIRMED (+PENDING) bookings on the driver's buses,
   // which are never archived and grow across terms.
-  const [bookings, riders] = await Promise.all([
+  const [bookings, riders, app] = await Promise.all([
     listDriverBookings(db, { limit: PAGE_SIZE, offset }),
     countDriverBookings(db),
+    isAppRequest(),
   ]);
   const totalPages = Math.max(1, Math.ceil(riders.total / PAGE_SIZE));
   if (riders.total > 0 && page > totalPages) redirect(`/driver/riders?page=${totalPages}`);
@@ -41,12 +43,14 @@ export default async function DriverRidersPage({
   return (
     <section className="space-y-5">
       <div className="space-y-1">
-        <p className="text-xs font-semibold tracking-wider text-primary uppercase">Roster</p>
+        {!app && (
+          <p className="text-xs font-semibold tracking-wider text-primary uppercase">Roster</p>
+        )}
         <h1 className="text-2xl font-heading font-bold tracking-tight sm:text-3xl">My Riders</h1>
-        <p className="text-muted-foreground">
-          Listed in pickup order along each route — top of the list is your next
-          stop. Tap a stage as the trip goes and the student and their parents get
-          an instant update when they board, reach campus, and get off.
+        <p className="text-sm text-muted-foreground sm:text-base">
+          {app
+            ? 'In pickup order — top of the list is your next stop. Tap a stage as the trip goes.'
+            : 'Listed in pickup order along each route — top of the list is your next stop. Tap a stage as the trip goes and the student and their parents get an instant update when they board, reach campus, and get off.'}
         </p>
       </div>
 
@@ -60,7 +64,7 @@ export default async function DriverRidersPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={cn('grid grid-cols-1 gap-4', !app && 'sm:grid-cols-2')}>
           {bookings.map((b, idx) => {
             const initials = (b.student_name ?? '')
               .split(' ')
@@ -92,13 +96,19 @@ export default async function DriverRidersPage({
                   className={cn(
                     'h-full',
                     isNext && 'ring-2 ring-primary',
+                    isNext && app && 'bg-primary/[0.06]',
                     isSkipped && 'opacity-70',
                   )}
                 >
-                  <CardContent className="space-y-3 py-5">
+                  <CardContent className={cn('space-y-3 py-5', app && 'space-y-3.5')}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
+                        <span
+                          className={cn(
+                            'relative grid shrink-0 place-items-center rounded-full bg-primary/12 font-semibold text-primary',
+                            app ? 'size-12 text-base' : 'size-10 text-sm',
+                          )}
+                        >
                           {initials || <Users className="size-4" />}
                           {b.pickup_sequence != null && (
                             <span className="absolute -top-1.5 -left-1.5 grid size-5 place-items-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground tnum">
@@ -108,7 +118,17 @@ export default async function DriverRidersPage({
                         </span>
                         <div className="min-w-0">
                           <p className="truncate font-semibold">{b.student_name ?? '—'}</p>
-                          <p className="truncate text-xs text-muted-foreground">{b.student_phone ?? '—'}</p>
+                          {app && b.student_phone ? (
+                            // Tap-to-call in the app.
+                            <a
+                              href={`tel:${b.student_phone}`}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary"
+                            >
+                              <Phone className="size-3" /> {b.student_phone}
+                            </a>
+                          ) : (
+                            <p className="truncate text-xs text-muted-foreground">{b.student_phone ?? '—'}</p>
+                          )}
                         </div>
                       </div>
                       <span

@@ -1,5 +1,6 @@
 import { Navigation } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { isAppRequest } from '@/lib/app-context';
 import { listDriverBuses } from '@/features/driver/repository';
 import { DriverLiveMap, type SimpleStop } from '@/components/driver-live-map';
 
@@ -7,7 +8,7 @@ import { DriverLiveMap, type SimpleStop } from '@/components/driver-live-map';
 // (client-side); the route's stops are loaded here for on-map context.
 export default async function DriverLivePage() {
   const db = await createClient();
-  const buses = await listDriverBuses(db); // cached, shared with the layout
+  const [buses, app] = await Promise.all([listDriverBuses(db), isAppRequest()]); // buses cached, shared with the layout
   const routeIds = [...new Set(buses.map((b) => b.route_id).filter(Boolean))] as string[];
 
   let stops: SimpleStop[] = [];
@@ -20,6 +21,23 @@ export default async function DriverLivePage() {
     stops = (data ?? [])
       .filter((s) => s.lat != null && s.lng != null)
       .map((s) => ({ name: s.name as string, lat: s.lat as number, lng: s.lng as number }));
+  }
+
+  if (app) {
+    // App: a big, full-bleed navigation map — the screen's focus. A one-line
+    // header keeps everything above the fold; the map fills the rest.
+    return (
+      <section className="space-y-3">
+        <div className="flex items-center gap-1.5">
+          <Navigation className="size-4 text-primary" />
+          <h1 className="text-lg font-heading font-bold tracking-tight">Live map</h1>
+        </div>
+        {/* -mx-4 cancels the layout's page padding so the map spans edge to edge. */}
+        <div className="-mx-4">
+          <DriverLiveMap stops={stops} heightClass="h-[calc(100dvh-15rem)] min-h-[62vh]" bleed />
+        </div>
+      </section>
+    );
   }
 
   return (
