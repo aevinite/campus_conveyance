@@ -90,6 +90,8 @@ export function ReserveForm({
   resumePickupName,
   payBy,
   payByIso,
+  bookForStudentId,
+  bookingsHref = '/student/bookings',
 }: {
   routeId: string;
   routeName: string;
@@ -99,6 +101,10 @@ export function ReserveForm({
   destinationName: string | null;
   /** Pricing plans the student can pick from (fresh booking flow). */
   plans: PlanOption[];
+  /** Parent flow: book this child (sent to reserve_seat / pay_booking). */
+  bookForStudentId?: string;
+  /** Where "View my bookings" links to — the parent flow points at /parent. */
+  bookingsHref?: string;
   resumeBookingId?: string;
   /** For a resumed booking the plan is already fixed — its amount + label. */
   resumeFare?: string | null;
@@ -193,6 +199,7 @@ export function ReserveForm({
     fd.set('bookingId', bookingId);
     fd.set('routeId', routeId);
     fd.set('method', value);
+    if (bookForStudentId) fd.set('studentId', bookForStudentId);
     const res = await payBookingAction({}, fd);
     setPaying(false);
     if (res.error) {
@@ -338,7 +345,7 @@ export function ReserveForm({
             ))}
         </dl>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-          <Link href="/student/bookings" className="flex-1">
+          <Link href={bookingsHref} className="flex-1">
             <Button className="w-full gap-1.5">
               <Ticket className="size-4" /> View My bookings
             </Button>
@@ -370,7 +377,7 @@ export function ReserveForm({
           <span>Payment successful — your seat is confirmed. Have a safe ride!</span>
         </div>
         <Link
-          href="/student/bookings"
+          href={bookingsHref}
           className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
         >
           View in My bookings <ArrowRight className="size-4" />
@@ -388,7 +395,7 @@ export function ReserveForm({
           <span>Bus is full — you are on the waitlist. We&apos;ll notify you if a seat opens up.</span>
         </div>
         <Link
-          href="/student/bookings"
+          href={bookingsHref}
           className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
         >
           View in My bookings <ArrowRight className="size-4" />
@@ -469,6 +476,7 @@ export function ReserveForm({
     <form ref={formRef} onSubmit={onReserve} className="space-y-4">
       <PanelSteps active={1} />
       <input type="hidden" name="routeId" value={routeId} />
+      {bookForStudentId && <input type="hidden" name="studentId" value={bookForStudentId} />}
       {selectedPlan && <input type="hidden" name="billingPeriod" value={selectedPlan.period} />}
 
       {plans.length > 0 && (

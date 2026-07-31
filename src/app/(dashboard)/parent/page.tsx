@@ -5,10 +5,12 @@ import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getSessionClaims } from '@/features/auth/session';
 import { listChildren, listChildrenBookings } from '@/features/parent/repository';
+import { listInstitutions } from '@/features/catalog/repository';
 import RouteStopsMap, {
   type MapStop,
 } from '../student/routes/[id]/route-stops-map';
 import { LinkChildForm } from './link-child-form';
+import { AddChildForm } from './add-child-form';
 import { UnlinkChildButton } from './unlink-child-button';
 import { formatShortDate } from '@/lib/format-date';
 
@@ -33,12 +35,17 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function ParentDashboard() {
   await requireRole('PARENT');
   const db = await createClient();
-  const [{ fullName }, children, bookings, app] = await Promise.all([
+  const [{ fullName }, children, bookings, campusList, app] = await Promise.all([
     getSessionClaims(db),
     listChildren(db),
     listChildrenBookings(db),
+    listInstitutions(db),
     isAppRequest(),
   ]);
+  const campuses = campusList.map((c) => ({ value: c.id, label: c.name }));
+  // A per-child booking CTA label: continue an active booking, else start one.
+  const ctaLabel = (status: string | null) =>
+    !status ? 'Book a bus' : status === 'WAITLISTED' ? 'View waitlist' : 'Manage booking';
   const name = (fullName ?? 'there').split(' ')[0];
 
   // Active trips get a live bus map. Group by route_id and render ONE map per
@@ -109,6 +116,7 @@ export default async function ParentDashboard() {
         </section>
 
         <LinkChildForm />
+        <AddChildForm campuses={campuses} />
 
         {/* Track their bus — one live map per active route, full width. */}
         {trackable.length > 0 && (
@@ -153,7 +161,7 @@ export default async function ParentDashboard() {
           ) : (
             <div className="space-y-3">
               {children.map((c) => (
-                <div key={c.student_id} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+                <div key={c.student_id} className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-xs">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
@@ -161,7 +169,9 @@ export default async function ParentDashboard() {
                       </span>
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{c.full_name ?? 'Student'}</p>
-                        <p className="truncate text-sm text-muted-foreground">{c.email}</p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {c.institution_name ?? c.email}
+                        </p>
                         {(c.grade || c.phone) && (
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
                             {c.grade && <span>Class {c.grade}</span>}
@@ -174,7 +184,27 @@ export default async function ParentDashboard() {
                         )}
                       </div>
                     </div>
-                    <UnlinkChildButton studentId={c.student_id} />
+                    <UnlinkChildButton studentId={c.student_id} managed={c.managed} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                    {c.active_status ? (
+                      <span
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                          STATUS_PILL[c.active_status] ?? STATUS_PILL.PENDING
+                        }`}
+                      >
+                        {STATUS_LABEL[c.active_status] ?? c.active_status}
+                        {c.active_route_name ? ` · ${c.active_route_name}` : ''}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No active booking</span>
+                    )}
+                    <Link
+                      href={`/parent/book/${c.student_id}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Ticket className="size-3.5" /> {ctaLabel(c.active_status)}
+                    </Link>
                   </div>
                 </div>
               ))}
@@ -281,6 +311,7 @@ export default async function ParentDashboard() {
       </section>
 
       <LinkChildForm />
+      <AddChildForm campuses={campuses} />
 
       {/* Live bus tracking — one map per active child trip. The map shows the
           route's stops and a live marker while the driver is online. */}
@@ -334,7 +365,7 @@ export default async function ParentDashboard() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {children.map((c) => (
-              <div key={c.student_id} className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+              <div key={c.student_id} className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-xs">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
@@ -342,10 +373,10 @@ export default async function ParentDashboard() {
                     </span>
                     <div>
                       <p className="font-semibold">{c.full_name ?? 'Student'}</p>
-                      <p className="text-sm text-muted-foreground">{c.email}</p>
+                      <p className="text-sm text-muted-foreground">{c.institution_name ?? c.email}</p>
                     </div>
                   </div>
-                  <UnlinkChildButton studentId={c.student_id} />
+                  <UnlinkChildButton studentId={c.student_id} managed={c.managed} />
                 </div>
                 <div className="mt-3 space-y-0.5 text-sm text-muted-foreground">
                   {c.grade && <p>Class: {c.grade}</p>}
@@ -354,6 +385,26 @@ export default async function ParentDashboard() {
                       <Phone className="size-3.5" /> {c.phone}
                     </p>
                   )}
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-4">
+                  {c.active_status ? (
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                        STATUS_PILL[c.active_status] ?? STATUS_PILL.PENDING
+                      }`}
+                    >
+                      {STATUS_LABEL[c.active_status] ?? c.active_status}
+                      {c.active_route_name ? ` · ${c.active_route_name}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No active booking</span>
+                  )}
+                  <Link
+                    href={`/parent/book/${c.student_id}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    <Ticket className="size-4" /> {ctaLabel(c.active_status)}
+                  </Link>
                 </div>
               </div>
             ))}

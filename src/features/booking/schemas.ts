@@ -9,9 +9,14 @@ export const reserveSchema = z.object({
   // The pricing plan the student chose (per month / semester / year). Optional
   // for legacy clients — reserve_seat falls back to the route's primary plan.
   billingPeriod: z.enum(['MONTHLY', 'SEMESTER', 'YEARLY']).optional(),
+  // Parent-books-for-a-child: the student to book for. Absent → the caller books
+  // for themselves (reserve_seat authorizes a linked parent when present).
+  studentId: z.union([z.string().uuid(), z.literal('')]).optional(),
 });
 export const cancelSchema = z.object({
   bookingId: z.string().uuid(),
+  // When a parent cancels a child's booking (so the action can revalidate /parent).
+  studentId: z.union([z.string().uuid(), z.literal('')]).optional(),
   // Why the student is cancelling / leaving the agency.
   reason: z.string().trim().max(600).optional(),
   // Where to send a refund (only collected for a paid booking).

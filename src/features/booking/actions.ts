@@ -34,6 +34,11 @@ export async function reserveSeatAction(
     revalidatePath('/student/bookings');
     revalidatePath('/student'); // home "recent trips" strip
     revalidatePath(`/student/routes/${parsed.data.routeId}`);
+    // Parent-books-for-a-child: refresh the parent dashboard + that child's flow.
+    if (parsed.data.studentId) {
+      revalidatePath('/parent');
+      revalidatePath(`/parent/book/${parsed.data.studentId}`);
+    }
     return {
       status: result.status,
       bookingId: result.id,
@@ -85,6 +90,12 @@ export async function payBookingAction(
     // both change once the seat is confirmed). routeId is passed by the form.
     const routeId = String(formData.get('routeId') ?? '');
     if (routeId) revalidatePath(`/student/routes/${routeId}`);
+    // Parent paying for a child's booking → refresh the parent surfaces too.
+    const studentId = String(formData.get('studentId') ?? '');
+    if (studentId) {
+      revalidatePath('/parent');
+      revalidatePath(`/parent/book/${studentId}`);
+    }
     return { status };
   } catch (e) {
     const r = toErrorResponse(e);
@@ -129,5 +140,10 @@ export async function cancelBookingAction(
   // by the form when the button is rendered from a bookings list row.
   const routeId = String(formData.get('routeId') ?? '');
   if (routeId) revalidatePath(`/student/routes/${routeId}`);
+  // Parent cancelling a child's booking → refresh the parent surfaces too.
+  if (d.studentId) {
+    revalidatePath('/parent');
+    revalidatePath(`/parent/book/${d.studentId}`);
+  }
   return { ok: true };
 }
