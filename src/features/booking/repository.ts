@@ -270,33 +270,22 @@ export async function getAvailability(
   db: SupabaseClient,
   routeId: string,
 ): Promise<Availability> {
-  const { data: alloc, error: allocErr } = await db
-    .from('seat_allocations')
-    .select('id, total_seats, created_at, route_assignments!inner(route_id)')
-    // Pick the SAME allocation reserve_seat locks + the campus list counts
-    // (oldest by created_at) so all three agree when a route has >1 allocation.
-    .eq('route_assignments.route_id', routeId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (allocErr) throw allocErr; // don't mask a transient error as "not bookable"
-  const total = (alloc?.total_seats as number) ?? 0;
-  if (!alloc) return { total: 0, reserved: 0, available: 0 };
-  // Count active bookings LIVE (same PENDING/CONFIRMED count reserve_seat uses
-  // under the allocation lock), rather than the trigger-maintained
-  // reserved_seats — so the displayed seats can't drift from the actual reserve
-  // outcome if that trigger ever lags. Backed by idx_bookings_alloc_status.
-  const { count, error } = await db
-    .from('bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('seat_allocation_id', (alloc as { id: string }).id)
-    .in('status', ['PENDING', 'CONFIRMED']);
-  // On a count error, fail SAFE: show the route as full rather than open, so we
-  // never advertise a possibly sold-out route as available (reserve_seat still
-  // enforces capacity, but the UI shouldn't invite a booking that will bounce).
-  if (error) return { total, reserved: total, available: 0 };
-  const reserved = count ?? 0;
-  return { total, reserved, available: Math.max(total - reserved, 0) };
+  // Count reservations through a SECURITY DEFINER RPC (migration 0106), NOT a
+  // plain query: bookings RLS (bookings_owner_read) only exposes the caller's
+  // OWN bookings, so a direct count as the student ignored other students'
+  // reservations and over-reported free seats — the detail page showed 20/20
+  // while the campus list (also security-definer) correctly showed 19/20. The
+  // RPC uses the SAME oldest-allocation + live PENDING/CONFIRMED logic as
+  // institution_routes, so list and detail always agree.
+  const { data, error } = await db.rpc('route_availability', { p_route_id: routeId });
+  if (error) throw error; // surface a transient error rather than mask it
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { total: number; reserved: number; available: number }
+    | undefined;
+  const total = Number(row?.total ?? 0);
+  const reserved = Number(row?.reserved ?? 0);
+  const available = Number(row?.available ?? Math.max(total - reserved, 0));
+  return { total, reserved, available };
 }
 
 /** Count of the student's own non-cancelled bookings, for My Bookings paging. */
