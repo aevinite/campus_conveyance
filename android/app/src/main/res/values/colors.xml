@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Ink backdrop shared by the launch splash, the native Capacitor splash
-         (capacitor.config.ts) and the web boot loader (app-splash.tsx), so the
-         hand-off from launch → WebView never flashes white. -->
-    <color name="splash_background">#1c1917</color>
+    <!-- Light warm-white backdrop shared by the launch splash and the native
+         Capacitor splash (capacitor.config.ts). The app opens in light mode by
+         default, so the launch surface matches the web boot loader (app-splash
+         .tsx) and there is no dark flash before the WebView paints. -->
+    <color name="splash_background">#fbfaf6</color>
 </resources>

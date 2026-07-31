@@ -18,7 +18,10 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   android: {
-    backgroundColor: '#1c1917',
+    // Light warm-white (matches the web --background). The app opens in light
+    // mode by default, so the native launch surface is light too — no dark→light
+    // flash before the WebView paints.
+    backgroundColor: '#fbfaf6',
     // Marker appended to the WebView User-Agent so the site can tell it is being
     // viewed inside the native app (vs a browser) and render the app-specific
     // view — bottom tab bar, no marketing landing, User/Agency login chooser.
@@ -35,7 +38,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 0,
       launchAutoHide: false,
-      backgroundColor: '#1c1917',
+      backgroundColor: '#fbfaf6',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
       splashImmersive: false,
