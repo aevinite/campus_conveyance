@@ -485,3 +485,42 @@ html.is-app:not(.dark) {
   .app-splash__logo { animation: none; }
   .app-splash__word { animation: none; opacity: 1; }
 }
+
+/* ---- Shared inline branded loader (route-navigation loading.tsx fallbacks) ----
+   Same spinning-ring-around-the-brandmark look as the boot splash, but inline
+   and on the page background instead of a full-screen ink backdrop — so moving
+   between screens shows the SAME branded loader, not a bare grey spinner. */
+.brand-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 55vh;
+}
+.brand-loader__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+}
+.brand-loader__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 3px solid color-mix(in oklch, var(--brand-yellow) 16%, transparent);
+  border-top-color: var(--brand-yellow);
+  border-right-color: color-mix(in oklch, var(--brand-yellow) 55%, transparent);
+  animation: cc-splash-spin 0.9s linear infinite;
+}
+.brand-loader__logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  box-shadow: 0 8px 22px color-mix(in oklch, var(--brand-gold) 24%, transparent);
+  animation: cc-splash-pulse 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader__ring { animation: none; border-top-color: var(--brand-yellow); }
+  .brand-loader__logo { animation: none; }
+}
