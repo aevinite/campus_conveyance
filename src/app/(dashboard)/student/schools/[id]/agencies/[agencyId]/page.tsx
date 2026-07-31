@@ -95,7 +95,6 @@ export default async function AgencyRoutesPage({
           <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-muted-foreground">
             <ArrowLeft className="size-4" /> Agencies
           </Link>
-          <BookingSteps active={3} compact />
           <div className="flex items-center gap-3">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-base font-bold text-primary ring-1 ring-inset ring-primary/15">
               {isCampus ? <Building2 className="size-6" /> : initials(agency.name)}

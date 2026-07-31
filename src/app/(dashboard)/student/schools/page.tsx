@@ -43,7 +43,7 @@ export default async function SchoolsPage({
   return (
     <section className="space-y-6">
       <div className={app ? 'space-y-3' : 'space-y-4'}>
-        <BookingSteps active={1} compact={app} />
+        {!app && <BookingSteps active={1} />}
         {app ? (
           <h1 className="text-2xl font-bold tracking-tight">Pick your campus</h1>
         ) : (

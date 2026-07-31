@@ -105,7 +105,7 @@ export default async function RouteDetailPage({
         <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
           ← Back to campuses
         </Link>
-        <BookingSteps active={4} compact={app} />
+        {!app && <BookingSteps active={4} />}
         <div>
         {!app && (
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">

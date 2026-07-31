@@ -40,7 +40,6 @@ export default async function SchoolDetailPage({
           <Link href="/student/schools" className="inline-flex items-center gap-1 text-sm text-muted-foreground">
             <ArrowLeft className="size-4" /> Campuses
           </Link>
-          <BookingSteps active={2} compact />
           {/* Compact campus header — logo tile + name inline, no gradient hero. */}
           <div className="flex items-center gap-3">
             <InstitutionLogo
