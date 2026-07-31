@@ -263,7 +263,7 @@ export function ReserveForm({
 
       <h2 className="mt-4 text-2xl font-bold sm:text-3xl">Pay with UPI</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Pay {payByLabel ? `before ${payByLabel}` : 'within 20 minutes'} to hold your seat, then
+        Pay {payByLabel ? `before ${payByLabel}` : 'within 10 minutes'} to hold your seat, then
         enter the UPI reference below.
       </p>
       <PaymentCountdown expiresAt={deadlineIso} onExpire={() => setPhase('expired')} />
@@ -464,7 +464,7 @@ export function ReserveForm({
         <div className="rounded-lg border border-success/30 bg-success/[0.08] px-3 py-2.5 text-sm">
           <p className="font-medium text-success">Request approved</p>
           <p className="text-muted-foreground">
-            Pay with UPI{payByLabel ? ` before ${payByLabel}` : ' within 20 minutes'} to hold your seat.
+            Pay with UPI{payByLabel ? ` before ${payByLabel}` : ' within 10 minutes'} to hold your seat.
           </p>
         </div>
         {payDismissed && (

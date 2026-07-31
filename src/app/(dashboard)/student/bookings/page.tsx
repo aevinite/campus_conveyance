@@ -27,7 +27,7 @@ interface TimelineStep {
 
 /**
  * The booking lifecycle as a readable timeline:
- *   request → agency approval → payment window (20 min) → confirmed,
+ *   request → agency approval → payment window (10 min) → confirmed,
  * with terminal lines for cancelled / rejected / expired outcomes.
  */
 function timelineFor(b: BookingRow): TimelineStep[] {
@@ -74,7 +74,7 @@ function timelineFor(b: BookingRow): TimelineStep[] {
     return [
       { state: 'done', label: 'Request sent' },
       { state: 'current', label: 'Waiting for agency approval' },
-      { state: 'upcoming', label: 'Complete payment within 20 minutes of approval' },
+      { state: 'upcoming', label: 'Complete payment within 10 minutes of approval' },
       { state: 'upcoming', label: 'Booking confirmed' },
     ];
   }
@@ -86,7 +86,7 @@ function timelineFor(b: BookingRow): TimelineStep[] {
         state: 'current',
         label: b.expires_at
           ? `Complete payment before ${formatTime(b.expires_at)}`
-          : 'Complete payment within 20 minutes',
+          : 'Complete payment within 10 minutes',
       },
       { state: 'upcoming', label: 'Booking confirmed' },
     ];

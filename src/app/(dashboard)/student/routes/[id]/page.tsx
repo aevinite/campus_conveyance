@@ -481,7 +481,7 @@ export default async function RouteDetailPage({
                     <Clock3 className="mt-0.5 size-4 shrink-0 text-warning" />
                     <span>
                       Your request for this route is <b>being approved</b>. Once approved,
-                      you&apos;ll have 20 minutes to complete the payment.
+                      you&apos;ll have 10 minutes to complete the payment.
                     </span>
                   </div>
                   <Link

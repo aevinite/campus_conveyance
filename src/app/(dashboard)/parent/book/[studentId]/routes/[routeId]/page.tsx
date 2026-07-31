@@ -92,7 +92,7 @@ export default async function ParentBookRoute({
     panel = (
       <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
         <Clock3 className="mt-0.5 size-4 shrink-0 text-warning" />
-        <span>{childName}&apos;s request is being approved. Once approved, you&apos;ll have 20 minutes to pay.</span>
+        <span>{childName}&apos;s request is being approved. Once approved, you&apos;ll have 10 minutes to pay.</span>
       </div>
     );
   } else if (activeHere && activeHere.status === 'CONFIRMED') {

@@ -7,7 +7,7 @@ export interface ReserveResult {
   status: string;
   /** Set once the request is auto-approved (a held seat). Null while waitlisted. */
   approvedAt: string | null;
-  /** Payment deadline (approval + 20 min); null while waitlisted. */
+  /** Payment deadline (approval + 10 min); null while waitlisted. */
   expiresAt: string | null;
 }
 

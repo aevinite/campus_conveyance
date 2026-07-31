@@ -72,7 +72,7 @@ const STEPS = [
   {
     icon: Ticket,
     title: 'Request, then pay',
-    body: 'Request a seat; once the agency approves, pay within 20 minutes to confirm it.',
+    body: 'Request a seat; once the agency approves, pay within 10 minutes to confirm it.',
   },
 ];
 

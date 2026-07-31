@@ -45,7 +45,7 @@ export default async function AgencyManageBookingsPage({
         <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Manage booking</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Requests are approved automatically once the seat, pickup and campus eligibility check out —
-          the student then has 20 minutes to pay, and payment confirms the seat and onboards them under
+          the student then has 10 minutes to pay, and payment confirms the seat and onboards them under
           Manage Students. Review the details below and reject any request you don&apos;t want to honour.
         </p>
       </div>
