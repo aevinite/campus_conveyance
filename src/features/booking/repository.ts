@@ -21,6 +21,12 @@ export interface RouteSummary {
   price_monthly_cents: number | null;
   price_semester_cents: number | null;
   price_yearly_cents: number | null;
+  // For the "back to agency" link on the detail page: which campus + agency this
+  // route belongs to (agencyId null = a seeded/campus route → the 'campus' group).
+  institutionId: string | null;
+  agencyId: string | null;
+  agencyName: string | null;
+  vehicleType: string | null;
 }
 export interface Stop {
   id: string;
@@ -184,7 +190,7 @@ export async function getRouteWithStops(
       .select(
         // Only the vehicle columns the detail page actually renders (dropped the
         // never-shown driver_address/driver_dob/conductor_address/conductor_dob).
-        'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, is_active, institutions(name, is_active, is_deleted), agencies(status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id, driver_blood_group, driver_alt_phone, effective_date))',
+        'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, is_active, institution_id, agency_id, vehicle_type, institutions(name, is_active, is_deleted), agencies(name, status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id, driver_blood_group, driver_alt_phone, effective_date))',
       )
       .eq('id', routeId)
       // Only TODAY's substitute rows are embedded (bus_driver_changes accumulate
@@ -211,9 +217,10 @@ export async function getRouteWithStops(
   const instRel = (route as { institutions: { is_active: boolean; is_deleted: boolean } | { is_active: boolean; is_deleted: boolean }[] | null }).institutions;
   const institution = Array.isArray(instRel) ? instRel[0] : instRel;
   if (institution && (institution.is_active === false || institution.is_deleted === true)) return null;
-  const agencyRel = (route as { agencies: { status: string; is_deleted: boolean } | { status: string; is_deleted: boolean }[] | null }).agencies;
+  const agencyRel = (route as { agencies: { name?: string; status: string; is_deleted: boolean } | { name?: string; status: string; is_deleted: boolean }[] | null }).agencies;
   const agency = Array.isArray(agencyRel) ? agencyRel[0] : agencyRel;
   if (agency && (agency.status !== 'APPROVED' || agency.is_deleted === true)) return null;
+  const agencyName = agency?.name ?? null;
   type ChangeRow = {
     role: string; driver_name: string; driver_phone: string | null; reason: string | null;
     driver_govt_id: string | null; driver_blood_group: string | null; driver_alt_phone: string | null;
@@ -257,6 +264,10 @@ export async function getRouteWithStops(
       price_monthly_cents: ((route as { price_monthly_cents?: number }).price_monthly_cents as number) ?? null,
       price_semester_cents: ((route as { price_semester_cents?: number }).price_semester_cents as number) ?? null,
       price_yearly_cents: ((route as { price_yearly_cents?: number }).price_yearly_cents as number) ?? null,
+      institutionId: ((route as { institution_id?: string }).institution_id as string) ?? null,
+      agencyId: ((route as { agency_id?: string }).agency_id as string) ?? null,
+      agencyName,
+      vehicleType: ((route as { vehicle_type?: string }).vehicle_type as string) ?? null,
     },
     stops: (stops ?? []) as Stop[],
     vehicle,

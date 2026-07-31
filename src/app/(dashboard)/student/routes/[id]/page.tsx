@@ -96,14 +96,24 @@ export default async function RouteDetailPage({
   const resumeFare = inr(resumePlanCents);
   const resumePeriodLabel = activeBooking ? periodLabel(activeBooking.billing_period) : null;
   const v = data.vehicle;
+  // "Back to <agency>" → the agency's route list this ride belongs to (agency-less
+  // seeded routes go to the 'campus' group). Falls back to the campus list if the
+  // route somehow has no institution.
+  const backType = data.route.vehicleType === 'VAN' ? 'VAN' : 'BUS';
+  const backHref = data.route.institutionId
+    ? `/student/schools/${data.route.institutionId}/agencies/${data.route.agencyId ?? 'campus'}?type=${backType}`
+    : '/student/schools';
+  const backLabel = data.route.institutionId
+    ? `Back to ${data.route.agencyName ?? 'agency'}`
+    : 'Back to campuses';
   const busPhotos = v ? (v.photos?.length ? v.photos : v.image_url ? [v.image_url] : []) : [];
   const hasGeo = data.stops.some((s) => s.lat != null && s.lng != null);
 
   return (
     <section className="space-y-6">
       <div className={app ? 'space-y-3' : 'space-y-4'}>
-        <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-          ← Back to campuses
+        <Link href={backHref} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+          ← {backLabel}
         </Link>
         {!app && <BookingSteps active={4} />}
         <div>
