@@ -26,11 +26,16 @@ export const cancelSchema = z.object({
   accountNumber: z.string().trim().max(40).optional(),
   ifsc: z.string().trim().max(20).optional(),
 });
-// Cash-on-board was removed: the agency can only confirm PAID bookings, and
-// without a gateway every online method completes the mock payment instantly.
-export const paySchema = z.object({
+// Real UPI payment (no gateway): the rider pays to the platform VPA, then submits
+// the 12-digit UPI reference (UTR). A SUPER_ADMIN verifies it to confirm the seat.
+export const submitUpiSchema = z.object({
   bookingId: z.string().uuid(),
-  method: z.enum(['UPI', 'CARD', 'NETBANKING']),
+  // Present when a parent is paying for a child's booking (revalidates /parent).
+  studentId: z.union([z.string().uuid(), z.literal('')]).optional(),
+  utr: z
+    .string()
+    .trim()
+    .regex(/^\d{12}$/, 'Enter the 12-digit UPI reference (UTR) from your UPI app.'),
 });
 
 export const studentDetailsSchema = z.object({

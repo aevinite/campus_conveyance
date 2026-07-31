@@ -849,6 +849,64 @@ export async function listContactMessages(opts: PageOpts = {}): Promise<Paged<Co
   return { rows: (data ?? []) as ContactMessageRow[], total: count ?? 0 };
 }
 
+// ---- UPI payments awaiting verification -----------------------------------
+
+export interface PendingPaymentRow {
+  bookingId: string;
+  studentName: string | null;
+  routeName: string;
+  amountCents: number;
+  utr: string | null;
+  reference: string | null;
+  submittedAt: string | null;
+}
+
+/**
+ * UPI payments a rider submitted (status CREATED = awaiting verification), for
+ * the admin Payments queue. Service-role read; the seat is confirmed only when
+ * the admin approves via verify_upi_payment.
+ */
+export async function listPendingUpiPayments(opts: PageOpts = {}): Promise<Paged<PendingPaymentRow>> {
+  const client = db();
+  let q = client
+    .from('payments')
+    .select('booking_id, amount_cents, upi_utr, reference, submitted_at', { count: 'exact' })
+    .eq('status', 'CREATED')
+    .not('submitted_at', 'is', null)
+    .order('submitted_at', { ascending: true });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const bookings = await mapByIds<{ id: string; student_name: string | null; route_id: string | null }>(
+    client,
+    'bookings',
+    'id, student_name, route_id',
+    rows.map((r) => r.booking_id as string),
+  );
+  const routes = await mapByIds<{ id: string; name: string }>(
+    client,
+    'routes',
+    'id, name',
+    [...bookings.values()].map((b) => b.route_id),
+  );
+  return {
+    rows: rows.map((r) => {
+      const b = bookings.get(r.booking_id as string);
+      return {
+        bookingId: r.booking_id as string,
+        studentName: b?.student_name ?? null,
+        routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
+        amountCents: (r.amount_cents as number) ?? 0,
+        utr: (r.upi_utr as string) ?? null,
+        reference: (r.reference as string) ?? null,
+        submittedAt: (r.submitted_at as string) ?? null,
+      };
+    }),
+    total: count ?? 0,
+  };
+}
+
 // ---- Student detail (everything a student filled) -------------------------
 // Keyed by the STUDENT's profile id (that's what the Manage Students list uses).
 // The `students` row — where the booking/"details" form saves address, class,

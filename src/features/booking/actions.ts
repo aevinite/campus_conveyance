@@ -2,8 +2,8 @@
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { reserveSchema, cancelSchema, paySchema, studentDetailsSchema } from './schemas';
-import { reserveSeat, cancelBooking, saveStudentDetails, payBooking } from './services';
+import { reserveSchema, cancelSchema, submitUpiSchema, studentDetailsSchema } from './schemas';
+import { reserveSeat, cancelBooking, saveStudentDetails, submitUpiPayment } from './services';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
 import { toErrorResponse } from '@/lib/errors/app-error';
@@ -17,7 +17,7 @@ export type ReserveState = {
 };
 export type CancelState = { ok?: boolean; error?: string };
 export type DetailsState = { ok?: boolean; error?: string };
-export type PayState = { status?: string; error?: string; code?: string };
+export type SubmitUpiState = { status?: string; error?: string; code?: string };
 
 export async function reserveSeatAction(
   _: ReserveState,
@@ -67,26 +67,31 @@ export async function saveStudentDetailsAction(
   return { ok: true };
 }
 
-/** Simulated payment → confirm the held seat. */
-export async function payBookingAction(
-  _: PayState,
+/**
+ * Record a rider's UPI payment (they paid to the platform VPA + entered the UTR).
+ * The seat is HELD as "SUBMITTED" — a SUPER_ADMIN verifies the UTR to confirm it.
+ * The confirmed bell/email/push fire later, from verify_upi_payment's status
+ * change (booking_notify), not here.
+ */
+export async function submitUpiPaymentAction(
+  _: SubmitUpiState,
   formData: FormData,
-): Promise<PayState> {
-  const parsed = paySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: 'Please choose a payment method.' };
+): Promise<SubmitUpiState> {
+  const parsed = submitUpiSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Enter the 12-digit UPI reference (UTR).' };
+  }
   const db = await createClient();
   try {
-    const status = await payBooking(db, parsed.data.bookingId);
-    // The CONFIRMED email (rich template) + push are enqueued by the booking_notify
-    // DB trigger and delivered by the retry-backed outbox drainers below — no
-    // one-shot send, so a transient SMTP hiccup can no longer lose the mail.
+    const status = await submitUpiPayment(db, {
+      bookingId: parsed.data.bookingId,
+      utr: parsed.data.utr,
+    });
+    // Notify the platform admins to verify (the submit RPC queued the bell rows).
     after(() => drainEmailOutbox());
     after(() => drainPushOutbox());
-    // Broad revalidation so the list cards, detail, bookings and home all reflect
-    // the confirmed seat together (see reserveSeatAction).
     revalidatePath('/student', 'layout');
-    const studentId = String(formData.get('studentId') ?? '');
-    if (studentId) revalidatePath('/parent', 'layout');
+    if (parsed.data.studentId) revalidatePath('/parent', 'layout');
     return { status };
   } catch (e) {
     const r = toErrorResponse(e);

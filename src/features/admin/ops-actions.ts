@@ -1,8 +1,11 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSessionRole } from '@/features/auth/session';
+import { drainEmailOutbox } from '@/lib/email-outbox';
+import { drainPushOutbox } from '@/lib/push';
 
 // Guard id-shaped input before it reaches Postgres — a malformed value is a
 // 22P02 (invalid uuid) crash to the error page rather than a clean no-op.
@@ -69,4 +72,45 @@ export async function setReviewHiddenAction(formData: FormData): Promise<void> {
     /* logging is best-effort */
   }
   revalidatePath('/aevinite/reviews');
+}
+
+// Verify (or reject) a rider's submitted UPI payment. Approving CONFIRMS the seat
+// (the only path that does so); rejecting reopens it for re-payment. The role
+// check lives in the RPC too, but we gate here as well and call it with the USER
+// session so verify_upi_payment sees auth.uid() = the admin.
+export async function verifyUpiPaymentAction(formData: FormData): Promise<void> {
+  const db = await createClient();
+  const role = await getSessionRole(db);
+  if (role !== 'SUPER_ADMIN') return;
+
+  const bookingId = String(formData.get('bookingId') ?? '');
+  const approve = String(formData.get('approve') ?? '') === 'true';
+  const note = String(formData.get('note') ?? '').trim() || null;
+  if (!UUID_RE.test(bookingId)) return;
+
+  const { error } = await db.rpc('verify_upi_payment', {
+    p_booking_id: bookingId,
+    p_approve: approve,
+    p_note: note,
+  });
+  if (error) throw error;
+
+  // Approving flips the booking to CONFIRMED → booking_notify queued the rider's
+  // confirmed bell/email/push; rejecting queued the "please re-pay" bell. Flush.
+  after(() => drainEmailOutbox());
+  after(() => drainPushOutbox());
+
+  try {
+    const { data } = await db.auth.getClaims();
+    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    await db.from('audit_logs').insert({
+      actor_id: actorId,
+      action: approve ? 'UPI_PAYMENT_VERIFIED' : 'UPI_PAYMENT_REJECTED',
+      entity: 'payments',
+      entity_id: bookingId,
+    });
+  } catch {
+    /* logging is best-effort */
+  }
+  revalidatePath('/aevinite/payments');
 }

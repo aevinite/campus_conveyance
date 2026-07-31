@@ -29,6 +29,7 @@ export interface ChildActiveBooking {
   expires_at: string | null;
   pickup_stop_id: string | null;
   billing_period: string | null;
+  payment_status: string | null;
   route_id: string | null;
   route_name: string | null;
 }

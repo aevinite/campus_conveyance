@@ -1,10 +1,12 @@
-import { AlertTriangle, Globe, Settings, Smartphone } from 'lucide-react';
+import { AlertTriangle, Globe, Settings, Smartphone, IndianRupee } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { getMaintenance } from '@/lib/maintenance';
+import { getUpiSettings } from '@/lib/upi-settings';
 import { toggleMaintenanceAction } from '@/features/admin/settings-actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
 import { formatDateTime } from '@/lib/format-date';
+import { UpiSettingsForm } from './upi-settings-form';
 
 function MaintenanceToggle({
   target,
@@ -72,7 +74,10 @@ function MaintenanceToggle({
 }
 
 export default async function AdminSettingsPage() {
-  const { website, app, updatedAt } = await getMaintenance();
+  const [{ website, app, updatedAt }, upi] = await Promise.all([
+    getMaintenance(),
+    getUpiSettings(),
+  ]);
   const since = updatedAt ? formatDateTime(updatedAt) : null;
 
   return (
@@ -105,6 +110,23 @@ export default async function AdminSettingsPage() {
           enabled={app}
         />
       </div>
+
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <IndianRupee className="size-5 text-primary" />
+            UPI payments
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            The single UPI account families pay into. After a rider submits their UPI
+            reference (UTR), verify it in{' '}
+            <span className="font-medium text-foreground">Payments</span> to confirm the seat.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <UpiSettingsForm vpa={upi.vpa} payeeName={upi.payeeName} active={upi.active} />
+        </CardContent>
+      </Card>
     </section>
   );
 }

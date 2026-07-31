@@ -7,6 +7,7 @@ const ITEMS: SidebarItem[] = [
   { label: 'Buses & Vans', href: '/aevinite/fleet', icon: 'Bus' },
   { label: 'Routes & Stops', href: '/aevinite/routes', icon: 'Route' },
   { label: 'Bookings', href: '/aevinite/bookings', icon: 'Ticket' },
+  { label: 'Payments', href: '/aevinite/payments', icon: 'Wallet' },
   { label: 'Live Rides', href: '/aevinite/live', icon: 'Radio' },
   { label: 'Drivers', href: '/aevinite/drivers', icon: 'IdCard' },
   { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },

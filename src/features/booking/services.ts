@@ -60,17 +60,25 @@ export async function saveStudentDetails(
   if (error) throw new AppError('BOOKING', error.message);
 }
 
-/** Confirm a held (PENDING) booking after a (simulated) successful payment. */
-export async function payBooking(db: SupabaseClient, bookingId: string): Promise<string> {
-  const { data, error } = await db.rpc('pay_booking', { p_booking_id: bookingId });
-  // Preserve the SQLSTATE (e.g. P0008 window-expired, P0005 no-longer-payable) so
-  // the UI can branch on the code instead of the message text.
+/**
+ * Record a rider's UPI payment (they've paid to the platform VPA and entered the
+ * 12-digit UTR). The seat is HELD as "SUBMITTED" — a SUPER_ADMIN verifies the UTR
+ * to actually confirm it. Returns the booking's payment_status (expected
+ * 'SUBMITTED'). Never confirms the seat itself.
+ */
+export async function submitUpiPayment(
+  db: SupabaseClient,
+  input: { bookingId: string; utr: string },
+): Promise<string> {
+  const { data, error } = await db.rpc('submit_upi_payment', {
+    p_booking_id: input.bookingId,
+    p_utr: input.utr,
+  });
+  // Preserve the SQLSTATE (P0008 window-expired, P0005 no-longer-payable,
+  // P0015 bad UTR) so the UI can branch on the code, not the message text.
   if (error) throw new AppError('BOOKING', error.message, 400, error.code);
-  // Don't assume success on an empty row — only an explicit status counts. A
-  // null/absent status here would otherwise read as "CONFIRMED" and trigger a
-  // confirmation email for a seat that may not actually be held.
-  const status = data?.status as string | undefined;
-  if (!status) throw new AppError('BOOKING', 'Payment could not be confirmed — please try again.', 400);
+  const status = (data?.payment_status as string | undefined) ?? undefined;
+  if (!status) throw new AppError('BOOKING', 'Could not submit your payment — please try again.', 400);
   return status;
 }
 

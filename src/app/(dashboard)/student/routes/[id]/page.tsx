@@ -11,6 +11,7 @@ import {
   getMyActiveBooking,
 } from '@/features/booking/repository';
 import { getStudentDetails } from '@/features/booking/services';
+import { getUpiSettings } from '@/lib/upi-settings';
 import { getRouteAgencyReviews } from '@/features/reviews/repository';
 import { StarRating } from '@/components/ui/star-rating';
 import { formatCompactDateTime } from '@/lib/format-date';
@@ -53,15 +54,17 @@ export default async function RouteDetailPage({
   // single active booking (one bus at a time — on this route it resumes/reports,
   // on another it locks booking here). All key only off id/the caller, so fetch
   // together rather than in two sequential batches.
-  const [data, details, availability, currentBooking, agencyReviews, app] = await Promise.all([
+  const [data, details, availability, currentBooking, agencyReviews, upiSettings, app] = await Promise.all([
     getRouteWithStops(db, id),
     getStudentDetails(db),
     getAvailability(db, id),
     getMyActiveBooking(db),
     getRouteAgencyReviews(db, id),
+    getUpiSettings(),
     isAppRequest(),
   ]);
   if (!data) notFound();
+  const upi = { vpa: upiSettings.vpa, payee: upiSettings.payeeName, configured: upiSettings.active && !!upiSettings.vpa };
 
   // Details-first flow: reserving without name/phone/address would hand the
   // agency an empty student record, so send the student to the details form
@@ -84,6 +87,7 @@ export default async function RouteDetailPage({
     label: p.label,
     suffix: p.suffix,
     amount: `₹${Math.round(p.cents / 100).toLocaleString('en-IN')}`,
+    amountRupees: String(Math.round(p.cents / 100)),
   }));
   const priceSummary =
     planOptions.length > 0
@@ -94,6 +98,7 @@ export default async function RouteDetailPage({
     ? planPrice(data.route, activeBooking.billing_period) ?? data.route.price_cents
     : null;
   const resumeFare = inr(resumePlanCents);
+  const resumeAmountRupees = resumePlanCents ? String(Math.round(resumePlanCents / 100)) : null;
   const resumePeriodLabel = activeBooking ? periodLabel(activeBooking.billing_period) : null;
   const v = data.vehicle;
   // "Back to <agency>" → the agency's route list this ride belongs to (agency-less
@@ -457,14 +462,12 @@ export default async function RouteDetailPage({
                   soldOut={soldOut}
                   destinationName={data.institutionName}
                   plans={planOptions}
+                  upi={upi}
                   resumeFare={resumeFare}
+                  resumeAmountRupees={resumeAmountRupees}
                   resumePeriodLabel={resumePeriodLabel}
                   resumeBookingId={activeBooking.id}
-                  // Pickup was chosen at request time; resolve its name from the
-                  // route's stops so the resume-payment receipt can show it.
-                  resumePickupName={
-                    data.stops.find((s) => s.id === activeBooking.pickup_stop_id)?.name ?? null
-                  }
+                  resumeSubmitted={activeBooking.payment_status === 'SUBMITTED'}
                   payBy={activeBooking.expires_at ? formatTime(activeBooking.expires_at) : null}
                   payByIso={activeBooking.expires_at}
                 />
@@ -538,6 +541,7 @@ export default async function RouteDetailPage({
                   notBookable={notBookable}
                   destinationName={data.institutionName}
                   plans={planOptions}
+                  upi={upi}
                 />
               )}
             </CardContent>

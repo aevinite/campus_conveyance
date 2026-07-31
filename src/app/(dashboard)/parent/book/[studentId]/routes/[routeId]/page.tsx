@@ -5,6 +5,7 @@ import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getRouteWithStops, getAvailability } from '@/features/booking/repository';
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
+import { getUpiSettings } from '@/lib/upi-settings';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { offeredPlans, planPrice, periodLabel, type BillingPeriod } from '@/lib/billing';
 import { formatTime } from '@/lib/format-date';
@@ -29,13 +30,15 @@ export default async function ParentBookRoute({
   const child = children.find((c) => c.student_id === studentId);
   if (!child) notFound(); // not linked to this parent
 
-  const [data, availability, active] = await Promise.all([
+  const [data, availability, active, upiSettings] = await Promise.all([
     getRouteWithStops(db, routeId),
     getAvailability(db, routeId),
     getChildActiveBooking(db, studentId),
+    getUpiSettings(),
   ]);
   if (!data) notFound();
 
+  const upi = { vpa: upiSettings.vpa, payee: upiSettings.payeeName, configured: upiSettings.active && !!upiSettings.vpa };
   const childName = child.full_name ?? 'your child';
   const soldOut = availability.available <= 0;
   const notBookable = availability.total <= 0;
@@ -45,6 +48,7 @@ export default async function ParentBookRoute({
     label: p.label,
     suffix: p.suffix,
     amount: `₹${Math.round(p.cents / 100).toLocaleString('en-IN')}`,
+    amountRupees: String(Math.round(p.cents / 100)),
   }));
 
   const activeHere = active && active.route_id === routeId ? active : null;
@@ -54,10 +58,8 @@ export default async function ParentBookRoute({
     ? planPrice(data.route, activeHere.billing_period as BillingPeriod | null) ?? data.route.price_cents
     : null;
   const resumeFare = inr(resumePlanCents);
+  const resumeAmountRupees = resumePlanCents ? String(Math.round(resumePlanCents / 100)) : null;
   const resumePeriodLabel = activeHere ? periodLabel(activeHere.billing_period as BillingPeriod | null) : null;
-  const resumePickupName = activeHere
-    ? data.stops.find((s) => s.id === activeHere.pickup_stop_id)?.name ?? null
-    : null;
 
   const v = data.vehicle;
   const hasGeo = data.stops.some((s) => s.lat != null && s.lng != null);
@@ -74,12 +76,14 @@ export default async function ParentBookRoute({
         soldOut={soldOut}
         destinationName={data.institutionName}
         plans={planOptions}
+        upi={upi}
         bookForStudentId={studentId}
         bookingsHref="/parent"
         resumeFare={resumeFare}
+        resumeAmountRupees={resumeAmountRupees}
         resumePeriodLabel={resumePeriodLabel}
         resumeBookingId={activeHere.booking_id}
-        resumePickupName={resumePickupName}
+        resumeSubmitted={activeHere.payment_status === 'SUBMITTED'}
         payBy={activeHere.expires_at ? formatTime(activeHere.expires_at) : null}
         payByIso={activeHere.expires_at}
       />
@@ -146,6 +150,7 @@ export default async function ParentBookRoute({
         notBookable={notBookable}
         destinationName={data.institutionName}
         plans={planOptions}
+        upi={upi}
         bookForStudentId={studentId}
         bookingsHref="/parent"
       />
