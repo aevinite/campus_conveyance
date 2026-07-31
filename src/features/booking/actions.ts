@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { reserveSchema, cancelSchema, submitUpiSchema, studentDetailsSchema } from './schemas';
-import { reserveSeat, cancelBooking, saveStudentDetails, submitUpiPayment } from './services';
+import { reserveSeat, cancelBooking, saveStudentDetails, submitUpiPayment, getBookingStatus } from './services';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
 import { toErrorResponse } from '@/lib/errors/app-error';
@@ -18,6 +18,20 @@ export type ReserveState = {
 export type CancelState = { ok?: boolean; error?: string };
 export type DetailsState = { ok?: boolean; error?: string };
 export type SubmitUpiState = { status?: string; error?: string; code?: string };
+export type BookingStatusResult = { status?: string; paymentStatus?: string | null; error?: string };
+
+/** Polled by the payment screen to detect when the admin confirms the seat. */
+export async function bookingStatusAction(bookingId: string): Promise<BookingStatusResult> {
+  if (!/^[0-9a-f-]{36}$/i.test(bookingId)) return { error: 'Invalid booking.' };
+  const db = await createClient();
+  try {
+    const r = await getBookingStatus(db, bookingId);
+    if (!r) return {};
+    return { status: r.status, paymentStatus: r.paymentStatus };
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+}
 
 export async function reserveSeatAction(
   _: ReserveState,

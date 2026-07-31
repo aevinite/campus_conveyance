@@ -80,6 +80,8 @@ export interface BookingRow {
   is_paid: boolean;
   approved_at: string | null;
   expires_at: string | null;
+  /** UPI payment step: UNPAID | SUBMITTED (verifying) | PAID | REJECTED. */
+  payment_status: string | null;
   /** Why a CANCELLED booking was cancelled: 'STUDENT' | 'PAYMENT_TIMEOUT' | null. */
   cancel_cause: string | null;
   bus_number: string | null;
@@ -319,7 +321,7 @@ export async function listMyBookings(
   let q = db
     .from('bookings')
     .select(
-      'id, status, created_at, is_paid, approved_at, expires_at, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, agency_id, agencies(name), vehicles(id, bus_number, driver_name, driver_phone))',
+      'id, status, created_at, is_paid, approved_at, expires_at, payment_status, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, agency_id, agencies(name), vehicles(id, bus_number, driver_name, driver_phone))',
     )
     // Cancelled bookings are hidden from the student panel entirely
     // (user decision 2026-07-18) — whatever the cancel reason.
@@ -364,6 +366,7 @@ export async function listMyBookings(
       is_paid: (b.is_paid as boolean) ?? false,
       approved_at: (b.approved_at as string) ?? null,
       expires_at: (b.expires_at as string) ?? null,
+      payment_status: (b.payment_status as string) ?? null,
       cancel_cause: (b.cancel_cause as string) ?? null,
       _vehicleId: vehicle?.id ?? null,
       bus_number: vehicle?.bus_number ?? null,

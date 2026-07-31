@@ -19,7 +19,11 @@ import { listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { AppStudentHome } from '@/components/app-student-home';
+import RouteStopsMap, { type MapStop } from './routes/[id]/route-stops-map';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
+
+// Bookings whose bus is worth showing a live map for.
+const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
 
 const STATUS_META: Record<
   string,
@@ -95,6 +99,25 @@ export default async function StudentHome() {
   const recent = recentRows.slice(0, 4);
   const nextTrip = active.find((b) => b.status === 'CONFIRMED') ?? active[0] ?? null;
 
+  // Live bus map for the active ride: fetch its stops once (only when trackable).
+  const trackRouteId =
+    nextTrip && nextTrip.route_id && TRACKABLE.has(nextTrip.status) ? nextTrip.route_id : null;
+  let trackStops: MapStop[] = [];
+  if (trackRouteId) {
+    const { data: stopRows } = await db
+      .from('route_stops')
+      .select('name, lat, lng, description, address, sequence')
+      .eq('route_id', trackRouteId)
+      .order('sequence');
+    trackStops = (stopRows ?? []).map((s) => ({
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      description: s.description,
+      address: s.address,
+    }));
+  }
+
 
   // Status breakdown for the mini bar chart (only non-empty buckets).
   // Cancelled bookings are hidden from the student panel entirely.
@@ -127,6 +150,8 @@ export default async function StudentHome() {
           image_url: i.image_url,
           is_verified: i.is_verified,
         }))}
+        trackRouteId={trackRouteId}
+        trackStops={trackStops}
       />
     );
   }
@@ -200,6 +225,23 @@ export default async function StudentHome() {
             Manage
             <ArrowRight className="size-4" />
           </Link>
+        </section>
+      )}
+
+      {/* Live bus tracking for the active ride */}
+      {trackRouteId && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-xl font-semibold">
+              <MapPin className="size-5 text-primary" /> Track your bus
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Live location shows while the driver is online for your ride.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-xs">
+            <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} />
+          </div>
         </section>
       )}
 

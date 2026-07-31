@@ -18,7 +18,7 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { reserveSeatAction, submitUpiPaymentAction } from '@/features/booking/actions';
+import { reserveSeatAction, submitUpiPaymentAction, bookingStatusAction } from '@/features/booking/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,6 +112,7 @@ export function ReserveForm({
   payByIso,
   bookForStudentId,
   bookingsHref = '/student/bookings',
+  homeHref = '/student',
 }: {
   routeId: string;
   routeName: string;
@@ -127,6 +128,8 @@ export function ReserveForm({
   bookForStudentId?: string;
   /** Where "View my bookings" links to — the parent flow points at /parent. */
   bookingsHref?: string;
+  /** Home to redirect to (with the live map) once the seat is confirmed. */
+  homeHref?: string;
   resumeBookingId?: string;
   /** For a resumed booking the plan is already fixed — its amount + label. */
   resumeFare?: string | null;
@@ -152,6 +155,7 @@ export function ReserveForm({
   const [payByAt, setPayByAt] = useState<string | null>(null); // ISO deadline from reserve
   const [busy, setBusy] = useState(false); // reserve in-flight
   const [submitting, setSubmitting] = useState(false); // UTR submit in-flight
+  const [confirmed, setConfirmed] = useState(false); // admin verified → seat confirmed
   const [utr, setUtr] = useState('');
   const [planIdx, setPlanIdx] = useState(0);
   const [payDismissed, setPayDismissed] = useState(false);
@@ -175,6 +179,35 @@ export function ReserveForm({
     const t = setTimeout(() => setPhase('payment'), APPROVAL_MS);
     return () => clearTimeout(t);
   }, [phase]);
+
+  // While a payment is "verifying", poll for the admin's confirmation. The moment
+  // the seat is CONFIRMED, show the success popup and (below) redirect home.
+  useEffect(() => {
+    if (phase !== 'submitted' || !bookingId || confirmed) return;
+    let stopped = false;
+    const iv = setInterval(async () => {
+      const r = await bookingStatusAction(bookingId);
+      if (stopped) return;
+      if (r.status === 'CONFIRMED') {
+        setConfirmed(true);
+        clearInterval(iv);
+      }
+    }, 5000);
+    return () => {
+      stopped = true;
+      clearInterval(iv);
+    };
+  }, [phase, bookingId, confirmed]);
+
+  // Once confirmed, briefly show the popup, then land on the home with the live map.
+  useEffect(() => {
+    if (!confirmed) return;
+    const t = setTimeout(() => {
+      router.push(homeHref);
+      router.refresh();
+    }, 2600);
+    return () => clearTimeout(t);
+  }, [confirmed, homeHref, router]);
 
   const payByLabel = fmtIST(payByAt) ?? payBy ?? null;
   const deadlineIso = payByAt ?? payByIso ?? null;
@@ -390,11 +423,37 @@ export function ReserveForm({
     return (
       <div className="space-y-3">
         <PanelSteps active={3} />
+        {confirmed && (
+          <Overlay label="Booking confirmed">
+            <div className="w-full max-w-md rounded-2xl border border-border bg-card p-7 text-center shadow-xl">
+              <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-success/10 text-success">
+                <CheckCircle2 className="size-9" />
+              </span>
+              <h2 className="mt-4 text-2xl font-bold">Booking confirmed! 🎉</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Your payment was verified and your seat is confirmed. Taking you to live tracking…
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Opening the map
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  router.push(homeHref);
+                  router.refresh();
+                }}
+                className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Go now <ArrowRight className="size-4" />
+              </button>
+            </div>
+          </Overlay>
+        )}
         <div className="flex items-start gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-2.5 text-sm">
           <Clock3 className="mt-0.5 size-4 shrink-0 text-primary" />
           <span>
             Payment submitted — we&apos;re verifying it. Your seat is held and will be confirmed
-            shortly. We&apos;ll notify you the moment it&apos;s confirmed.
+            shortly. This screen updates automatically the moment it&apos;s confirmed.
           </span>
         </div>
         <Link

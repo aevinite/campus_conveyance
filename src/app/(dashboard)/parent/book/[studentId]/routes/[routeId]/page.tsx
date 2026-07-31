@@ -79,6 +79,7 @@ export default async function ParentBookRoute({
         upi={upi}
         bookForStudentId={studentId}
         bookingsHref="/parent"
+        homeHref="/parent"
         resumeFare={resumeFare}
         resumeAmountRupees={resumeAmountRupees}
         resumePeriodLabel={resumePeriodLabel}
@@ -153,6 +154,7 @@ export default async function ParentBookRoute({
         upi={upi}
         bookForStudentId={studentId}
         bookingsHref="/parent"
+        homeHref="/parent"
       />
     );
   }

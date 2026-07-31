@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import RouteStopsMap, { type MapStop } from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import type { Kind } from '@/features/catalog/repository';
 import { formatShortDate } from '@/lib/format-date';
 
@@ -49,11 +50,15 @@ export function AppStudentHome({
   dateLabel,
   active,
   campuses,
+  trackRouteId,
+  trackStops = [],
 }: {
   name: string;
   dateLabel: string;
   active: ActiveTrip;
   campuses: Campus[];
+  trackRouteId?: string | null;
+  trackStops?: MapStop[];
 }) {
   const meta = active ? STATUS_META[active.status] ?? STATUS_META.PENDING : null;
   const canTrack = active && active.route_id && TRACKABLE.has(active.status);
@@ -131,6 +136,12 @@ export function AppStudentHome({
               Manage
             </Link>
           </div>
+          {/* Live bus map right in the home card */}
+          {trackRouteId && (
+            <div className="border-t border-primary/15 p-3">
+              <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} />
+            </div>
+          )}
         </section>
       ) : (
         <section className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card/50 px-5 py-8 text-center">

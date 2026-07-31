@@ -79,14 +79,27 @@ function timelineFor(b: BookingRow): TimelineStep[] {
     ];
   }
   if (!b.is_paid) {
+    // The rider paid by UPI and submitted their reference — awaiting admin verify.
+    if (b.payment_status === 'SUBMITTED') {
+      return [
+        { state: 'done', label: 'Request sent' },
+        { state: 'done', label: 'Agency approved your request' },
+        { state: 'done', label: 'Payment submitted' },
+        { state: 'current', label: 'Verifying your payment — your seat is held' },
+        { state: 'upcoming', label: 'Booking confirmed' },
+      ];
+    }
     return [
       { state: 'done', label: 'Request sent' },
       { state: 'done', label: 'Agency approved your request' },
       {
         state: 'current',
-        label: b.expires_at
-          ? `Complete payment before ${formatTime(b.expires_at)}`
-          : 'Complete payment within 10 minutes',
+        label:
+          b.payment_status === 'REJECTED'
+            ? 'Payment could not be verified — please pay again'
+            : b.expires_at
+              ? `Complete payment before ${formatTime(b.expires_at)}`
+              : 'Complete payment within 10 minutes',
       },
       { state: 'upcoming', label: 'Booking confirmed' },
     ];
@@ -133,7 +146,11 @@ function statusPill(b: BookingRow) {
     ? { label: 'Awaiting approval', cls: 'border-warning/30 bg-warning/10 text-warning' }
     : b.is_paid
       ? { label: 'Paid — awaiting confirmation', cls: 'border-primary/30 bg-primary/10 text-primary' }
-      : { label: 'Approved — pay now', cls: 'border-primary/30 bg-primary/10 text-primary' };
+      : b.payment_status === 'SUBMITTED'
+        ? { label: 'Verifying payment', cls: 'border-primary/30 bg-primary/10 text-primary' }
+        : b.payment_status === 'REJECTED'
+          ? { label: 'Payment failed — pay again', cls: 'border-destructive/30 bg-destructive/10 text-destructive' }
+          : { label: 'Approved — pay now', cls: 'border-primary/30 bg-primary/10 text-primary' };
   const m = map[b.status] ?? pending;
   return (
     <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>
@@ -215,8 +232,11 @@ export default async function BookingsPage({
             // expiry to "now"); not a compiler purity hazard for this list.
             // eslint-disable-next-line react-hooks/purity
             const windowOpen = !b.expires_at || new Date(b.expires_at).getTime() > Date.now();
+            // A SUBMITTED payment is awaiting admin verification — no "Pay now"
+            // (they've already paid); a REJECTED one can be paid again.
             const payNow =
-              b.status === 'PENDING' && b.approved_at && !b.is_paid && b.routeId && windowOpen;
+              b.status === 'PENDING' && b.approved_at && !b.is_paid && b.routeId && windowOpen
+              && b.payment_status !== 'SUBMITTED';
             return (
               <Card key={b.id}>
                 <CardContent className="space-y-4 py-4">
