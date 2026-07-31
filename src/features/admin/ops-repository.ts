@@ -197,7 +197,7 @@ export async function getVehicleDetail(id: string): Promise<VehicleDetail | null
       routeId: a.route_id,
       routeName: a.route_id ? (routes.get(a.route_id)?.name ?? '—') : '—',
       totalSeats: alloc?.total_seats ?? null,
-      reservedSeats: alloc?.reserved_seats ?? null,
+      reservedSeats: alloc ? liveReserved(riders) : null,
       riders,
     });
   }
@@ -232,6 +232,14 @@ export async function getVehicleDetail(id: string): Promise<VehicleDetail | null
 }
 
 /** Riders (bookings) attached to a seat allocation, with stop names resolved. */
+// Live "reserved" count = PENDING + CONFIRMED riders (the seats actually held),
+// matching the rider list/detail and the driver panel. Derived from the already-
+// loaded riders so the admin console never shows a denormalized count that has
+// drifted from what riders see. (ridersForAllocation returns all non-cancelled,
+// which also includes waitlisted/expired — those don't hold a seat.)
+const liveReserved = (riders: SeatRider[]): number =>
+  riders.filter((r) => r.status === 'PENDING' || r.status === 'CONFIRMED').length;
+
 async function ridersForAllocation(client: SupabaseClient, allocationId: string): Promise<SeatRider[]> {
   const { data, error } = await client
     .from('bookings')
@@ -385,8 +393,9 @@ export async function getRouteDetail(id: string): Promise<RouteDetail | null> {
       .maybeSingle();
     if (allocErr) throw allocErr;
     if (alloc) {
-      occupancy = { totalSeats: (alloc.total_seats as number) ?? null, reservedSeats: (alloc.reserved_seats as number) ?? null };
       riders = await ridersForAllocation(client, alloc.id as string);
+      // Live PENDING/CONFIRMED count (matches rider + driver views), not denorm.
+      occupancy = { totalSeats: (alloc.total_seats as number) ?? null, reservedSeats: liveReserved(riders) };
     }
   }
 

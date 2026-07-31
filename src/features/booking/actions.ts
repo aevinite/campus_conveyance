@@ -31,14 +31,12 @@ export async function reserveSeatAction(
     // Flush the reserved/waitlisted email + push the DB trigger just queued.
     after(() => drainEmailOutbox());
     after(() => drainPushOutbox());
-    revalidatePath('/student/bookings');
-    revalidatePath('/student'); // home "recent trips" strip
-    revalidatePath(`/student/routes/${parsed.data.routeId}`);
-    // Parent-books-for-a-child: refresh the parent dashboard + that child's flow.
-    if (parsed.data.studentId) {
-      revalidatePath('/parent');
-      revalidatePath(`/parent/book/${parsed.data.studentId}`);
-    }
+    // Broad layout revalidation so EVERY surface that shows this route's seat
+    // count refreshes together — the campus/agency list cards, the route detail,
+    // bookings and the home strip — never a stale seat number in one place while
+    // another is fresh.
+    revalidatePath('/student', 'layout');
+    if (parsed.data.studentId) revalidatePath('/parent', 'layout');
     return {
       status: result.status,
       bookingId: result.id,
@@ -84,18 +82,11 @@ export async function payBookingAction(
     // one-shot send, so a transient SMTP hiccup can no longer lose the mail.
     after(() => drainEmailOutbox());
     after(() => drainPushOutbox());
-    revalidatePath('/student/bookings');
-    revalidatePath('/student');
-    // Refresh the route detail page too (its seat count + resume-payment panel
-    // both change once the seat is confirmed). routeId is passed by the form.
-    const routeId = String(formData.get('routeId') ?? '');
-    if (routeId) revalidatePath(`/student/routes/${routeId}`);
-    // Parent paying for a child's booking → refresh the parent surfaces too.
+    // Broad revalidation so the list cards, detail, bookings and home all reflect
+    // the confirmed seat together (see reserveSeatAction).
+    revalidatePath('/student', 'layout');
     const studentId = String(formData.get('studentId') ?? '');
-    if (studentId) {
-      revalidatePath('/parent');
-      revalidatePath(`/parent/book/${studentId}`);
-    }
+    if (studentId) revalidatePath('/parent', 'layout');
     return { status };
   } catch (e) {
     const r = toErrorResponse(e);
@@ -133,17 +124,9 @@ export async function cancelBookingAction(
   // cancel notice (to parents) and any promotion email/push the trigger queued.
   after(() => drainEmailOutbox());
   after(() => drainPushOutbox());
-  revalidatePath('/student/bookings');
-  revalidatePath('/student');
-  // Refresh the route detail page too — cancelling frees a seat, so its seat
-  // count + resume-payment panel change (mirrors reserve/pay). routeId is passed
-  // by the form when the button is rendered from a bookings list row.
-  const routeId = String(formData.get('routeId') ?? '');
-  if (routeId) revalidatePath(`/student/routes/${routeId}`);
-  // Parent cancelling a child's booking → refresh the parent surfaces too.
-  if (d.studentId) {
-    revalidatePath('/parent');
-    revalidatePath(`/parent/book/${d.studentId}`);
-  }
+  // Cancelling frees a seat → broad revalidation so every surface (list cards,
+  // detail, bookings, home) shows the freed seat together (see reserveSeatAction).
+  revalidatePath('/student', 'layout');
+  if (d.studentId) revalidatePath('/parent', 'layout');
   return { ok: true };
 }
