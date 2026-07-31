@@ -13,6 +13,8 @@ import { rateLimit } from '@/lib/rate-limit';
 // per-provider throttle; a saturated throttle serves a stale/empty result
 // rather than risking Nominatim's per-IP ban. See src/lib/geocode-cache.ts.
 export const runtime = 'nodejs';
+// Co-locate with the Supabase DB (ap-northeast-1 / Tokyo) — see src/app/layout.tsx.
+export const preferredRegion = 'hnd1';
 
 interface Suggestion {
   primary: string;

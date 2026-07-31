@@ -16,6 +16,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 //      (Estimated counts read as 0/low on a freshly-seeded DB until Postgres
 //      runs ANALYZE, which made the marketing band understate real numbers.)
 export const runtime = 'nodejs';
+// Co-locate with the Supabase DB (ap-northeast-1 / Tokyo) — see src/app/layout.tsx.
+export const preferredRegion = 'hnd1';
 export const revalidate = 60;
 
 // Authoritative DB-load cap: the 4 counts run at most once per 60s, keyed in the

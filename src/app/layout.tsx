@@ -22,6 +22,14 @@ const spaceGrotesk = Space_Grotesk({
   display: "swap",
 });
 
+// Run the server functions in Tokyo (hnd1) — the SAME region as the Supabase
+// database (ap-northeast-1). The Vercel default is US-East (iad1), which forced
+// every authenticated page and server action to hop US↔Tokyo on each DB query
+// (several per request) — the source of the "delay on every action". Pinning
+// the region here co-locates the function with the DB so those round-trips are
+// ~1ms instead of ~170ms. Applies to all routes nested under this root layout.
+export const preferredRegion = 'hnd1';
+
 export const metadata: Metadata = {
   title: "Campus Conveyance — Daily campus transport, managed",
   description:

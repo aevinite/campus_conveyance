@@ -11,6 +11,8 @@ import { drainPushOutbox } from '@/lib/push';
 // driver_update_location RPC is security-definer and keyed to auth.uid(), so it
 // only ever writes the caller's own row.
 export const runtime = 'nodejs';
+// Co-locate with the Supabase DB (ap-northeast-1 / Tokyo) — see src/app/layout.tsx.
+export const preferredRegion = 'hnd1';
 
 // A legit driver posts ~1 fix / 9s (~7/min). Cap well above that so normal
 // clients never hit it, but a misbehaving/forged client can't hammer the write.

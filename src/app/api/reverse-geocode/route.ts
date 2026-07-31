@@ -15,6 +15,8 @@ import { rateLimit } from '@/lib/rate-limit';
 // the throttle is saturated we serve a stale cached area (or null) rather than
 // risk Nominatim's per-IP ban.
 export const runtime = 'nodejs';
+// Co-locate with the Supabase DB (ap-northeast-1 / Tokyo) — see src/app/layout.tsx.
+export const preferredRegion = 'hnd1';
 
 // Areas are effectively static — cache generously. ~100 m grid (3 decimals).
 const cache = new TtlCache<string | null>(2000, 24 * 60 * 60 * 1000);

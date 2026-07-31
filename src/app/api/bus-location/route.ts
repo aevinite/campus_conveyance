@@ -9,6 +9,8 @@ import { rateLimit } from '@/lib/rate-limit';
 // optimized). Declared explicitly to match the other API routes rather than
 // relying on the cookie-triggered dynamic default.
 export const runtime = 'nodejs';
+// Co-locate with the Supabase DB (ap-northeast-1 / Tokyo) — see src/app/layout.tsx.
+export const preferredRegion = 'hnd1';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
