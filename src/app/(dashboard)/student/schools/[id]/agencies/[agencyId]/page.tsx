@@ -86,7 +86,7 @@ export default async function AgencyRoutesPage({
     redirect(qs ? `${base}?${qs}` : base);
   }
 
-  const backHref = `/student/schools/${id}`;
+  const backHref = vehicleType ? `/student/schools/${id}?type=${vehicleType}` : `/student/schools/${id}`;
 
   return (
     <section className="space-y-6">

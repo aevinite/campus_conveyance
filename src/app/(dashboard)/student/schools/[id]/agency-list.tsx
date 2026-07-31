@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight, Bus, Truck, Building2, Sparkles } from 'lucide-react';
 import { StarRating } from '@/components/ui/star-rating';
-import type { InstitutionAgency } from '@/features/catalog/repository';
+import type { InstitutionAgency, VehicleType } from '@/features/catalog/repository';
 
 /** Up to two initials from an agency name, for the logo chip. */
 function initials(name: string): string {
@@ -12,26 +12,76 @@ function initials(name: string): string {
 }
 
 /**
- * The agencies serving a campus — the student picks one before seeing its buses
- * (campus → agency → bus → reserve). Presentational only: each card links to the
- * agency's route drill-down. Shared by the website and the app-native views.
+ * Bus / Van chooser at the top of the campus page. The student picks a vehicle
+ * type first, then sees only the agencies that run that type. Plain links (the
+ * server re-fetches the agency list for the chosen type) — no client state.
+ */
+export function VehicleTabs({
+  institutionId,
+  active,
+}: {
+  institutionId: string;
+  active: VehicleType;
+}) {
+  const tabs: { key: VehicleType; label: string; Icon: typeof Bus }[] = [
+    { key: 'BUS', label: 'Bus', Icon: Bus },
+    { key: 'VAN', label: 'Van', Icon: Truck },
+  ];
+  return (
+    <div role="tablist" aria-label="Vehicle type" className="inline-flex rounded-xl border border-border bg-card p-1">
+      {tabs.map(({ key, label, Icon }) => {
+        const on = key === active;
+        return (
+          <Link
+            key={key}
+            role="tab"
+            aria-selected={on}
+            href={`/student/schools/${institutionId}?type=${key}`}
+            scroll={false}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${
+              on
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Icon className="size-4" /> {label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The agencies running the chosen vehicle type to a campus — the student picks
+ * one before seeing its buses/vans (campus → agency → ride → reserve). Each card
+ * links to the agency's route drill-down, carrying the vehicle type through.
+ * Shared by the website and the app-native views.
  */
 export function AgencyList({
   agencies,
   institutionId,
+  vehicleType,
 }: {
   agencies: InstitutionAgency[];
   institutionId: string;
+  vehicleType: VehicleType;
 }) {
+  const isVan = vehicleType === 'VAN';
+  const noun = (n: number) => (isVan ? (n === 1 ? 'van' : 'vans') : n === 1 ? 'bus' : 'buses');
+  const TypeIcon = isVan ? Truck : Bus;
+
   if (agencies.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
         <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
-          <Bus className="size-6" />
+          <TypeIcon className="size-6" />
         </span>
-        <p className="font-semibold">No agencies yet</p>
+        <p className="font-semibold">No {isVan ? 'van operators' : 'bus agencies'} yet</p>
         <p className="max-w-xs text-sm text-muted-foreground">
-          No transport agencies serve this campus yet — check back soon.
+          No {isVan ? 'vans' : 'buses'} serve this campus yet — try the{' '}
+          <span className="font-medium text-foreground">{isVan ? 'Bus' : 'Van'}</span> tab,
+          or check back soon.
         </p>
       </div>
     );
@@ -41,11 +91,10 @@ export function AgencyList({
     <ul className="grid gap-3 sm:grid-cols-2">
       {agencies.map((a) => {
         const isCampus = a.id === 'campus';
-        const buses = `${a.routeCount} ${a.routeCount === 1 ? 'ride' : 'rides'}`;
         return (
           <li key={a.id}>
             <Link
-              href={`/student/schools/${institutionId}/agencies/${a.id}`}
+              href={`/student/schools/${institutionId}/agencies/${a.id}?type=${vehicleType}`}
               className="group flex h-full items-center gap-4 rounded-2xl border border-border bg-card/60 p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-md sm:p-5"
             >
               {/* Logo chip — initials for a real agency, an icon for the campus group. */}
@@ -57,29 +106,20 @@ export function AgencyList({
                 <p className="truncate font-semibold">{a.name}</p>
                 <div className="mt-1 min-h-5">
                   {isCampus ? (
-                    <span className="text-xs text-muted-foreground">Direct campus rides</span>
+                    <span className="text-xs text-muted-foreground">Direct campus {noun(2)}</span>
                   ) : a.ratingCount > 0 ? (
                     <StarRating value={a.ratingAvg} count={a.ratingCount} size={13} />
                   ) : (
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                      <Sparkles className="size-3.5 text-primary" /> New agency
+                      <Sparkles className="size-3.5 text-primary" /> New operator
                     </span>
                   )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
-                  <span className="rounded-full border border-border bg-secondary px-2 py-0.5 text-muted-foreground">
-                    {buses}
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary">
+                    <TypeIcon className="size-3" />
+                    <span className="tnum">{a.routeCount}</span> {noun(a.routeCount)}
                   </span>
-                  {a.hasBus && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary">
-                      <Bus className="size-3" /> Bus
-                    </span>
-                  )}
-                  {a.hasVan && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-primary">
-                      <Truck className="size-3" /> Van
-                    </span>
-                  )}
                 </div>
               </div>
 

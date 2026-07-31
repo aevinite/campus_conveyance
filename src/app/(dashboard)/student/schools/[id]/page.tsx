@@ -6,28 +6,38 @@ import { VerifiedBadge } from '@/components/verified-badge';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
-import { getInstitution, listInstitutionAgencies } from '@/features/catalog/repository';
+import {
+  getInstitution,
+  listInstitutionAgencies,
+  type VehicleType,
+} from '@/features/catalog/repository';
 import { getMyActiveBooking } from '@/features/booking/repository';
 import { BookingSteps } from '../../booking-steps';
-import { AgencyList } from './agency-list';
+import { AgencyList, VehicleTabs } from './agency-list';
 
 /**
- * Step 2 of the booking flow. Shows a brief description of the campus and the
- * transport agencies that serve it; the student picks an agency, then sees just
- * that agency's buses (step 3). Replaces the old flat "every ride at once" list.
+ * Step 2 of the booking flow. Shows a brief description of the campus, a Bus/Van
+ * chooser, and the agencies running the chosen vehicle type to the campus; the
+ * student picks one, then sees just that agency's rides (step 3). Replaces the
+ * old flat "every ride at once" list.
  */
 export default async function SchoolDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ type?: string }>;
 }) {
   await requireRole('STUDENT');
   const { id } = await params;
+  const sp = await searchParams;
+  // Default to Bus; Van is the other tab.
+  const vehicleType: VehicleType = sp.type === 'VAN' ? 'VAN' : 'BUS';
 
   const db = await createClient();
   const [inst, agencies, currentBooking, app] = await Promise.all([
     getInstitution(db, id),
-    listInstitutionAgencies(db, id),
+    listInstitutionAgencies(db, id, vehicleType),
     getMyActiveBooking(db),
     isAppRequest(),
   ]);
@@ -106,15 +116,20 @@ export default async function SchoolDetailPage({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Step 2 · Choose an agency
-            </p>
-            <h2 className="text-xl font-bold tracking-tight">Transport agencies</h2>
-            <p className="text-sm text-muted-foreground">
-              These agencies run buses to {inst.name}. Pick one to see its routes,
-              fares and live seats.
-            </p>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                Step 2 · Choose an agency
+              </p>
+              <h2 className="text-xl font-bold tracking-tight">
+                {vehicleType === 'VAN' ? 'Van operators' : 'Bus agencies'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Pick a vehicle type, then choose who runs your {vehicleType === 'VAN' ? 'van' : 'bus'} to{' '}
+                {inst.name} — tap one to see its routes, fares and live seats.
+              </p>
+            </div>
+            <VehicleTabs institutionId={id} active={vehicleType} />
           </div>
         </>
       )}
@@ -140,9 +155,12 @@ export default async function SchoolDetailPage({
       )}
 
       {app && (
-        <p className="text-sm font-semibold text-primary">Choose an agency</p>
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-primary">Choose an agency</p>
+          <VehicleTabs institutionId={id} active={vehicleType} />
+        </div>
       )}
-      <AgencyList agencies={agencies} institutionId={id} />
+      <AgencyList agencies={agencies} institutionId={id} vehicleType={vehicleType} />
     </section>
   );
 }

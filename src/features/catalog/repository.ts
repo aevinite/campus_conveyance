@@ -262,9 +262,11 @@ export interface InstitutionAgency {
 export async function listInstitutionAgencies(
   db: SupabaseClient,
   institutionId: string,
+  vehicleType?: VehicleType,
 ): Promise<InstitutionAgency[]> {
   const { data, error } = await db.rpc('institution_agencies', {
     p_institution_id: institutionId,
+    p_vehicle_type: vehicleType ?? null,
   });
   if (error) throw error;
   type Row = {
