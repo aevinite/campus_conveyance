@@ -29,11 +29,17 @@ export default function RegisterPage() {
         <form action={action} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full name</Label>
-            <Input id="fullName" name="fullName" required />
+            {/* defaultValue is fed from the action's returned `values` so React's
+                automatic form reset restores what was typed instead of blanking
+                the field on an error. */}
+            <Input id="fullName" name="fullName" defaultValue={state.values?.fullName} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="off" required />
+            {/* Only this field is cleared when the email is already registered
+                (the action returns an empty email); it keeps the value on any
+                other error. */}
+            <Input id="email" name="email" type="email" autoComplete="off" defaultValue={state.values?.email} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
@@ -42,6 +48,7 @@ export default function RegisterPage() {
               name="password"
               autoComplete="new-password"
               minLength={8}
+              defaultValue={state.values?.password}
               required
             />
           </div>
@@ -62,7 +69,7 @@ export default function RegisterPage() {
                     type="radio"
                     name="role"
                     value={o.value}
-                    defaultChecked={o.value === 'STUDENT'}
+                    defaultChecked={(state.values?.role ?? 'STUDENT') === o.value}
                     className="peer sr-only"
                   />
                   <span className="flex items-center justify-center rounded-lg border border-input px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/40 peer-checked:border-primary peer-checked:bg-primary/10 peer-checked:text-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50">

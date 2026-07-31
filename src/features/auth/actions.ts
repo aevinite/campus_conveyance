@@ -13,7 +13,16 @@ import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '@/lib/mailer';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
-export type AuthState = { error?: string; message?: string };
+export type AuthState = {
+  error?: string;
+  message?: string;
+  // Echoed back to the register form so a failed signup keeps what the user
+  // already typed. React auto-resets an uncontrolled `<form action>` after the
+  // action runs, so without this every field would blank on any error. On the
+  // "email already registered" error we clear ONLY the email (so they can enter
+  // a different one) and keep the name, password and role.
+  values?: { fullName?: string; email?: string; password?: string; role?: string };
+};
 
 // Caps shared across the outbound-mail actions: per address, plus a combined
 // per-IP ceiling. Blocks the email-bomb / Gmail-quota-exhaustion vector.
@@ -48,10 +57,24 @@ export async function registerAction(
   _: AuthState,
   formData: FormData,
 ): Promise<AuthState> {
+  // Preserve everything the user typed across a failed submit. `clearEmail`
+  // blanks ONLY the email (the "already registered" case) so they don't have to
+  // retype their name, password and role.
+  const typed = {
+    fullName: String(formData.get('fullName') ?? ''),
+    email: String(formData.get('email') ?? ''),
+    password: String(formData.get('password') ?? ''),
+    role: String(formData.get('role') ?? 'STUDENT'),
+  };
+  const fail = (error: string, clearEmail = false): AuthState => ({
+    error,
+    values: { ...typed, email: clearEmail ? '' : typed.email },
+  });
+
   const parsed = registerSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: 'Please check the form fields.' };
+  if (!parsed.success) return fail('Please check the form fields.');
   const limited = await emailRateLimited('email:signup', parsed.data.email);
-  if (limited) return { error: limited };
+  if (limited) return fail(limited);
   const site = process.env.NEXT_PUBLIC_SITE_URL!;
   // Create the account + confirmation link via the admin API (does NOT send an
   // email), then send it ourselves from Gmail — this sidesteps Supabase's
@@ -63,7 +86,8 @@ export async function registerAction(
   );
   // Free up the email if a previous, never-confirmed signup is still holding it.
   const free = await ensureEmailFreeForSignup(admin, parsed.data.email);
-  if (free.error) return { error: free.error };
+  // Email already taken by a live account → clear ONLY the email field.
+  if (free.error) return fail(free.error, true);
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'signup',
     email: parsed.data.email,
@@ -80,11 +104,13 @@ export async function registerAction(
       redirectTo: `${site}/confirm`,
     },
   });
-  if (error) return { error: error.message };
+  // A late "already registered" from the admin API (race with the check above)
+  // clears the email too; other failures keep every field.
+  if (error) return fail(error.message, /already|registered|exists/i.test(error.message));
   try {
     await sendSignupConfirmationEmail(parsed.data.email, data.properties.action_link);
   } catch (e) {
-    return { error: toErrorResponse(e).message };
+    return fail(toErrorResponse(e).message);
   }
   redirect('/verify');
 }
