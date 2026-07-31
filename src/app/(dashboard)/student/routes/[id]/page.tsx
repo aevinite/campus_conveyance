@@ -105,11 +105,11 @@ export default async function RouteDetailPage({
         <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
           ← Back to campuses
         </Link>
-        <BookingSteps active={3} compact={app} />
+        <BookingSteps active={4} compact={app} />
         <div>
         {!app && (
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Step 3 · Reserve &amp; pay
+            Step 4 · Reserve &amp; pay
           </p>
         )}
         <h1 className={`${app ? '' : 'mt-2'} text-2xl font-bold tracking-tight sm:text-3xl`}>{data.route.name}</h1>

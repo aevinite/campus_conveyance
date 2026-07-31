@@ -152,6 +152,10 @@ export interface CampusRouteQuery {
   vehicleType?: VehicleType;
   limit?: number;
   offset?: number;
+  /** Restrict to one agency's routes (the agency drill-down page). */
+  agencyId?: string;
+  /** Only routes with no agency — the synthetic "Campus routes" group. */
+  orphanOnly?: boolean;
 }
 
 export async function listInstitutionRoutes(
@@ -160,14 +164,17 @@ export async function listInstitutionRoutes(
   opts: CampusRouteQuery = {},
 ): Promise<CampusRoute[]> {
   // The agency-visibility filter, seat roll-up, name/agency search, vehicle-type
-  // filter and pagination all happen in SQL (migrations 0062/0068), so the campus
-  // page fetches ONE page server-side — no fetch-everything-then-filter-in-JS.
+  // filter, agency drill-down and pagination all happen in SQL (migrations
+  // 0062/0068/0104), so the campus page fetches ONE page server-side — no
+  // fetch-everything-then-filter-in-JS.
   const { data, error } = await db.rpc('institution_routes', {
     p_institution_id: institutionId,
     p_query: opts.query?.trim() || null,
     p_vehicle_type: opts.vehicleType ?? null,
     p_limit: opts.limit ?? null,
     p_offset: opts.offset ?? 0,
+    p_agency_id: opts.agencyId ?? null,
+    p_orphan_only: opts.orphanOnly ?? false,
   });
   if (error) throw error;
   type Row = {
@@ -222,13 +229,56 @@ export async function listInstitutionRoutes(
 export async function countInstitutionRoutes(
   db: SupabaseClient,
   institutionId: string,
-  opts: Pick<CampusRouteQuery, 'query' | 'vehicleType'> = {},
+  opts: Pick<CampusRouteQuery, 'query' | 'vehicleType' | 'agencyId' | 'orphanOnly'> = {},
 ): Promise<number> {
   const { data, error } = await db.rpc('institution_routes_count', {
     p_institution_id: institutionId,
     p_query: opts.query?.trim() || null,
     p_vehicle_type: opts.vehicleType ?? null,
+    p_agency_id: opts.agencyId ?? null,
+    p_orphan_only: opts.orphanOnly ?? false,
   });
   if (error) throw error;
   return Number(data ?? 0);
+}
+
+/** An agency serving a campus — one row of the campus page's agency list. */
+export interface InstitutionAgency {
+  /** Real agency uuid, or the sentinel 'campus' for the agency-less group. */
+  id: string;
+  name: string;
+  ratingAvg: number;
+  ratingCount: number;
+  routeCount: number;
+  hasBus: boolean;
+  hasVan: boolean;
+}
+
+/**
+ * Approved, live agencies with at least one active route at this campus (plus a
+ * synthetic 'campus' group for any agency-less bookable routes). The booking
+ * flow lists these so the student picks an agency before its buses.
+ */
+export async function listInstitutionAgencies(
+  db: SupabaseClient,
+  institutionId: string,
+): Promise<InstitutionAgency[]> {
+  const { data, error } = await db.rpc('institution_agencies', {
+    p_institution_id: institutionId,
+  });
+  if (error) throw error;
+  type Row = {
+    id: string | null; name: string;
+    rating_avg: number | string | null; rating_count: number | null;
+    route_count: number | string | null; has_bus: boolean | null; has_van: boolean | null;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.id ?? 'campus',
+    name: r.name,
+    ratingAvg: Number(r.rating_avg ?? 0),
+    ratingCount: r.rating_count ?? 0,
+    routeCount: Number(r.route_count ?? 0),
+    hasBus: r.has_bus ?? false,
+    hasVan: r.has_van ?? false,
+  }));
 }

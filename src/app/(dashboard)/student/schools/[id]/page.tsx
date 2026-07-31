@@ -1,65 +1,37 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { Ticket, ArrowLeft } from 'lucide-react';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
-import {
-  getInstitution,
-  listInstitutionRoutes,
-  countInstitutionRoutes,
-  type VehicleType,
-} from '@/features/catalog/repository';
+import { getInstitution, listInstitutionAgencies } from '@/features/catalog/repository';
 import { getMyActiveBooking } from '@/features/booking/repository';
-import { pageParams } from '@/components/pager';
 import { BookingSteps } from '../../booking-steps';
-import { RoutesExplorer } from './routes-explorer';
-
-const PAGE_SIZE = 15;
+import { AgencyList } from './agency-list';
 
 /**
- * Step 2 of the booking flow. One flat, comparable list of every ride serving
- * this campus (all agencies, buses AND vans) — the student picks the ride
- * directly instead of drilling through type-tab → agency → routes.
+ * Step 2 of the booking flow. Shows a brief description of the campus and the
+ * transport agencies that serve it; the student picks an agency, then sees just
+ * that agency's buses (step 3). Replaces the old flat "every ride at once" list.
  */
 export default async function SchoolDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; type?: string; page?: string }>;
 }) {
   await requireRole('STUDENT');
   const { id } = await params;
-  const sp = await searchParams;
-  const query = (sp.q ?? '').trim();
-  const vehicleType: VehicleType | undefined =
-    sp.type === 'BUS' || sp.type === 'VAN' ? sp.type : undefined;
-  const { page, offset } = pageParams(sp.page, PAGE_SIZE);
 
   const db = await createClient();
-  // Lapsed holds are swept by the pg_cron 'expire-stale-holds' job (migration
-  // 0052); seat counts here tolerate <=60s of staleness. Routes are searched +
-  // paginated in the DB (migration 0068) — one page, not every campus route.
-  const [inst, routes, total, currentBooking, app] = await Promise.all([
+  const [inst, agencies, currentBooking, app] = await Promise.all([
     getInstitution(db, id),
-    listInstitutionRoutes(db, id, { query, vehicleType, limit: PAGE_SIZE, offset }),
-    countInstitutionRoutes(db, id, { query, vehicleType }),
+    listInstitutionAgencies(db, id),
     getMyActiveBooking(db),
     isAppRequest(),
   ]);
   if (!inst) notFound();
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (total > 0 && page > totalPages) {
-    const p = new URLSearchParams();
-    if (query) p.set('q', query);
-    if (vehicleType) p.set('type', vehicleType);
-    if (totalPages > 1) p.set('page', String(totalPages));
-    const qs = p.toString();
-    redirect(qs ? `/student/schools/${id}?${qs}` : `/student/schools/${id}`);
-  }
 
   return (
     <section className="space-y-6">
@@ -88,6 +60,9 @@ export default async function SchoolDetailPage({
               </h1>
             </div>
           </div>
+          {inst.description && (
+            <p className="text-sm leading-relaxed text-muted-foreground">{inst.description}</p>
+          )}
         </div>
       ) : (
         <>
@@ -123,25 +98,28 @@ export default async function SchoolDetailPage({
                   {inst.name}
                   <VerifiedBadge verified={inst.is_verified} className="text-[1.25rem]" />
                 </h1>
-                <p className="mt-1.5 max-w-2xl leading-relaxed text-muted-foreground">
-                  {inst.description}
-                </p>
+                {inst.description && (
+                  <p className="mt-1.5 max-w-2xl leading-relaxed text-muted-foreground">
+                    {inst.description}
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Step 2 · Choose a ride
+              Step 2 · Choose an agency
             </p>
-            <h2 className="text-xl font-bold tracking-tight">Pick your bus</h2>
+            <h2 className="text-xl font-bold tracking-tight">Transport agencies</h2>
             <p className="text-sm text-muted-foreground">
-              Every ride to {inst.name} — compare fares, timings and live seats, then
-              tap one to reserve.
+              These agencies run buses to {inst.name}. Pick one to see its routes,
+              fares and live seats.
             </p>
           </div>
         </>
       )}
+
       {/* One bus at a time: browsing stays open, booking is locked. */}
       {currentBooking && (
         <div className="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/[0.06] px-4 py-3 text-sm">
@@ -161,13 +139,11 @@ export default async function SchoolDetailPage({
           </span>
         </div>
       )}
-      <RoutesExplorer
-        routes={routes}
-        query={query}
-        vehicleType={vehicleType ?? 'ALL'}
-        page={page}
-        totalPages={totalPages}
-      />
+
+      {app && (
+        <p className="text-sm font-semibold text-primary">Choose an agency</p>
+      )}
+      <AgencyList agencies={agencies} institutionId={id} />
     </section>
   );
 }
