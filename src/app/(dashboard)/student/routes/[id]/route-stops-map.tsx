@@ -69,12 +69,15 @@ export default function RouteStopsMap({
   stops,
   liveRouteId,
   pickupStop,
+  heightClass = 'h-[24rem]',
 }: {
   stops: MapStop[];
   /** When set, poll for and show this route's live bus position. */
   liveRouteId?: string;
   /** The viewing rider's own pickup stop — enables the "N min away" ETA badge. */
   pickupStop?: { lat: number; lng: number; name: string } | null;
+  /** Tailwind height class for the map box (e.g. a taller map on the home page). */
+  heightClass?: string;
 }) {
   // Read the latest pickup stop from a ref so the poll effect (keyed on
   // liveRouteId) never has to re-subscribe when the prop object identity changes.
@@ -385,7 +388,7 @@ export default function RouteStopsMap({
         // `relative z-0 isolate` contains Leaflet's internal z-indexes (panes/
         // controls go up to 1000) inside this box's own stacking context, so the
         // map can't paint over the sticky header/footer when scrolling.
-        className="relative z-0 isolate h-[24rem] w-full overflow-hidden rounded-2xl border border-border shadow-sm ring-1 ring-black/5"
+        className={`relative z-0 isolate ${heightClass} w-full overflow-hidden rounded-2xl border border-border shadow-sm ring-1 ring-black/5`}
       />
     </div>
   );

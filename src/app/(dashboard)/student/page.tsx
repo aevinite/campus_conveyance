@@ -240,7 +240,11 @@ export default async function StudentHome() {
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-xs">
-            <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} />
+            <RouteStopsMap
+              stops={trackStops}
+              liveRouteId={trackRouteId}
+              heightClass="h-[28rem] sm:h-[34rem] lg:h-[38rem]"
+            />
           </div>
         </section>
       )}

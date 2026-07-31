@@ -139,7 +139,11 @@ export function AppStudentHome({
           {/* Live bus map right in the home card */}
           {trackRouteId && (
             <div className="border-t border-primary/15 p-3">
-              <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} />
+              <RouteStopsMap
+                stops={trackStops}
+                liveRouteId={trackRouteId}
+                heightClass="h-[26rem] sm:h-[30rem]"
+              />
             </div>
           )}
         </section>
