@@ -6,7 +6,7 @@ export type BillingPeriod = 'MONTHLY' | 'SEMESTER' | 'YEARLY';
 
 export const BILLING_PERIODS: {
   period: BillingPeriod;
-  /** Full label for a plan option, e.g. "Per semester (6 months)". */
+  /** Full label for a plan option, e.g. "Per semester". */
   label: string;
   /** Short noun, e.g. "Semester" — for column headings / chips. */
   short: string;
@@ -15,7 +15,7 @@ export const BILLING_PERIODS: {
   months: number;
 }[] = [
   { period: 'MONTHLY', label: 'Per month', short: 'Monthly', suffix: '/mo', months: 1 },
-  { period: 'SEMESTER', label: 'Per semester (6 months)', short: 'Semester', suffix: '/sem', months: 6 },
+  { period: 'SEMESTER', label: 'Per semester', short: 'Semester', suffix: '/sem', months: 6 },
   { period: 'YEARLY', label: 'Per year', short: 'Yearly', suffix: '/yr', months: 12 },
 ];
 

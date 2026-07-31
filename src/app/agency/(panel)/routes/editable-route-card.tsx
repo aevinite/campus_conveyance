@@ -111,7 +111,7 @@ export function EditableRouteCard({ route }: { route: RouteFull }) {
               <Input id={`price-m-${route.id}`} name="priceMonthly" type="number" min={0} step="1" inputMode="numeric" placeholder="—" defaultValue={asRupees(route.price_monthly_cents)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`price-s-${route.id}`} className="text-sm font-normal text-muted-foreground">Per semester (6 mo)</Label>
+              <Label htmlFor={`price-s-${route.id}`} className="text-sm font-normal text-muted-foreground">Per semester</Label>
               <Input id={`price-s-${route.id}`} name="priceSemester" type="number" min={0} step="1" inputMode="numeric" placeholder="—" defaultValue={asRupees(route.price_semester_cents)} />
             </div>
             <div className="space-y-1.5">

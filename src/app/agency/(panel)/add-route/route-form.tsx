@@ -111,7 +111,7 @@ export function RouteForm({
             <Input id="priceMonthly" name="priceMonthly" type="number" min={0} step="1" inputMode="numeric" placeholder="e.g. 1800" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="priceSemester" className="text-sm font-normal text-muted-foreground">Per semester (6 mo)</Label>
+            <Label htmlFor="priceSemester" className="text-sm font-normal text-muted-foreground">Per semester</Label>
             <Input id="priceSemester" name="priceSemester" type="number" min={0} step="1" inputMode="numeric" placeholder="e.g. 9000" />
           </div>
           <div className="space-y-1.5">
