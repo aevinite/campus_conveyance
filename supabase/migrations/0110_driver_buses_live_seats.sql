@@ -1,4 +1,4 @@
--- 0107_driver_buses_live_seats.sql (idempotent — requires 0065)
+-- 0110_driver_buses_live_seats.sql (idempotent — requires 0065)
 --
 -- Make the driver panel's seat count use the SAME live PENDING/CONFIRMED count
 -- as the rider list (institution_routes) and detail (route_availability), instead

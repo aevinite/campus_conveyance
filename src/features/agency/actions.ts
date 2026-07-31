@@ -1085,7 +1085,7 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
 
 /**
  * Permanently remove a hidden student from THIS agency's Deleted Students list.
- * Soft `purged_at` flag (migration 0108): the hidden row is kept so the student
+ * Soft `purged_at` flag (migration 0111): the hidden row is kept so the student
  * stays out of the active roster and can't reappear, but the list RPCs skip it,
  * so the entry is gone from the agency's view for good. Does NOT delete the
  * student's account or any booking/payment history — a whole-database account

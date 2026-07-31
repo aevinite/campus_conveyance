@@ -1,4 +1,4 @@
--- 0108_agency_hidden_students_purge.sql (idempotent — requires 0060)
+-- 0111_agency_hidden_students_purge.sql (idempotent — requires 0060)
 --
 -- The agency "Deleted students" list (rows in agency_hidden_students) only had a
 -- Restore action. Add a permanent "Remove" that clears an entry from that list
