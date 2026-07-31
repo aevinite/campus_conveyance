@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getMyAgency, listHiddenStudents, countHiddenStudents } from '@/features/agency/repository';
-import { restoreStudentAction } from '@/features/agency/actions';
+import { restoreStudentAction, purgeHiddenStudentAction } from '@/features/agency/actions';
 import { DataTable } from '@/components/data-table';
 import { SubmitButton } from '@/components/submit-button';
+import { ConfirmSubmit } from '@/components/confirm-submit';
 import { Pager, pageParams } from '@/components/pager';
 
 const PAGE_SIZE = 20;
@@ -40,12 +41,23 @@ export default async function AgencyDeletedStudentsPage({
           s.name ?? '—',
           s.email ?? '—',
           s.phone ?? '—',
-          <form action={restoreStudentAction} key={s.student_id}>
-            <input type="hidden" name="studentId" value={s.student_id} />
-            <SubmitButton size="sm" pendingText="Restoring…">
-              Restore
-            </SubmitButton>
-          </form>,
+          <div className="flex flex-wrap gap-2" key={s.student_id}>
+            <form action={restoreStudentAction}>
+              <input type="hidden" name="studentId" value={s.student_id} />
+              <SubmitButton size="sm" pendingText="Restoring…">
+                Restore
+              </SubmitButton>
+            </form>
+            <ConfirmSubmit
+              action={purgeHiddenStudentAction}
+              fields={{ studentId: s.student_id }}
+              triggerLabel="Remove permanently"
+              title="Remove this student from your list?"
+              description={`“${s.name ?? s.email ?? 'This student'}” will be permanently removed from your Deleted Students list and won't come back. Their account and their history with other agencies are not affected.`}
+              confirmLabel="Remove permanently"
+              pendingText="Removing…"
+            />
+          </div>,
         ])}
         empty="No deleted students."
       />

@@ -1082,3 +1082,27 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
   revalidatePath('/agency/deleted-students');
   updateTag(agencyReportTag(agency.id)); // restored student re-enters the dashboard counts
 }
+
+/**
+ * Permanently remove a hidden student from THIS agency's Deleted Students list.
+ * Soft `purged_at` flag (migration 0108): the hidden row is kept so the student
+ * stays out of the active roster and can't reappear, but the list RPCs skip it,
+ * so the entry is gone from the agency's view for good. Does NOT delete the
+ * student's account or any booking/payment history — a whole-database account
+ * delete is an admin-only power (/aevinite/deleted-students).
+ */
+export async function purgeHiddenStudentAction(formData: FormData): Promise<void> {
+  const studentId = String(formData.get('studentId') ?? '');
+  if (!UUID_RE.test(studentId)) return;
+  const db = await createClient();
+  const agency = await getMyAgency(db);
+  if (!agency) return;
+  const { error } = await db
+    .from('agency_hidden_students')
+    .update({ purged_at: new Date().toISOString() })
+    .eq('agency_id', agency.id)
+    .eq('student_id', studentId)
+    .is('purged_at', null);
+  if (error) throw new AppError('AGENCY', error.message);
+  revalidatePath('/agency/deleted-students');
+}
