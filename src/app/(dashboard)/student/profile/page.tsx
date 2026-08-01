@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { ArrowLeft, Mail, Phone, ShieldCheck, CalendarDays } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, ShieldCheck, CalendarDays, LogOut } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
+import { logoutAction } from '@/features/auth/actions';
+import { SubmitButton } from '@/components/submit-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
@@ -160,6 +162,16 @@ export default async function StudentProfilePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Log out — pinned at the bottom of the profile inside the app. */}
+      {app && (
+        <form action={logoutAction} className="pt-2">
+          <SubmitButton variant="destructive" className="w-full gap-2" pendingText="Logging out…">
+            <LogOut className="size-4" />
+            Log out
+          </SubmitButton>
+        </form>
+      )}
     </section>
   );
 }
