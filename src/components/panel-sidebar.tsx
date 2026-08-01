@@ -111,7 +111,7 @@ function SidebarNav({
 }) {
   return (
     <>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
+      <nav className="scrollbar-slim flex-1 space-y-0.5 overflow-y-auto px-3">
         {items.map((it) => {
           // Exact match for the dashboard root, prefix match for sub-pages.
           const active =

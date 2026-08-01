@@ -47,7 +47,7 @@ export default async function AdminFleetPage({
             {v.driver_verified ? <StatusBadge value="Verified" className="ml-1.5" /> : null}
           </div>,
           <BoolBadge key="act" value={!!v.is_active} yes="Active" no="Inactive" />,
-          <Link key="view" href={`/aevinite/fleet/${v.id}`} className="text-primary underline-offset-4 hover:underline">
+          <Link key="view" href={`/aevinite/fleet/${v.id}`} className="text-primary transition-colors hover:text-primary/70">
             View →
           </Link>,
         ])}

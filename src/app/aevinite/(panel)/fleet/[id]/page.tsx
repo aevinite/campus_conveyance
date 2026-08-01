@@ -32,7 +32,7 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 function DocLink({ href, label }: { href: string | null; label: string }) {
   if (!href) return null;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm text-primary underline-offset-4 hover:underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-sm text-primary transition-colors hover:text-primary/70">
       {label} ↗
     </a>
   );
@@ -193,7 +193,7 @@ export default async function AdminVehicleDetailPage({ params }: { params: Promi
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-medium">
                   {a.routeId ? (
-                    <Link href={`/aevinite/routes/${a.routeId}`} className="text-primary underline-offset-4 hover:underline">
+                    <Link href={`/aevinite/routes/${a.routeId}`} className="text-primary transition-colors hover:text-primary/70">
                       {a.routeName}
                     </Link>
                   ) : (

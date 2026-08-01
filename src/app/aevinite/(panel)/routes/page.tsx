@@ -47,7 +47,7 @@ export default async function AdminRoutesPage({
           rupees(r.price_cents),
           <span key="sc" className="tabular-nums">{r.stopCount}</span>,
           <BoolBadge key="a" value={!!r.is_active} yes="Active" no="Inactive" />,
-          <Link key="v" href={`/aevinite/routes/${r.id}`} className="text-primary underline-offset-4 hover:underline">
+          <Link key="v" href={`/aevinite/routes/${r.id}`} className="text-primary transition-colors hover:text-primary/70">
             View →
           </Link>,
         ])}

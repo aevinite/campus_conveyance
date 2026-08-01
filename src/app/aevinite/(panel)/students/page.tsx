@@ -34,7 +34,7 @@ export default async function AdminStudentsPage({
           s.full_name ?? '—',
           s.email ?? '—',
           s.phone ?? '—',
-          <Link key="v" href={`/aevinite/students/${s.id}`} className="text-primary underline-offset-4 hover:underline">
+          <Link key="v" href={`/aevinite/students/${s.id}`} className="text-primary transition-colors hover:text-primary/70">
             View →
           </Link>,
           <ConfirmSubmit

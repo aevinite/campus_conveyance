@@ -122,7 +122,7 @@ function ProviderCard({ a }: { a: AgencyDetail }) {
               href={a.permit_doc_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary underline-offset-4 hover:underline"
+              className="text-primary transition-colors hover:text-primary/70"
             >
               Transport permit ↗
             </a>
@@ -132,7 +132,7 @@ function ProviderCard({ a }: { a: AgencyDetail }) {
               href={a.fitness_doc_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary underline-offset-4 hover:underline"
+              className="text-primary transition-colors hover:text-primary/70"
             >
               Fitness certificate ↗
             </a>

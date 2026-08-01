@@ -42,7 +42,7 @@ export default async function AdminDriversPage({
           d.busNumber ?? '—',
           <BoolBadge key="a" value={!!d.is_active} yes="Active" no="Inactive" />,
           <StatusBadge key="o" value={d.isOnline ? 'Online' : 'Offline'} />,
-          <Link key="v" href={`/aevinite/drivers/${d.id}`} className="text-primary underline-offset-4 hover:underline">
+          <Link key="v" href={`/aevinite/drivers/${d.id}`} className="text-primary transition-colors hover:text-primary/70">
             View →
           </Link>,
         ])}
