@@ -115,8 +115,9 @@ export default async function ParentDashboard() {
           </p>
         </section>
 
-        <LinkChildForm />
+        {/* Add child first (primary action), then link-by-code. */}
         <AddChildForm campuses={campuses} />
+        <LinkChildForm />
 
         {/* Track their bus — one live map per active route, full width. */}
         {trackable.length > 0 && (
@@ -163,7 +164,10 @@ export default async function ParentDashboard() {
               {children.map((c) => (
                 <div key={c.student_id} className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-xs">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
+                    <Link
+                      href={`/parent/child/${c.student_id}`}
+                      className="-m-1 flex min-w-0 items-center gap-3 rounded-lg p-1 transition-colors hover:bg-muted/40"
+                    >
                       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
                         <GraduationCap className="size-5" />
                       </span>
@@ -183,7 +187,7 @@ export default async function ParentDashboard() {
                           </p>
                         )}
                       </div>
-                    </div>
+                    </Link>
                     <UnlinkChildButton studentId={c.student_id} managed={c.managed} />
                   </div>
                   <div className="flex items-center justify-between gap-2 border-t border-border pt-3">

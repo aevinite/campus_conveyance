@@ -17,10 +17,12 @@ function initials(name: string): string {
  * server re-fetches the agency list for the chosen type) — no client state.
  */
 export function VehicleTabs({
-  institutionId,
+  basePath,
   active,
 }: {
-  institutionId: string;
+  /** The page these tabs live on, e.g. /student/schools/[id] or
+   *  /parent/book/[studentId]. Each tab links to `${basePath}?type=…`. */
+  basePath: string;
   active: VehicleType;
 }) {
   const tabs: { key: VehicleType; label: string; Icon: typeof Bus }[] = [
@@ -36,7 +38,7 @@ export function VehicleTabs({
             key={key}
             role="tab"
             aria-selected={on}
-            href={`/student/schools/${institutionId}?type=${key}`}
+            href={`${basePath}?type=${key}`}
             scroll={false}
             className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${
               on
@@ -60,11 +62,13 @@ export function VehicleTabs({
  */
 export function AgencyList({
   agencies,
-  institutionId,
+  basePath,
   vehicleType,
 }: {
   agencies: InstitutionAgency[];
-  institutionId: string;
+  /** Where an agency card links: `${basePath}/agencies/[id]?type=…` — e.g.
+   *  /student/schools/[id] or /parent/book/[studentId]. */
+  basePath: string;
   vehicleType: VehicleType;
 }) {
   const isVan = vehicleType === 'VAN';
@@ -94,7 +98,7 @@ export function AgencyList({
         return (
           <li key={a.id}>
             <Link
-              href={`/student/schools/${institutionId}/agencies/${a.id}?type=${vehicleType}`}
+              href={`${basePath}/agencies/${a.id}?type=${vehicleType}`}
               className="group flex h-full items-center gap-4 rounded-2xl border border-border bg-card/60 p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card hover:shadow-md sm:p-5"
             >
               {/* Logo chip — initials for a real agency, an icon for the campus group. */}

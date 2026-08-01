@@ -129,7 +129,7 @@ export default async function SchoolDetailPage({
                 {inst.name} — tap one to see its routes, fares and live seats.
               </p>
             </div>
-            <VehicleTabs institutionId={id} active={vehicleType} />
+            <VehicleTabs basePath={`/student/schools/${id}`} active={vehicleType} />
           </div>
         </>
       )}
@@ -157,10 +157,10 @@ export default async function SchoolDetailPage({
       {app && (
         <div className="space-y-2">
           <p className="text-sm font-semibold text-primary">Choose an agency</p>
-          <VehicleTabs institutionId={id} active={vehicleType} />
+          <VehicleTabs basePath={`/student/schools/${id}`} active={vehicleType} />
         </div>
       )}
-      <AgencyList agencies={agencies} institutionId={id} vehicleType={vehicleType} />
+      <AgencyList agencies={agencies} basePath={`/student/schools/${id}`} vehicleType={vehicleType} />
     </section>
   );
 }
