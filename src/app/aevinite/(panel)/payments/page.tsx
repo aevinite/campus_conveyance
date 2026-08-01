@@ -39,6 +39,9 @@ export default async function AdminPaymentsPage({
         <Link href="/aevinite/payments" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground">
           To verify
         </Link>
+        <Link href="/aevinite/payments/refunds" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
+          Refunds
+        </Link>
         <Link href="/aevinite/payments/history" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
           Completed
         </Link>

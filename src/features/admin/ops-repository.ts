@@ -1013,6 +1013,78 @@ export async function listPendingUpiPayments(opts: PageOpts = {}): Promise<Paged
   };
 }
 
+// ---- Refunds awaiting processing ------------------------------------------
+
+export interface PendingRefundRow {
+  bookingId: string;
+  studentName: string | null;
+  routeName: string;
+  /** Amount originally paid — prefill for the refund amount. */
+  amountCents: number;
+  payoutMethod: string | null; // 'UPI' | 'BANK'
+  payoutDetails: string | null; // formatted UPI id or bank account line
+  reason: string | null;
+  requestedAt: string | null;
+}
+
+/**
+ * Paid bookings the rider cancelled, whose refund the admin still has to send
+ * (payments.refund_status = 'REQUESTED'). The payout details + cancel reason come
+ * from the booking (bookings.refund_details / cancel_reason).
+ */
+export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<PendingRefundRow>> {
+  const client = db();
+  let q = client
+    .from('payments')
+    .select('booking_id, amount_cents, updated_at', { count: 'exact' })
+    .eq('refund_status', 'REQUESTED')
+    .order('updated_at', { ascending: true });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const bookings = await mapByIds<{
+    id: string;
+    student_name: string | null;
+    route_id: string | null;
+    refund_details: Record<string, unknown> | null;
+    cancel_reason: string | null;
+  }>(
+    client,
+    'bookings',
+    'id, student_name, route_id, refund_details, cancel_reason',
+    rows.map((r) => r.booking_id as string),
+  );
+  const routes = await mapByIds<{ id: string; name: string }>(
+    client,
+    'routes',
+    'id, name',
+    [...bookings.values()].map((b) => b.route_id),
+  );
+  return {
+    rows: rows.map((r) => {
+      const b = bookings.get(r.booking_id as string);
+      const rd = (b?.refund_details ?? null) as Record<string, unknown> | null;
+      const method = rd?.method as string | undefined;
+      let details: string | null = null;
+      if (method === 'UPI') details = (rd?.upi_id as string) ?? null;
+      else if (method === 'BANK')
+        details = [rd?.account_name, rd?.account_number, rd?.ifsc].filter(Boolean).join(' · ') || null;
+      return {
+        bookingId: r.booking_id as string,
+        studentName: b?.student_name ?? null,
+        routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
+        amountCents: (r.amount_cents as number) ?? 0,
+        payoutMethod: method ?? null,
+        payoutDetails: details,
+        reason: b?.cancel_reason ?? null,
+        requestedAt: (r.updated_at as string) ?? null,
+      };
+    }),
+    total: count ?? 0,
+  };
+}
+
 // ---- Student detail (everything a student filled) -------------------------
 // Keyed by the STUDENT's profile id (that's what the Manage Students list uses).
 // The `students` row — where the booking/"details" form saves address, class,

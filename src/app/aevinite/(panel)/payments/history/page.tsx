@@ -10,17 +10,16 @@ export const dynamic = 'force-dynamic';
 
 const inr = (cents: number) => `₹${Math.round((cents ?? 0) / 100).toLocaleString('en-IN')}`;
 
-// Tab links shared with the "to verify" page.
-function Tabs({ active }: { active: 'verify' | 'history' }) {
+// Tab links shared with the "to verify" + refunds pages.
+function Tabs({ active }: { active: 'verify' | 'history' | 'refunds' }) {
   const base = 'rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors';
+  const on = 'bg-primary text-primary-foreground';
+  const off = 'text-muted-foreground hover:text-foreground';
   return (
     <div className="inline-flex rounded-xl border border-border bg-card p-1">
-      <Link href="/aevinite/payments" className={`${base} ${active === 'verify' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-        To verify
-      </Link>
-      <Link href="/aevinite/payments/history" className={`${base} ${active === 'history' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-        Completed
-      </Link>
+      <Link href="/aevinite/payments" className={`${base} ${active === 'verify' ? on : off}`}>To verify</Link>
+      <Link href="/aevinite/payments/refunds" className={`${base} ${active === 'refunds' ? on : off}`}>Refunds</Link>
+      <Link href="/aevinite/payments/history" className={`${base} ${active === 'history' ? on : off}`}>Completed</Link>
     </div>
   );
 }

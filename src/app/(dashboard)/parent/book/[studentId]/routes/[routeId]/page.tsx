@@ -12,7 +12,7 @@ import { formatTime } from '@/lib/format-date';
 import { ReserveForm } from '../../../../../student/routes/[id]/reserve-form';
 import { SeatMap } from '../../../../../student/routes/[id]/seat-map';
 import RouteStopsMap from '../../../../../student/routes/[id]/route-stops-map';
-import { ChildCancelButton } from './child-cancel-button';
+import { CancelBookingButton } from '../../../../../student/bookings/cancel-booking-button';
 
 const inr = (cents: number | null) =>
   cents == null || cents === 0 ? null : `₹${Math.round(cents / 100).toLocaleString('en-IN')}`;
@@ -103,7 +103,7 @@ export default async function ParentBookRoute({
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
           <span>{childName}&apos;s seat on this ride is confirmed.</span>
         </div>
-        <ChildCancelButton bookingId={activeHere.booking_id} studentId={studentId} />
+        <CancelBookingButton bookingId={activeHere.booking_id} studentId={studentId} paid={activeHere.is_paid} />
       </div>
     );
   } else if (activeHere && activeHere.status === 'WAITLISTED') {
@@ -113,7 +113,7 @@ export default async function ParentBookRoute({
           <Clock3 className="mt-0.5 size-4 shrink-0" />
           <span>{childName} is on the waitlist for this ride. We&apos;ll notify you if a seat opens.</span>
         </div>
-        <ChildCancelButton bookingId={activeHere.booking_id} studentId={studentId} />
+        <CancelBookingButton bookingId={activeHere.booking_id} studentId={studentId} paid={activeHere.is_paid} />
       </div>
     );
   } else if (activeElsewhere) {

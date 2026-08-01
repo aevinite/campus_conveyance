@@ -18,6 +18,7 @@ export function CancelBookingButton({
   bookingId,
   routeId,
   paid = false,
+  studentId,
 }: {
   bookingId: string;
   /** The booking's route — lets the action revalidate that route's detail page
@@ -25,6 +26,8 @@ export function CancelBookingButton({
   routeId?: string | null;
   /** A paid booking → collect refund payout details before cancelling. */
   paid?: boolean;
+  /** Set when a parent cancels a child's booking (revalidates /parent). */
+  studentId?: string;
 }) {
   const [state, action] = useActionState<CancelState, FormData>(cancelBookingAction, {});
   const [phase, setPhase] = useState<Phase>('idle');
@@ -100,6 +103,7 @@ export function CancelBookingButton({
               <form action={action} className="space-y-4">
                 <input type="hidden" name="bookingId" value={bookingId} />
                 {routeId && <input type="hidden" name="routeId" value={routeId} />}
+                {studentId && <input type="hidden" name="studentId" value={studentId} />}
                 {paid && <input type="hidden" name="refundMethod" value={method} />}
 
                 <div className="flex items-center gap-2.5">

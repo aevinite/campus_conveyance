@@ -114,3 +114,44 @@ export async function verifyUpiPaymentAction(formData: FormData): Promise<void> 
   }
   revalidatePath('/aevinite/payments');
 }
+
+// Process a refund for a cancelled paid booking: the admin sent the money (or
+// declined) and records it. Approve → payment REFUNDED + rider notified.
+export async function processRefundAction(formData: FormData): Promise<void> {
+  const db = await createClient();
+  const role = await getSessionRole(db);
+  if (role !== 'SUPER_ADMIN') return;
+
+  const bookingId = String(formData.get('bookingId') ?? '');
+  const approve = String(formData.get('approve') ?? '') === 'true';
+  const note = String(formData.get('note') ?? '').trim() || null;
+  if (!UUID_RE.test(bookingId)) return;
+  // The admin enters the refunded amount in rupees; store paise/cents.
+  const rupees = Number(String(formData.get('amount') ?? '0').replace(/[^\d.]/g, ''));
+  const amountCents = approve ? Math.max(0, Math.round((Number.isFinite(rupees) ? rupees : 0) * 100)) : 0;
+
+  const { error } = await db.rpc('process_refund', {
+    p_booking_id: bookingId,
+    p_amount_cents: amountCents,
+    p_approve: approve,
+    p_note: note,
+  });
+  if (error) throw error;
+
+  after(() => drainEmailOutbox());
+  after(() => drainPushOutbox());
+
+  try {
+    const { data } = await db.auth.getClaims();
+    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    await db.from('audit_logs').insert({
+      actor_id: actorId,
+      action: approve ? 'REFUND_PROCESSED' : 'REFUND_DECLINED',
+      entity: 'payments',
+      entity_id: bookingId,
+    });
+  } catch {
+    /* logging is best-effort */
+  }
+  revalidatePath('/aevinite/payments/refunds');
+}
