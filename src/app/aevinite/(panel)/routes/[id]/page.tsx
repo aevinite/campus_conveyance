@@ -5,6 +5,7 @@ import { getRouteDetail } from '@/features/admin/ops-repository';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/data-table';
 import { StatusBadge, BoolBadge } from '@/components/status-badge';
+import RouteStopsMap from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import { formatDateTime } from '@/lib/format-date';
 import { rupees } from '@/lib/format';
 
@@ -27,6 +28,7 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
   const detail = await getRouteDetail(id);
   if (!detail) notFound();
   const { route: r, institutionName, agencyName, busNumber, stops, occupancy, riders, progress } = detail;
+  const hasGeo = stops.some((st) => st.lat != null && st.lng != null);
 
   return (
     <section className="space-y-6">
@@ -97,6 +99,31 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
           </CardContent>
         </Card>
       </div>
+
+      {/* Route map — stop pins + the live bus position while the driver is online. */}
+      {hasGeo && (
+        <Card className="rounded-2xl">
+          <CardContent className="space-y-3 py-5">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <MapPin className="size-4 text-primary" /> Route map
+              <span className="text-sm font-normal text-muted-foreground">
+                · live bus shows while the driver is online
+              </span>
+            </h2>
+            <RouteStopsMap
+              stops={stops.map((st) => ({
+                name: st.name,
+                lat: st.lat,
+                lng: st.lng,
+                description: st.description,
+                address: st.address,
+              }))}
+              liveRouteId={r.id as string}
+              heightClass="h-96"
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {progress.length > 0 && (
         <div className="space-y-2">

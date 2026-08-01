@@ -8,6 +8,7 @@ import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { formatDateTime, formatDateMedium } from '@/lib/format-date';
 import { relativeTime } from '@/lib/format';
 import BusGallery from '@/app/(dashboard)/student/routes/[id]/bus-gallery';
+import RouteStopsMap from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 
 export const dynamic = 'force-dynamic';
 
@@ -188,25 +189,67 @@ export default async function AdminVehicleDetailPage({ params }: { params: Promi
         {assignments.length === 0 ? (
           <p className="text-sm text-muted-foreground">This bus is not assigned to any route.</p>
         ) : (
-          assignments.map((a) => (
-            <div key={a.assignmentId} className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium">
-                  {a.routeId ? (
-                    <Link href={`/aevinite/routes/${a.routeId}`} className="text-primary transition-colors hover:text-primary/70">
-                      {a.routeName}
-                    </Link>
-                  ) : (
-                    a.routeName
-                  )}
-                </p>
-                <span className="text-sm text-muted-foreground">
-                  Occupancy: <span className="font-semibold text-foreground tabular-nums">{a.reservedSeats ?? 0}</span> / {a.totalSeats ?? '—'} seats
-                </span>
+          assignments.map((a) => {
+            const geoStops = a.stops.filter((st) => st.lat != null && st.lng != null);
+            return (
+              <div key={a.assignmentId} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">
+                    {a.routeId ? (
+                      <Link href={`/aevinite/routes/${a.routeId}`} className="text-primary transition-colors hover:text-primary/70">
+                        {a.routeName}
+                      </Link>
+                    ) : (
+                      a.routeName
+                    )}
+                  </p>
+                  <span className="text-sm text-muted-foreground">
+                    Occupancy: <span className="font-semibold text-foreground tabular-nums">{a.reservedSeats ?? 0}</span> / {a.totalSeats ?? '—'} seats
+                  </span>
+                </div>
+
+                {/* This route's stops + the bus's live position on a map. */}
+                {a.stops.length > 0 && (
+                  <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+                    <div className="rounded-xl border border-border bg-card p-3">
+                      <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                        <MapPin className="size-4 text-primary" /> Stops ({a.stops.length})
+                      </p>
+                      <ol className="space-y-2">
+                        {a.stops.map((st, i) => (
+                          <li key={`${a.assignmentId}-${i}`} className="flex items-start gap-2.5">
+                            <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary tabular-nums">
+                              {st.sequence ?? '·'}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">{st.name}</p>
+                              {st.description && <p className="text-xs text-muted-foreground">Exact spot: {st.description}</p>}
+                              {st.address && <p className="text-xs text-muted-foreground">{st.address}</p>}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    {geoStops.length > 0 && a.routeId && (
+                      <RouteStopsMap
+                        stops={a.stops.map((st) => ({
+                          name: st.name,
+                          lat: st.lat,
+                          lng: st.lng,
+                          description: st.description,
+                          address: st.address,
+                        }))}
+                        liveRouteId={a.routeId}
+                        heightClass="h-80"
+                      />
+                    )}
+                  </div>
+                )}
+
+                <RiderTable riders={a.riders} />
               </div>
-              <RiderTable riders={a.riders} />
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

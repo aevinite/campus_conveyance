@@ -115,6 +115,15 @@ export async function listVehicles(opts: PageOpts = {}): Promise<Paged<VehicleLi
   };
 }
 
+export interface RouteStopLite {
+  name: string;
+  sequence: number | null;
+  lat: number | null;
+  lng: number | null;
+  address: string | null;
+  description: string | null;
+}
+
 export interface VehicleDetail {
   vehicle: Record<string, unknown>;
   agencyName: string;
@@ -125,6 +134,8 @@ export interface VehicleDetail {
     totalSeats: number | null;
     reservedSeats: number | null;
     riders: SeatRider[];
+    /** Stops of this assignment's route (for the admin map + stop list). */
+    stops: RouteStopLite[];
   }[];
   live: { is_online: boolean; lat: number | null; lng: number | null; updated_at: string | null } | null;
   changes: {
@@ -188,6 +199,32 @@ export async function getVehicleDetail(id: string): Promise<VehicleDetail | null
     'route_assignment_id',
   );
 
+  // Stops for every route this bus serves (one query), grouped by route → used
+  // for the per-route stop list + map on the bus detail page.
+  const stopsByRoute = new Map<string, RouteStopLite[]>();
+  const routeIds = [...new Set(assignmentRows.map((a) => a.route_id).filter((x): x is string => !!x))];
+  if (routeIds.length > 0) {
+    const { data: stopData, error: stopErr } = await client
+      .from('route_stops')
+      .select('route_id, name, sequence, lat, lng, address, description')
+      .in('route_id', routeIds)
+      .order('sequence', { ascending: true });
+    if (stopErr) throw stopErr;
+    for (const st of (stopData ?? []) as Record<string, unknown>[]) {
+      const rid = st.route_id as string;
+      const arr = stopsByRoute.get(rid) ?? [];
+      arr.push({
+        name: st.name as string,
+        sequence: (st.sequence as number) ?? null,
+        lat: (st.lat as number) ?? null,
+        lng: (st.lng as number) ?? null,
+        address: (st.address as string) ?? null,
+        description: (st.description as string) ?? null,
+      });
+      stopsByRoute.set(rid, arr);
+    }
+  }
+
   const assignments = [];
   for (const a of assignmentRows) {
     const alloc = allocs.get(a.id);
@@ -199,6 +236,7 @@ export async function getVehicleDetail(id: string): Promise<VehicleDetail | null
       totalSeats: alloc?.total_seats ?? null,
       reservedSeats: alloc ? liveReserved(riders) : null,
       riders,
+      stops: a.route_id ? (stopsByRoute.get(a.route_id) ?? []) : [],
     });
   }
 
