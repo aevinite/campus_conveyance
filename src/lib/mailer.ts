@@ -302,8 +302,8 @@ export async function sendSignupConfirmationEmail(to: string, confirmLink: strin
         </a>
       </p>
       <p style="color:#888;font-size:13px;line-height:1.5">
-        If the button doesn't work, copy this link into your browser:<br>
-        <a href="${confirmLink}" style="color:#6d5efc;word-break:break-all">${confirmLink}</a>
+        Button not working?
+        <a href="${confirmLink}" style="color:#6d5efc;font-weight:600;text-decoration:underline">Confirm your email here</a>.
       </p>
       <p style="color:#aaa;font-size:12px;margin-top:24px">
         If you didn't create this account, you can safely ignore this email.
