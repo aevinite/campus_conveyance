@@ -581,6 +581,55 @@ export async function countAgencyRefunds(db: SupabaseClient, agencyId: string): 
   return Number(data ?? 0);
 }
 
+/** A fully-paid (completed) payment on one of the agency's routes — so the
+ *  agency can see which student has completed the payment. Read-only. */
+export interface AgencyPaymentRow {
+  bookingId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  routeName: string;
+  amountCents: number;
+  utr: string | null;
+  reference: string | null;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+}
+
+export async function listAgencyCompletedPayments(
+  db: SupabaseClient,
+  agencyId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<AgencyPaymentRow[]> {
+  const { data, error } = await db.rpc('agency_completed_payments', {
+    p_agency_id: agencyId,
+    p_limit: opts.limit ?? null,
+    p_offset: opts.offset ?? 0,
+  });
+  if (error) throw error;
+  type Row = {
+    booking_id: string; student_name: string | null; student_email: string | null;
+    route_name: string; amount_cents: number | null; upi_utr: string | null;
+    reference: string | null; submitted_at: string | null; verified_at: string | null;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    bookingId: r.booking_id,
+    studentName: r.student_name,
+    studentEmail: r.student_email,
+    routeName: r.route_name,
+    amountCents: Number(r.amount_cents ?? 0),
+    utr: r.upi_utr,
+    reference: r.reference,
+    submittedAt: r.submitted_at,
+    verifiedAt: r.verified_at,
+  }));
+}
+
+export async function countAgencyCompletedPayments(db: SupabaseClient, agencyId: string): Promise<number> {
+  const { data, error } = await db.rpc('agency_completed_payments_count', { p_agency_id: agencyId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export interface DriverRow {
   driver_id: string;
   profile_id: string | null;
