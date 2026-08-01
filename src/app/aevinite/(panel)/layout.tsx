@@ -10,7 +10,6 @@ const ITEMS: SidebarItem[] = [
   { label: 'Routes & Stops', href: '/aevinite/routes', icon: 'Route' },
   { label: 'Bookings', href: '/aevinite/bookings', icon: 'Ticket' },
   { label: 'Payments', href: '/aevinite/payments', icon: 'Wallet' },
-  { label: 'Payment History', href: '/aevinite/payments/history', icon: 'ReceiptText' },
   { label: 'Live Rides', href: '/aevinite/live', icon: 'Radio' },
   { label: 'Drivers', href: '/aevinite/drivers', icon: 'IdCard' },
   { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },
