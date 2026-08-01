@@ -775,6 +775,107 @@ export async function listParents(opts: PageOpts = {}): Promise<Paged<ParentRow>
   };
 }
 
+export interface ParentChildDetail {
+  studentId: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  campus: string | null;
+  /** A login-less "managed" child (added by the parent) vs a logged-in student
+   *  who linked the parent via a code. */
+  managed: boolean;
+  rideRoute: string | null;
+  rideStatus: string | null;
+}
+export interface ParentDetailRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  children: ParentChildDetail[];
+}
+
+/**
+ * Parents with the FULL details of every child they're linked to — name, email,
+ * phone, campus, whether it's a logged-in student (who granted access via a code)
+ * or a login-less managed child, and the child's current active ride. For the
+ * admin "Parents" cards. Service-role; batched (no N+1).
+ */
+export async function listParentsDetailed(opts: PageOpts = {}): Promise<Paged<ParentDetailRow>> {
+  const client = db();
+  let q = client.from('parents').select('id, profile_id', { count: 'exact' }).order('created_at', { ascending: false });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const parentIds = rows.map((r) => r.id as string);
+  const parentProfiles = await mapByIds<{ id: string; full_name: string | null; email: string | null; phone: string | null }>(
+    client, 'profiles', 'id, full_name, email, phone', rows.map((r) => r.profile_id as string),
+  );
+
+  const { data: links } = await client.from('parent_students').select('parent_id, student_id').in('parent_id', parentIds);
+  const linkRows = (links ?? []) as { parent_id: string; student_id: string }[];
+  const studentIds = linkRows.map((l) => l.student_id);
+  const students = await mapByIds<{ id: string; profile_id: string | null; full_name: string | null; phone: string | null; email: string | null; institution_id: string | null }>(
+    client, 'students', 'id, profile_id, full_name, phone, email, institution_id', studentIds,
+  );
+  const studentProfiles = await mapByIds<{ id: string; full_name: string | null; email: string | null; phone: string | null }>(
+    client, 'profiles', 'id, full_name, email, phone', [...students.values()].map((s) => s.profile_id),
+  );
+  const insts = await mapByIds<{ id: string; name: string }>(
+    client, 'institutions', 'id, name', [...students.values()].map((s) => s.institution_id),
+  );
+
+  // Current active ride per linked student (one-active-booking model).
+  const rideByStudent = new Map<string, { route: string | null; status: string }>();
+  if (studentIds.length) {
+    const { data: bks } = await client
+      .from('bookings')
+      .select('student_id, status, route_id')
+      .in('student_id', studentIds)
+      .in('status', ['PENDING', 'CONFIRMED']);
+    const bkRows = (bks ?? []) as { student_id: string; status: string; route_id: string | null }[];
+    const routes = await mapByIds<{ id: string; name: string }>(client, 'routes', 'id, name', bkRows.map((b) => b.route_id));
+    for (const b of bkRows) {
+      rideByStudent.set(b.student_id, { route: b.route_id ? (routes.get(b.route_id)?.name ?? null) : null, status: b.status });
+    }
+  }
+
+  const childrenByParent = new Map<string, ParentChildDetail[]>();
+  for (const l of linkRows) {
+    const st = students.get(l.student_id);
+    const prof = st?.profile_id ? studentProfiles.get(st.profile_id) : null;
+    const ride = rideByStudent.get(l.student_id) ?? null;
+    const child: ParentChildDetail = {
+      studentId: l.student_id,
+      name: prof?.full_name ?? st?.full_name ?? 'Unnamed',
+      email: prof?.email ?? st?.email ?? null,
+      phone: prof?.phone ?? st?.phone ?? null,
+      campus: st?.institution_id ? (insts.get(st.institution_id)?.name ?? null) : null,
+      managed: !st?.profile_id,
+      rideRoute: ride?.route ?? null,
+      rideStatus: ride?.status ?? null,
+    };
+    const arr = childrenByParent.get(l.parent_id) ?? [];
+    arr.push(child);
+    childrenByParent.set(l.parent_id, arr);
+  }
+
+  return {
+    rows: rows.map((r) => {
+      const p = parentProfiles.get(r.profile_id as string);
+      return {
+        id: r.id as string,
+        name: p?.full_name ?? null,
+        email: p?.email ?? null,
+        phone: p?.phone ?? null,
+        children: childrenByParent.get(r.id as string) ?? [],
+      };
+    }),
+    total: count ?? 0,
+  };
+}
+
 export interface LinkCodeRow {
   id: string;
   code: string;
