@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { IndianRupee } from 'lucide-react';
 import { listPendingUpiPayments, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
 import { verifyUpiPaymentAction } from '@/features/admin/ops-actions';
@@ -33,6 +34,14 @@ export default async function AdminPaymentsPage({
           Riders who paid by UPI and submitted a reference ({total}). Check the money arrived in your
           UPI account, then approve to confirm the seat.
         </p>
+      </div>
+      <div className="inline-flex rounded-xl border border-border bg-card p-1">
+        <Link href="/aevinite/payments" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground">
+          To verify
+        </Link>
+        <Link href="/aevinite/payments/history" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground">
+          Completed
+        </Link>
       </div>
       <DataTable
         headers={['Rider', 'Route', 'Amount', 'UTR', 'Ref', 'Submitted', 'Action']}

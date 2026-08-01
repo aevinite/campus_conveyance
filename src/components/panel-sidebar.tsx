@@ -36,6 +36,7 @@ import {
   Trash2,
   Star,
   Wallet,
+  ReceiptText,
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -73,6 +74,7 @@ const ICONS = {
   Trash2,
   Star,
   Wallet,
+  ReceiptText,
 } as const;
 
 export type SidebarIcon = keyof typeof ICONS;

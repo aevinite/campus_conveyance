@@ -861,6 +861,74 @@ export interface PendingPaymentRow {
   submittedAt: string | null;
 }
 
+export interface CompletedPaymentRow {
+  bookingId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  routeName: string;
+  amountCents: number;
+  utr: string | null;
+  reference: string | null;
+  method: string | null;
+  /** PAID = verified, FAILED = rejected. */
+  status: string;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+  note: string | null;
+}
+
+/**
+ * UPI payments the admin has already processed — verified (PAID) or rejected
+ * (FAILED) — for the admin "Payment History" log: who paid, how much, the UTR
+ * they submitted, and when it was verified. Service-role read.
+ */
+export async function listCompletedUpiPayments(opts: PageOpts = {}): Promise<Paged<CompletedPaymentRow>> {
+  const client = db();
+  let q = client
+    .from('payments')
+    .select('booking_id, amount_cents, upi_utr, reference, method, status, submitted_at, verified_at, verify_note', { count: 'exact' })
+    // Every completed/processed payment — verified UPI ones (with a UTR) AND any
+    // legacy/mock completions (no UTR). Newest verification first; the rest after.
+    .in('status', ['PAID', 'FAILED'])
+    .order('verified_at', { ascending: false, nullsFirst: false });
+  q = range(q, opts);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const bookings = await mapByIds<{ id: string; student_name: string | null; student_email: string | null; route_id: string | null }>(
+    client,
+    'bookings',
+    'id, student_name, student_email, route_id',
+    rows.map((r) => r.booking_id as string),
+  );
+  const routes = await mapByIds<{ id: string; name: string }>(
+    client,
+    'routes',
+    'id, name',
+    [...bookings.values()].map((b) => b.route_id),
+  );
+  return {
+    rows: rows.map((r) => {
+      const b = bookings.get(r.booking_id as string);
+      return {
+        bookingId: r.booking_id as string,
+        studentName: b?.student_name ?? null,
+        studentEmail: b?.student_email ?? null,
+        routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
+        amountCents: (r.amount_cents as number) ?? 0,
+        utr: (r.upi_utr as string) ?? null,
+        reference: (r.reference as string) ?? null,
+        method: (r.method as string) ?? null,
+        status: (r.status as string) ?? '',
+        submittedAt: (r.submitted_at as string) ?? null,
+        verifiedAt: (r.verified_at as string) ?? null,
+        note: (r.verify_note as string) ?? null,
+      };
+    }),
+    total: count ?? 0,
+  };
+}
+
 /**
  * UPI payments a rider submitted (status CREATED = awaiting verification), for
  * the admin Payments queue. Service-role read; the seat is confirmed only when
