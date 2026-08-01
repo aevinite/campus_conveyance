@@ -19,6 +19,7 @@ export function CancelBookingButton({
   routeId,
   paid = false,
   studentId,
+  refundPending = false,
 }: {
   bookingId: string;
   /** The booking's route — lets the action revalidate that route's detail page
@@ -28,6 +29,9 @@ export function CancelBookingButton({
   paid?: boolean;
   /** Set when a parent cancels a child's booking (revalidates /parent). */
   studentId?: string;
+  /** The rider already requested cancellation of this paid booking — the refund
+   *  is pending admin action, so show a locked "Refund pending" state. */
+  refundPending?: boolean;
 }) {
   const [state, action] = useActionState<CancelState, FormData>(cancelBookingAction, {});
   const [phase, setPhase] = useState<Phase>('idle');
@@ -40,7 +44,7 @@ export function CancelBookingButton({
     if (state === lastShown.current) return;
     if (state.error) toast.error(state.error);
     else if (state.ok) {
-      toast.success('Booking cancelled.');
+      toast.success(paid ? 'Cancellation requested — refund pending.' : 'Booking cancelled.');
       // Reacting to a completed useActionState result (guarded by lastShown) —
       // runtime-correct, not a cascading-render hazard.
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -51,6 +55,15 @@ export function CancelBookingButton({
 
   const open = phase !== 'idle';
   useModalFocusTrap(open, dialogRef, () => setPhase('idle'));
+
+  // Already requested — the seat is held until the admin processes the refund.
+  if (refundPending) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">
+        Refund pending
+      </span>
+    );
+  }
 
   return (
     <>
@@ -84,11 +97,20 @@ export function CancelBookingButton({
                   <h2 id={titleId} className="text-lg font-semibold">Cancel this booking?</h2>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  This frees your seat and can&apos;t be undone — you&apos;d have to request it again.
                   {paid
-                    ? ' Since you have already paid, we’ll ask where to send your refund on the next step.'
-                    : ''}
+                    ? 'This sends a cancellation & refund request. Your seat stays reserved until we process your refund — we’ll ask where to send it on the next step.'
+                    : 'This frees your seat and can’t be undone — you’d have to request it again.'}
                 </p>
+                {paid && (
+                  <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                      <b>Refund policy:</b> you get a full refund only if you cancel within{' '}
+                      <b>3 days</b> of booking. After that, a small deduction is applied before your
+                      refund is processed.
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => setPhase('idle')}>
                     Keep booking

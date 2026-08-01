@@ -84,6 +84,9 @@ export interface BookingRow {
   payment_status: string | null;
   /** Why a CANCELLED booking was cancelled: 'STUDENT' | 'PAYMENT_TIMEOUT' | null. */
   cancel_cause: string | null;
+  /** Set (with status still CONFIRMED) when the rider requested cancellation of a
+   *  PAID booking and the refund is pending admin action — the seat is held. */
+  cancelRequestedAt: string | null;
   bus_number: string | null;
   /** Effective driver for today (substitute if changed, else the regular one). */
   driver_name: string | null;
@@ -321,7 +324,7 @@ export async function listMyBookings(
   let q = db
     .from('bookings')
     .select(
-      'id, status, created_at, is_paid, approved_at, expires_at, payment_status, cancel_cause, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, agency_id, agencies(name), vehicles(id, bus_number, driver_name, driver_phone))',
+      'id, status, created_at, is_paid, approved_at, expires_at, payment_status, cancel_cause, cancel_requested_at, billing_period, routes(id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, agency_id, agencies(name), vehicles(id, bus_number, driver_name, driver_phone))',
     )
     // Cancelled bookings are hidden from the student panel entirely
     // (user decision 2026-07-18) — whatever the cancel reason.
@@ -368,6 +371,7 @@ export async function listMyBookings(
       expires_at: (b.expires_at as string) ?? null,
       payment_status: (b.payment_status as string) ?? null,
       cancel_cause: (b.cancel_cause as string) ?? null,
+      cancelRequestedAt: (b.cancel_requested_at as string) ?? null,
       _vehicleId: vehicle?.id ?? null,
       bus_number: vehicle?.bus_number ?? null,
       driver_name: vehicle?.driver_name ?? null,

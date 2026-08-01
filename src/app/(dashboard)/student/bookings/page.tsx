@@ -136,6 +136,15 @@ function StepIcon({ state, isLast }: { state: StepState; isLast: boolean }) {
 }
 
 function statusPill(b: BookingRow) {
+  // A paid booking the rider asked to cancel: held until the admin processes the
+  // refund, so it still reads CONFIRMED but shows the pending state.
+  if (b.status === 'CONFIRMED' && b.cancelRequestedAt) {
+    return (
+      <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">
+        Cancellation requested — refund pending
+      </span>
+    );
+  }
   const map: Record<string, { label: string; cls: string }> = {
     CONFIRMED: { label: 'Confirmed', cls: 'border-success/30 bg-success/10 text-success' },
     WAITLISTED: { label: 'Waitlisted', cls: 'border-warning/30 bg-warning/10 text-warning' },
@@ -254,7 +263,12 @@ export default async function BookingsPage({
                       </p>
                     </div>
                     {b.status !== 'CANCELLED' && b.status !== 'REJECTED' && (
-                      <CancelBookingButton bookingId={b.id} routeId={b.routeId} paid={b.is_paid} />
+                      <CancelBookingButton
+                        bookingId={b.id}
+                        routeId={b.routeId}
+                        paid={b.is_paid}
+                        refundPending={!!b.cancelRequestedAt}
+                      />
                     )}
                   </div>
 
