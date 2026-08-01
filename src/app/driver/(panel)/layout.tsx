@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getDriverProfile, getDriverStatus, listDriverBuses } from '@/features/driver/repository';
 import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { DriverTracker } from '@/components/driver-tracker';
 import { DriverBottomNav, type DriverNavItem } from '@/components/driver-bottom-nav';
 import { Logo } from '@/components/brand';
@@ -111,6 +112,7 @@ export default async function DriverPanelLayout({ children }: { children: React.
           </div>
         </header>
         <main className="flex-1 p-4 pb-28">
+          <AutoRefresh />
           {drivesToday && <DriverTracker initialOnline={status?.is_online ?? false} />}
           {children}
         </main>

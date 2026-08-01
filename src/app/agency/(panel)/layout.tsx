@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getMyAgency } from '@/features/agency/repository';
 import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { AgencyBottomNav } from '@/components/agency-bottom-nav';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -89,7 +90,7 @@ export default async function AgencyPanelLayout({
             <ThemeToggle />
           </div>
         </header>
-        <main className="flex-1 p-4 pb-28">{children}</main>
+        <main className="flex-1 p-4 pb-28"><AutoRefresh />{children}</main>
         <AgencyBottomNav />
       </div>
     );

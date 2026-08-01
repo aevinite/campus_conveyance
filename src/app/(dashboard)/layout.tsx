@@ -9,6 +9,7 @@ import { UserMenu } from '@/components/user-menu';
 import { NotificationBell } from '@/components/notification-bell';
 import { PushToggle } from '@/components/push-toggle';
 import { AppBottomNav } from '@/components/app-bottom-nav';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { isAppRequest } from '@/lib/app-context';
 import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
 
@@ -62,6 +63,7 @@ export default async function DashboardLayout({
         </div>
       </header>
       <main className={`mx-auto max-w-6xl p-4 sm:p-6 lg:p-8${showBottomNav ? ' pb-28' : ''}`}>
+        <AutoRefresh />
         {children}
       </main>
       {showBottomNav && <AppBottomNav role={role as 'STUDENT' | 'PARENT'} />}

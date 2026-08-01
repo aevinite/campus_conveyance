@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { logoutAction } from '@/features/auth/actions';
 import { cn } from '@/lib/utils';
 
@@ -173,6 +174,8 @@ export function PanelSidebar({
 
   return (
     <div className="flex min-h-screen bg-muted/30">
+      {/* Keep every panel live without a manual reload. */}
+      <AutoRefresh />
       {/* Desktop rail */}
       <aside className="dark sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex items-center justify-between gap-2 px-5 py-5">
