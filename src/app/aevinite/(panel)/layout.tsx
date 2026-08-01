@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { PlusCircle } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
 
@@ -38,6 +40,16 @@ export default async function AdminPanelLayout({
   await requireRole('SUPER_ADMIN', '/aevinite/login');
   return (
     <PanelSidebar items={ITEMS} homeHref="/aevinite" greeting="Admin">
+      {/* Persistent quick action — add a college/school from any admin section. */}
+      <div className="mb-5 flex justify-end">
+        <Link
+          href="/aevinite/add-college"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <PlusCircle className="size-4" />
+          Add College / School
+        </Link>
+      </div>
       {children}
     </PanelSidebar>
   );

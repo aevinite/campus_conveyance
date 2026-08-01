@@ -18,9 +18,12 @@ export default async function AdminBookingsPage({
   searchParams: Promise<{ page?: string; status?: string }>;
 }) {
   const { page: pageParam, status: statusParam } = await searchParams;
-  const status = FILTERS.includes((statusParam ?? 'ALL').toUpperCase() as (typeof FILTERS)[number])
-    ? (statusParam ?? 'ALL').toUpperCase()
-    : 'ALL';
+  // Default to CONFIRMED (paid) bookings — the admin usually wants the actual
+  // riders, not the pending/cancelled/rejected noise. Every status is still one
+  // click away via the filter chips ("All" shows everything).
+  const status = FILTERS.includes((statusParam ?? 'CONFIRMED').toUpperCase() as (typeof FILTERS)[number])
+    ? (statusParam ?? 'CONFIRMED').toUpperCase()
+    : 'CONFIRMED';
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const { rows, total } = await listBookings({
     limit: OPS_PAGE_SIZE,
@@ -29,8 +32,7 @@ export default async function AdminBookingsPage({
   });
   const totalPages = Math.max(1, Math.ceil(total / OPS_PAGE_SIZE));
   if (total > 0 && page > totalPages) {
-    const qs = status === 'ALL' ? '' : `&status=${status}`;
-    redirect(`/aevinite/bookings?page=${totalPages}${qs}`);
+    redirect(`/aevinite/bookings?page=${totalPages}&status=${status}`);
   }
 
   return (
@@ -50,7 +52,7 @@ export default async function AdminBookingsPage({
         {FILTERS.map((f) => (
           <Link
             key={f}
-            href={f === 'ALL' ? '/aevinite/bookings' : `/aevinite/bookings?status=${f}`}
+            href={f === 'CONFIRMED' ? '/aevinite/bookings' : `/aevinite/bookings?status=${f}`}
             aria-current={status === f ? 'page' : undefined}
             className={cn(
               'rounded-full border px-3 py-1 text-sm transition-colors',
