@@ -509,6 +509,78 @@ export async function countHiddenStudents(
   return Number(data ?? 0);
 }
 
+/** A cancelled-with-refund booking on one of the agency's routes (read-only —
+ *  the platform issues the refund; the agency just sees the request + status). */
+export interface AgencyRefundRow {
+  bookingId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  routeName: string;
+  amountCents: number;
+  refundStatus: string; // REQUESTED | PROCESSED | DECLINED
+  refundAmountCents: number | null;
+  payoutMethod: string | null;
+  payoutDetails: string | null;
+  reason: string | null;
+  requestedAt: string | null;
+  refundedAt: string | null;
+}
+
+type RefundRpcRow = {
+  booking_id: string; student_name: string | null; student_email: string | null;
+  route_name: string; amount_cents: number | null; refund_status: string;
+  refund_amount_cents: number | null; refund_details: Record<string, unknown> | null;
+  cancel_reason: string | null; requested_at: string | null; refunded_at: string | null;
+};
+
+function payout(rd: Record<string, unknown> | null): { method: string | null; details: string | null } {
+  if (!rd) return { method: null, details: null };
+  const method = (rd.method as string) ?? null;
+  if (method === 'UPI') return { method: 'UPI', details: (rd.upi_id as string) ?? null };
+  if (method === 'BANK')
+    return {
+      method: 'Bank',
+      details: [rd.account_name, rd.account_number, rd.ifsc].filter(Boolean).join(' · ') || null,
+    };
+  return { method, details: null };
+}
+
+export async function listAgencyRefunds(
+  db: SupabaseClient,
+  agencyId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<AgencyRefundRow[]> {
+  const { data, error } = await db.rpc('agency_refunds', {
+    p_agency_id: agencyId,
+    p_limit: opts.limit ?? null,
+    p_offset: opts.offset ?? 0,
+  });
+  if (error) throw error;
+  return ((data ?? []) as RefundRpcRow[]).map((r) => {
+    const p = payout(r.refund_details);
+    return {
+      bookingId: r.booking_id,
+      studentName: r.student_name,
+      studentEmail: r.student_email,
+      routeName: r.route_name,
+      amountCents: Number(r.amount_cents ?? 0),
+      refundStatus: r.refund_status,
+      refundAmountCents: r.refund_amount_cents != null ? Number(r.refund_amount_cents) : null,
+      payoutMethod: p.method,
+      payoutDetails: p.details,
+      reason: r.cancel_reason,
+      requestedAt: r.requested_at,
+      refundedAt: r.refunded_at,
+    };
+  });
+}
+
+export async function countAgencyRefunds(db: SupabaseClient, agencyId: string): Promise<number> {
+  const { data, error } = await db.rpc('agency_refunds_count', { p_agency_id: agencyId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export interface DriverRow {
   driver_id: string;
   profile_id: string | null;
