@@ -1,6 +1,44 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
+ * One booking in the family's booking history — a CONFIRMED booking, or a
+ * CANCELLED one that had been paid for (see my_booking_history / migration 0116).
+ */
+export interface BookingHistoryRow {
+  booking_id: string;
+  student_name: string | null;
+  route_name: string | null;
+  college_name: string | null;
+  bus_number: string | null;
+  agency_name: string | null;
+  pickup_name: string | null;
+  /** Only ever 'CONFIRMED' or 'CANCELLED' (SQL filters the rest out). */
+  status: 'CONFIRMED' | 'CANCELLED';
+  /** Refund state of the payment (for a paid-then-cancelled booking). */
+  refund_status: 'NONE' | 'REQUESTED' | 'PROCESSED' | 'DECLINED';
+  /** Amount paid, in paise/cents. 0 if no payment row. */
+  amount_cents: number;
+  billing_period: string | null;
+  /** When the booking was first made. */
+  booked_at: string;
+  /** When it was paid/confirmed (null if never reached that). */
+  paid_at: string | null;
+  /** Last change — used as the confirmed/cancelled date the UI shows. */
+  changed_at: string;
+}
+
+/**
+ * The caller's BOOKING history — their own bookings (as a student) or their
+ * linked children's (as a parent), via the `my_booking_history` security-definer
+ * RPC. Only confirmed bookings and paid-then-cancelled bookings, newest first.
+ */
+export async function listMyBookingHistory(db: SupabaseClient): Promise<BookingHistoryRow[]> {
+  const { data, error } = await db.rpc('my_booking_history');
+  if (error) throw error;
+  return (data ?? []) as BookingHistoryRow[];
+}
+
+/**
  * One actual ride (boarding) taken by the caller or their linked child. Trip
  * history is a list of these, newest boarding first.
  */
