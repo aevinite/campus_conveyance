@@ -16,6 +16,7 @@ import { getRouteAgencyReviews } from '@/features/reviews/repository';
 import { StarRating } from '@/components/ui/star-rating';
 import { formatCompactDateTime } from '@/lib/format-date';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { BookingSteps } from '../../booking-steps';
 import { ReserveForm } from './reserve-form';
 import { SeatMap } from './seat-map';
@@ -117,9 +118,7 @@ export default async function RouteDetailPage({
   return (
     <section className="space-y-6">
       <div className={app ? 'space-y-3' : 'space-y-4'}>
-        <Link href={backHref} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-          ← {backLabel}
-        </Link>
+        <AppBackLink href={backHref} label={backLabel} />
         {!app && <BookingSteps active={4} />}
         <div>
         {!app && (

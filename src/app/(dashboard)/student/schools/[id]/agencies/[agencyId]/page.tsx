@@ -92,8 +92,11 @@ export default async function AgencyRoutesPage({
     <section className="space-y-6">
       {app ? (
         <div className="space-y-3">
-          <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-            <ArrowLeft className="size-4" /> Agencies
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors active:bg-muted"
+          >
+            <ArrowLeft className="size-4 text-primary" /> Agencies
           </Link>
           <div className="flex items-center gap-3">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-base font-bold text-primary ring-1 ring-inset ring-primary/15">

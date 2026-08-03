@@ -47,8 +47,11 @@ export default async function SchoolDetailPage({
     <section className="space-y-6">
       {app ? (
         <div className="space-y-3">
-          <Link href="/student/schools" className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-            <ArrowLeft className="size-4" /> Campuses
+          <Link
+            href="/student/schools"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors active:bg-muted"
+          >
+            <ArrowLeft className="size-4 text-primary" /> Campuses
           </Link>
           {/* Compact campus header — logo tile + name inline, no gradient hero. */}
           <div className="flex items-center gap-3">

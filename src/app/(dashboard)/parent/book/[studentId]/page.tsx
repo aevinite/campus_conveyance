@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { GraduationCap, Ticket, Clock3, ArrowLeft } from 'lucide-react';
+import { GraduationCap, Ticket, Clock3 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
 import { listInstitutionAgencies, type VehicleType } from '@/features/catalog/repository';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { AgencyList, VehicleTabs } from '../../../student/schools/[id]/agency-list';
 
 export default async function ParentBookPickAgency({
@@ -37,9 +38,8 @@ export default async function ParentBookPickAgency({
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <Link href={`/parent/child/${studentId}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="size-4" /> Back to {childName}
-        </Link>
+        <AppBackLink href={`/parent/child/${studentId}`} label={`Back to ${childName}`} />
+
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
             <GraduationCap className="size-6" />

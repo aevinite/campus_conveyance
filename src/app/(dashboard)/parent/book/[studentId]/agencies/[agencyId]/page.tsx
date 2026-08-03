@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { Bus, Truck, MapPin, Star, ArrowRight, ArrowLeft, Building2 } from 'lucide-react';
+import { Bus, Truck, MapPin, Star, ArrowRight, Building2 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listChildren } from '@/features/parent/repository';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import {
   listInstitutionAgencies,
   listInstitutionRoutes,
@@ -65,9 +66,7 @@ export default async function ParentBookAgencyRoutes({
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="size-4" /> Agencies
-        </Link>
+        <AppBackLink href={backHref} label="Agencies" />
         <div className="flex items-center gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-base font-bold text-primary ring-1 ring-inset ring-primary/15">
             {isCampus ? <Building2 className="size-6" /> : initials(agency.name)}

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Bus, CheckCircle2, Clock3, GraduationCap, Phone } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { getRouteWithStops, getAvailability } from '@/features/booking/repository';
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
 import { getUpiSettings } from '@/lib/upi-settings';
@@ -162,12 +163,7 @@ export default async function ParentBookRoute({
   return (
     <section className="space-y-6">
       <div className="space-y-2">
-        <Link
-          href={`/parent/book/${studentId}`}
-          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          ← Back to rides
-        </Link>
+        <AppBackLink href={`/parent/book/${studentId}`} label="Back to rides" />
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <GraduationCap className="size-4 text-primary" /> Booking for <b className="text-foreground">{childName}</b>
         </div>

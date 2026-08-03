@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, GraduationCap, Mail, Phone, MapPin, Home, Ticket, Bus } from 'lucide-react';
+import { GraduationCap, Mail, Phone, MapPin, Home, Ticket, Bus } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listChildren } from '@/features/parent/repository';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import RouteStopsMap, { type MapStop } from '../../../student/routes/[id]/route-stops-map';
 
 const STATUS_PILL: Record<string, string> = {
@@ -67,9 +68,7 @@ export default async function ParentChildHub({
   return (
     <section className="space-y-6">
       <div>
-        <Link href="/parent" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
-          <ArrowLeft className="size-4" /> Back to dashboard
-        </Link>
+        <AppBackLink href="/parent" label="Back to dashboard" />
         <div className="mt-3 flex items-center gap-4">
           <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
             <GraduationCap className="size-7" />
