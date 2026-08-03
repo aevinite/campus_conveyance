@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Loader2,
   X,
+  XCircle,
+  Circle,
 } from 'lucide-react';
 import { reserveSeatAction, submitUpiPaymentAction, bookingStatusAction, cancelBookingAction } from '@/features/booking/actions';
 import { Button } from '@/components/ui/button';
@@ -27,13 +29,43 @@ import type { Stop } from '@/features/booking/repository';
 import { PaymentCountdown } from './payment-countdown';
 
 // The auto-approval runs server-side inside reserve_seat (seat availability,
-// pickup validity and campus eligibility are all checked there). This is the
-// on-screen "Approving your request…" pause — kept well under 30 seconds.
-const APPROVAL_MS = 4000;
+// pickup validity and campus eligibility are all checked together, atomically).
+// On screen we replay those as a live top-to-bottom checklist: each row starts
+// red, then turns green one-by-one. STEP_MS paces how long each row takes; the
+// final pass/fail is the REAL server result — a failing row goes red and the
+// request is auto-cancelled.
+const STEP_MS = 850;
+const FAIL_HOLD_MS = 1700; // how long the red failed row shows before we bail out
 
-const CHECKS = ['Seat availability', 'Your pickup stop', 'Campus eligibility'];
+// The three approval checks, IN THE ORDER they light up.
+const CHECKS = ['Seat availability', 'Your pickup stop', 'Campus eligibility'] as const;
 
 type Phase = 'reserve' | 'approving' | 'payment' | 'submitted' | 'waitlisted' | 'expired';
+
+// The live outcome that drives the approving checklist animation. `ok` → all
+// three pass then payment; `fail` → rows up to failStep pass, failStep goes red,
+// then auto-cancel. bookingId is only set on a full/waitlist hold we must release.
+type ApproveOutcome =
+  | { kind: 'ok'; bookingId: string; expiresAt: string | null }
+  | { kind: 'fail'; failStep: 0 | 1 | 2; message: string; bookingId?: string };
+
+// Map a reserve_seat error code to the checklist row it belongs to. Structural
+// errors (missing details, already-booked, auth) aren't one of the three checks
+// → null, and we surface those as a plain message without the row theatrics.
+function stepForCode(code?: string): 0 | 1 | 2 | null {
+  switch (code) {
+    case 'P0004': // no seats configured / not accepting → seat availability
+      return 0;
+    case 'P0012': // invalid pickup stop for this route
+      return 1;
+    case 'P0010': // route no longer available
+    case 'P0011': // campus not available
+    case 'P0013': // ride not offered on the chosen plan
+      return 2;
+    default:
+      return null;
+  }
+}
 
 function fmtIST(iso: string | null): string | null {
   return iso ? formatTime(iso) : null;
@@ -156,6 +188,11 @@ export function ReserveForm({
   const [busy, setBusy] = useState(false); // reserve in-flight
   const [submitting, setSubmitting] = useState(false); // UTR submit in-flight
   const [cancelling, setCancelling] = useState(false); // releasing the seat hold
+  // Live approval checklist: how many rows have PASSED (turned green), which row
+  // FAILED (turned red), and the real server outcome that drives the animation.
+  const [checkStep, setCheckStep] = useState(0);
+  const [failStep, setFailStep] = useState<0 | 1 | 2 | null>(null);
+  const [outcome, setOutcome] = useState<ApproveOutcome | null>(null);
   const [confirmed, setConfirmed] = useState(false); // admin verified → seat confirmed
   const [utr, setUtr] = useState('');
   const [planIdx, setPlanIdx] = useState(0);
@@ -170,16 +207,62 @@ export function ReserveForm({
     setPayByAt(null);
     setPayDismissed(false);
     setUtr('');
+    setCheckStep(0);
+    setFailStep(null);
+    setOutcome(null);
     setPhase('reserve');
     router.refresh();
   }
 
-  // Move from the approving popup to the payment step after the pause.
+  // Drive the live approval checklist. Each row lights up green in turn (STEP_MS
+  // apart). On a PASS-through we finish on the payment step; on a FAIL we stop at
+  // the offending row and flip it red (a separate effect then auto-cancels).
   useEffect(() => {
-    if (phase !== 'approving') return;
-    const t = setTimeout(() => setPhase('payment'), APPROVAL_MS);
+    if (phase !== 'approving' || !outcome) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // How many rows turn green before we stop: all 3 on success, else up to the
+    // failing row (which stays red rather than green).
+    const greenRows = outcome.kind === 'ok' ? 3 : outcome.failStep;
+    for (let i = 0; i < greenRows; i++) {
+      timers.push(setTimeout(() => setCheckStep(i + 1), STEP_MS * (i + 1)));
+    }
+    // After the last green row settles, either advance to payment or mark the
+    // failing row red.
+    timers.push(
+      setTimeout(() => {
+        if (outcome.kind === 'ok') {
+          setBookingId(outcome.bookingId);
+          setPayByAt(outcome.expiresAt);
+          setPhase('payment');
+        } else {
+          setFailStep(outcome.failStep);
+        }
+      }, STEP_MS * (greenRows + 1)),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [phase, outcome]);
+
+  // A check failed → show the red row briefly, release any hold the server made
+  // (e.g. a full-bus waitlist entry), then auto-cancel back to the request form.
+  useEffect(() => {
+    if (failStep === null || outcome?.kind !== 'fail') return;
+    const held = outcome.bookingId;
+    const message = outcome.message;
+    const t = setTimeout(async () => {
+      if (held) {
+        const fd = new FormData();
+        fd.set('bookingId', held);
+        if (bookForStudentId) fd.set('studentId', bookForStudentId);
+        // Best-effort release of the waitlist/hold; ignore its result.
+        await cancelBookingAction({}, fd).catch(() => {});
+      }
+      toast.error(message);
+      requestAgain();
+    }, FAIL_HOLD_MS);
     return () => clearTimeout(t);
-  }, [phase]);
+    // requestAgain is stable enough for our purposes; deps kept minimal on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failStep]);
 
   // While a payment is "verifying", poll for the admin's confirmation. The moment
   // the seat is CONFIRMED, show the success popup and (below) redirect home.
@@ -231,21 +314,40 @@ export function ReserveForm({
     e.preventDefault();
     const form = formRef.current;
     if (!form || busy) return;
+    // Open the live checklist popup immediately (all rows red) and run the check
+    // in the background; the outcome (below) then drives the row-by-row reveal.
     setBusy(true);
+    setCheckStep(0);
+    setFailStep(null);
+    setOutcome(null);
+    setPhase('approving');
     const res = await reserveSeatAction({}, new FormData(form));
     setBusy(false);
+
     if (res.error) {
-      toast.error(res.error);
+      const step = stepForCode(res.code);
+      if (step === null) {
+        // Not one of the three checks (missing details, already-booked, etc.) —
+        // don't fake a red row; just say what's wrong and return to the form.
+        toast.error(res.error);
+        setPhase('reserve');
+        return;
+      }
+      setOutcome({ kind: 'fail', failStep: step, message: res.error });
       return;
     }
     if (res.status === 'WAITLISTED') {
-      toast.warning('Bus is full — you have been added to the waitlist.');
-      setPhase('waitlisted');
+      // Bus is full. Per product decision we treat this as a failed seat-
+      // availability check and cancel the hold rather than waitlisting.
+      setOutcome({
+        kind: 'fail',
+        failStep: 0,
+        message: 'This bus is full — there are no seats available right now.',
+        bookingId: res.bookingId,
+      });
       return;
     }
-    setBookingId(res.bookingId ?? '');
-    setPayByAt(res.expiresAt ?? null);
-    setPhase('approving');
+    setOutcome({ kind: 'ok', bookingId: res.bookingId ?? '', expiresAt: res.expiresAt ?? null });
   }
 
   async function onSubmitUtr() {
@@ -417,23 +519,77 @@ export function ReserveForm({
     </div>
   );
 
+  // Per-row status for the live checklist: 'pass' (green), 'fail' (red),
+  // 'checking' (the row currently being verified) or 'pending' (red, waiting).
+  function rowStatus(i: number): 'pass' | 'fail' | 'checking' | 'pending' {
+    if (failStep !== null) {
+      if (i < failStep) return 'pass';
+      if (i === failStep) return 'fail';
+      return 'pending';
+    }
+    if (i < checkStep) return 'pass';
+    if (i === checkStep) return 'checking';
+    return 'pending';
+  }
+  const anyFailed = failStep !== null;
+
   const approvingModal = phase === 'approving' && (
     <Overlay label="Approving your request">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
-        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-          <Loader2 className="size-8 animate-spin" />
+        <span
+          className={`mx-auto grid size-14 place-items-center rounded-2xl ${
+            anyFailed ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'
+          }`}
+        >
+          {anyFailed ? <XCircle className="size-8" /> : <Loader2 className="size-8 animate-spin" />}
         </span>
-        <h2 className="mt-4 text-xl font-bold">Approving your request…</h2>
+        <h2 className="mt-4 text-xl font-bold">
+          {anyFailed ? 'Couldn’t approve your request' : 'Approving your request…'}
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          We&apos;re checking everything and approving automatically. This only takes a few seconds.
+          {anyFailed
+            ? 'One of the checks didn’t pass, so we’re cancelling this request.'
+            : 'We’re checking everything and approving automatically. This only takes a few seconds.'}
         </p>
         <ul className="mx-auto mt-5 max-w-xs space-y-2 text-left text-sm">
-          {CHECKS.map((c) => (
-            <li key={c} className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/30 px-3 py-2">
-              <CheckCircle2 className="size-4 shrink-0 text-success" />
-              <span>{c}</span>
-            </li>
-          ))}
+          {CHECKS.map((c, i) => {
+            const st = rowStatus(i);
+            return (
+              <li
+                key={c}
+                className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${
+                  st === 'pass'
+                    ? 'border-success/30 bg-success/[0.08]'
+                    : st === 'fail'
+                      ? 'border-destructive/40 bg-destructive/10'
+                      : st === 'checking'
+                        ? 'border-primary/30 bg-primary/[0.06]'
+                        : 'border-destructive/20 bg-destructive/[0.04]'
+                }`}
+              >
+                {st === 'pass' ? (
+                  <CheckCircle2 className="size-4 shrink-0 text-success" />
+                ) : st === 'fail' ? (
+                  <XCircle className="size-4 shrink-0 text-destructive" />
+                ) : st === 'checking' ? (
+                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <Circle className="size-4 shrink-0 text-destructive/50" />
+                )}
+                <span
+                  className={
+                    st === 'fail'
+                      ? 'font-medium text-destructive'
+                      : st === 'pending'
+                        ? 'text-muted-foreground'
+                        : ''
+                  }
+                >
+                  {c}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </Overlay>
@@ -541,10 +697,17 @@ export function ReserveForm({
       <div className="space-y-3">
         <PanelSteps active={2} />
         {modals}
-        <div className="flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-2.5 text-sm">
-          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-          <span>Approving your request…</span>
-        </div>
+        {failStep !== null ? (
+          <div className="flex items-center gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+            <XCircle className="size-4 shrink-0" />
+            <span>A check didn’t pass — cancelling your request…</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-2.5 text-sm">
+            <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+            <span>Approving your request…</span>
+          </div>
+        )}
       </div>
     );
   }

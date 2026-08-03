@@ -14,6 +14,9 @@ export type ReserveState = {
   approvedAt?: string | null;
   expiresAt?: string | null;
   error?: string;
+  /** Postgres error code (e.g. P0004/P0012/P0011) so the UI can map a failure
+   *  to the specific approval check that didn't pass. */
+  code?: string;
 };
 export type CancelState = { ok?: boolean; error?: string };
 export type DetailsState = { ok?: boolean; error?: string };
@@ -58,7 +61,8 @@ export async function reserveSeatAction(
       expiresAt: result.expiresAt,
     };
   } catch (e) {
-    return { error: toErrorResponse(e).message };
+    const r = toErrorResponse(e);
+    return { error: r.message, code: r.pgCode };
   }
 }
 
