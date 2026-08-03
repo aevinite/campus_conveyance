@@ -18,7 +18,7 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { reserveSeatAction, submitUpiPaymentAction, bookingStatusAction } from '@/features/booking/actions';
+import { reserveSeatAction, submitUpiPaymentAction, bookingStatusAction, cancelBookingAction } from '@/features/booking/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -155,6 +155,7 @@ export function ReserveForm({
   const [payByAt, setPayByAt] = useState<string | null>(null); // ISO deadline from reserve
   const [busy, setBusy] = useState(false); // reserve in-flight
   const [submitting, setSubmitting] = useState(false); // UTR submit in-flight
+  const [cancelling, setCancelling] = useState(false); // releasing the seat hold
   const [confirmed, setConfirmed] = useState(false); // admin verified → seat confirmed
   const [utr, setUtr] = useState('');
   const [planIdx, setPlanIdx] = useState(0);
@@ -269,6 +270,24 @@ export function ReserveForm({
     setPhase('submitted');
   }
 
+  // Release the held (unpaid) seat so the payment timer stops and the rider is
+  // free to go browse other agencies/rides. Resets to a clean request step.
+  async function onCancelHold() {
+    if (cancelling || !bookingId) return;
+    setCancelling(true);
+    const fd = new FormData();
+    fd.set('bookingId', bookingId);
+    if (bookForStudentId) fd.set('studentId', bookForStudentId);
+    const res = await cancelBookingAction({}, fd);
+    setCancelling(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success('Seat hold cancelled — you can browse other rides now.');
+    requestAgain();
+  }
+
   function copyVpa() {
     if (!upi?.vpa) return;
     navigator.clipboard?.writeText(upi.vpa).then(
@@ -380,6 +399,21 @@ export function ReserveForm({
       <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <ShieldCheck className="size-3.5" /> We confirm your seat once the payment is verified.
       </p>
+
+      <button
+        type="button"
+        onClick={onCancelHold}
+        disabled={cancelling}
+        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+      >
+        {cancelling ? (
+          <>
+            <Loader2 className="size-4 animate-spin" /> Cancelling…
+          </>
+        ) : (
+          'Cancel and browse other rides'
+        )}
+      </button>
     </div>
   );
 
@@ -531,6 +565,20 @@ export function ReserveForm({
         )}
         <Button className="w-full" onClick={() => setPayDismissed(false)}>
           Pay now
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={onCancelHold}
+          disabled={cancelling}
+        >
+          {cancelling ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" /> Cancelling…
+            </span>
+          ) : (
+            'Cancel'
+          )}
         </Button>
       </div>
     );
