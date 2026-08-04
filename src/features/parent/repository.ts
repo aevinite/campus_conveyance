@@ -75,6 +75,10 @@ export interface ChildBookingRow {
   /** True when today's driver is a substitute (the agency changed it). */
   driver_changed: boolean;
   route_id: string | null;
+  /** The plan this booking was made under (for the bus-pass widget). */
+  billing_period: string | null;
+  /** When the seat was paid/confirmed — the pass-window start. */
+  paid_at: string | null;
 }
 
 /** The signed-in parent's linked children (via security-definer RPC). */

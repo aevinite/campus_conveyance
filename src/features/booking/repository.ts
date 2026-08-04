@@ -119,6 +119,10 @@ export interface ActiveBooking {
   billing_period: BillingPeriod | null;
   /** UPI payment step state: UNPAID | SUBMITTED | PAID | REJECTED. */
   payment_status: string | null;
+  /** When the booking was made — the pass-window start (created≈paid, minutes apart). */
+  created_at: string | null;
+  /** When the seat was paid/confirmed — the precise pass-window start, if set. */
+  paid_at: string | null;
 }
 
 /** The caller's single active booking on ANY route (one bus at a time). */
@@ -136,7 +140,7 @@ export async function getMyActiveBooking(
   // of a separate students lookup, then the active booking, in a single query.
   const { data, error } = await db
     .from('bookings')
-    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, routes(id, name), students!inner(profile_id)')
+    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, created_at, paid_at, routes(id, name), students!inner(profile_id)')
     .eq('students.profile_id', userId)
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
     // The one-active-booking unique index already guarantees ≤1 match; the
@@ -173,6 +177,8 @@ export async function getMyActiveBooking(
     pickup_stop_id: (data.pickup_stop_id as string) ?? null,
     billing_period: ((data.billing_period as string) ?? null) as BillingPeriod | null,
     payment_status: (data.payment_status as string) ?? null,
+    created_at: (data.created_at as string) ?? null,
+    paid_at: (data.paid_at as string) ?? null,
     routeId: route?.id ?? null,
     routeName: route?.name ?? null,
   };

@@ -7,18 +7,24 @@ import {
   ArrowRight,
   MapPin,
   Navigation,
-  CalendarClock,
 } from 'lucide-react';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { BusPassCard } from '@/components/bus-pass-card';
 import RouteStopsMap, { type MapStop } from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import type { Kind } from '@/features/catalog/repository';
-import { formatShortDate } from '@/lib/format-date';
+import type { BillingPeriod } from '@/lib/billing';
 
 type ActiveTrip = {
-  routeName: string;
+  routeName: string | null;
   status: string;
-  created_at: string;
+  isPaid: boolean;
+  paymentStatus: string | null;
+  billingPeriod: BillingPeriod | null;
+  /** paid_at ?? created_at — the pass-window start. */
+  startIso: string | null;
+  pickupName: string | null;
+  busNumber: string | null;
   route_id: string | null;
 } | null;
 
@@ -29,14 +35,6 @@ type Campus = {
   image_url: string | null;
   is_verified: boolean;
 };
-
-const STATUS_META: Record<string, { label: string; pill: string }> = {
-  CONFIRMED: { label: 'Confirmed', pill: 'border-success/30 bg-success/10 text-success' },
-  PENDING: { label: 'Pending', pill: 'border-primary/30 bg-primary/10 text-primary' },
-  WAITLISTED: { label: 'Waitlisted', pill: 'border-warning/30 bg-warning/10 text-warning' },
-};
-
-const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
 
 /**
  * Native-app home for students — a compact daily hub (not the website's long
@@ -60,9 +58,6 @@ export function AppStudentHome({
   trackRouteId?: string | null;
   trackStops?: MapStop[];
 }) {
-  const meta = active ? STATUS_META[active.status] ?? STATUS_META.PENDING : null;
-  const canTrack = active && active.route_id && TRACKABLE.has(active.status);
-
   return (
     <div className="space-y-7 pb-2">
       {/* Greeting */}
@@ -93,58 +88,34 @@ export function AppStudentHome({
         <ArrowRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
       </Link>
 
-      {/* Active ride */}
+      {/* Active ride — bus pass + live map */}
       {active ? (
-        <section className="overflow-hidden rounded-2xl border border-primary/30 bg-primary/[0.06]">
-          <div className="flex items-start gap-3.5 p-5">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <CalendarClock className="size-6" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
-                Your active ride
+        <section className="space-y-3">
+          <BusPassCard
+            routeName={active.routeName}
+            billingPeriod={active.billingPeriod}
+            status={active.status}
+            isPaid={active.isPaid}
+            paymentStatus={active.paymentStatus}
+            startIso={active.startIso}
+            pickupName={active.pickupName}
+            busNumber={active.busNumber}
+            manageHref="/student/bookings"
+            renewHref={active.route_id ? `/student/routes/${active.route_id}` : '/student/schools'}
+            compact
+          />
+          {/* Live bus map right in the home */}
+          {trackRouteId ? (
+            <div className="space-y-2 rounded-2xl border border-border bg-card p-3 shadow-xs">
+              <p className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+                <Navigation className="size-3.5 text-primary" /> Live location — shows while the driver is online
               </p>
-              <p className="mt-0.5 truncate text-lg font-semibold">{active.routeName}</p>
-              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta!.pill}`}>
-                  {meta!.label}
-                </span>
-                <span className="tnum">Booked {formatShortDate(active.created_at)}</span>
-              </p>
+              <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} heightClass="h-[26rem] sm:h-[30rem]" />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-px bg-primary/15">
-            {canTrack ? (
-              <Link
-                href={`/student/routes/${active.route_id}`}
-                className="flex items-center justify-center gap-2 bg-background/40 py-3 text-sm font-semibold text-primary transition-colors hover:bg-background/70"
-              >
-                <Navigation className="size-4" />
-                Track live
-              </Link>
-            ) : (
-              <span className="flex items-center justify-center gap-2 bg-background/20 py-3 text-sm font-medium text-muted-foreground">
-                <Navigation className="size-4" />
-                Not trackable
-              </span>
-            )}
-            <Link
-              href="/student/bookings"
-              className="flex items-center justify-center gap-2 bg-background/40 py-3 text-sm font-semibold transition-colors hover:bg-background/70"
-            >
-              <Ticket className="size-4" />
-              Manage
-            </Link>
-          </div>
-          {/* Live bus map right in the home card */}
-          {trackRouteId && (
-            <div className="border-t border-primary/15 p-3">
-              <RouteStopsMap
-                stops={trackStops}
-                liveRouteId={trackRouteId}
-                heightClass="h-[26rem] sm:h-[30rem]"
-              />
-            </div>
+          ) : (
+            <p className="px-1 text-xs text-muted-foreground">
+              Live tracking starts once your seat is confirmed.
+            </p>
           )}
         </section>
       ) : (

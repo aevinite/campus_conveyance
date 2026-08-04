@@ -1,24 +1,19 @@
 import Link from 'next/link';
-import {
-  Search,
-  Ticket,
-  ArrowRight,
-  Bus,
-  Sparkles,
-  MapPin,
-  ShieldCheck,
-  LifeBuoy,
-  CalendarClock,
-} from 'lucide-react';
+import { Search, Ticket, ArrowRight, Sparkles, MapPin } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getSessionClaims } from '@/features/auth/session';
-import { listRecentBookings, myBookingStatusCounts } from '@/features/booking/repository';
+import {
+  listRecentBookings,
+  myBookingStatusCounts,
+  getMyActiveBooking,
+} from '@/features/booking/repository';
 import { listFeaturedInstitutions } from '@/features/catalog/repository';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { AppStudentHome } from '@/components/app-student-home';
+import { BusPassCard } from '@/components/bus-pass-card';
 import RouteStopsMap, { type MapStop } from './routes/[id]/route-stops-map';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
 
@@ -29,86 +24,46 @@ const STATUS_META: Record<
   string,
   { label: string; dot: string; pill: string; bar: string }
 > = {
-  CONFIRMED: {
-    label: 'Confirmed',
-    dot: 'bg-success',
-    pill: 'border-success/30 bg-success/10 text-success',
-    bar: 'bg-success',
-  },
-  WAITLISTED: {
-    label: 'Waitlisted',
-    dot: 'bg-warning',
-    pill: 'border-warning/30 bg-warning/10 text-warning',
-    bar: 'bg-warning',
-  },
-  PENDING: {
-    label: 'Pending',
-    dot: 'bg-primary',
-    pill: 'border-primary/30 bg-primary/10 text-primary',
-    bar: 'bg-primary',
-  },
-  CANCELLED: {
-    label: 'Cancelled',
-    dot: 'bg-muted-foreground',
-    pill: 'border-border bg-muted text-muted-foreground',
-    bar: 'bg-muted-foreground',
-  },
-  REJECTED: {
-    label: 'Rejected',
-    dot: 'bg-destructive',
-    pill: 'border-destructive/30 bg-destructive/10 text-destructive',
-    bar: 'bg-destructive',
-  },
+  CONFIRMED: { label: 'Confirmed', dot: 'bg-success', pill: 'border-success/30 bg-success/10 text-success', bar: 'bg-success' },
+  WAITLISTED: { label: 'Waitlisted', dot: 'bg-warning', pill: 'border-warning/30 bg-warning/10 text-warning', bar: 'bg-warning' },
+  PENDING: { label: 'Pending', dot: 'bg-primary', pill: 'border-primary/30 bg-primary/10 text-primary', bar: 'bg-primary' },
+  CANCELLED: { label: 'Cancelled', dot: 'bg-muted-foreground', pill: 'border-border bg-muted text-muted-foreground', bar: 'bg-muted-foreground' },
+  REJECTED: { label: 'Rejected', dot: 'bg-destructive', pill: 'border-destructive/30 bg-destructive/10 text-destructive', bar: 'bg-destructive' },
 };
-
-
-const STEPS = [
-  {
-    icon: Search,
-    title: 'Pick your campus',
-    body: 'Choose your school or college from the list.',
-  },
-  {
-    icon: Bus,
-    title: 'Pick your bus',
-    body: 'One list of every route — compare fares, timings and live seats.',
-  },
-  {
-    icon: Ticket,
-    title: 'Request, then pay',
-    body: 'Request a seat; once the agency approves, pay within 10 minutes to confirm it.',
-  },
-];
 
 export default async function StudentHome() {
   await requireRole('STUDENT');
   const db = await createClient();
-  // In the native app the hero subtitle is dropped (kept for the website only).
   const app = await isAppRequest();
-  const [{ fullName }, recentRows, statusCounts, featured] = await Promise.all([
+  const [{ fullName }, recentRows, statusCounts, featured, activeBooking] = await Promise.all([
     getSessionClaims(db),
-    // Only the few rows the home actually shows, not the whole history + driver
-    // overlay; counts come from a SQL GROUP BY, institutions from head counts.
     listRecentBookings(db, 8),
     myBookingStatusCounts(db),
     listFeaturedInstitutions(db, 12),
+    getMyActiveBooking(db),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
-
-  const active = recentRows.filter((b) => b.status !== 'CANCELLED' && b.status !== 'REJECTED');
   const recent = recentRows.slice(0, 4);
-  const nextTrip = active.find((b) => b.status === 'CONFIRMED') ?? active[0] ?? null;
 
-  // Live bus map for the active ride: fetch its stops once (only when trackable).
+  // The active booking powers the bus-pass card + the live map. Fetch its stops
+  // (for the map + the rider's pickup name) and the bus number once, only when
+  // there's an active booking.
   const trackRouteId =
-    nextTrip && nextTrip.route_id && TRACKABLE.has(nextTrip.status) ? nextTrip.route_id : null;
+    activeBooking && activeBooking.routeId && TRACKABLE.has(activeBooking.status)
+      ? activeBooking.routeId
+      : null;
   let trackStops: MapStop[] = [];
-  if (trackRouteId) {
-    const { data: stopRows } = await db
-      .from('route_stops')
-      .select('name, lat, lng, description, address, sequence')
-      .eq('route_id', trackRouteId)
-      .order('sequence');
+  let pickupName: string | null = null;
+  let busNumber: string | null = null;
+  if (activeBooking?.routeId) {
+    const [{ data: stopRows }, { data: routeRow }] = await Promise.all([
+      db
+        .from('route_stops')
+        .select('id, name, lat, lng, description, address, sequence')
+        .eq('route_id', activeBooking.routeId)
+        .order('sequence'),
+      db.from('routes').select('vehicles(bus_number)').eq('id', activeBooking.routeId).maybeSingle(),
+    ]);
     trackStops = (stopRows ?? []).map((s) => ({
       name: s.name,
       lat: s.lat,
@@ -116,11 +71,16 @@ export default async function StudentHome() {
       description: s.description,
       address: s.address,
     }));
+    pickupName =
+      (stopRows ?? []).find((s) => s.id === activeBooking.pickup_stop_id)?.name ?? null;
+    const vv = (routeRow as { vehicles: { bus_number: string | null } | { bus_number: string | null }[] | null } | null)?.vehicles;
+    busNumber = (Array.isArray(vv) ? vv[0] : vv)?.bus_number ?? null;
   }
+  const passStart = activeBooking ? activeBooking.paid_at ?? activeBooking.created_at : null;
+  const passRenewHref = activeBooking?.routeId ? `/student/routes/${activeBooking.routeId}` : '/student/schools';
 
-
-  // Status breakdown for the mini bar chart (only non-empty buckets).
-  // Cancelled bookings are hidden from the student panel entirely.
+  // Status breakdown for the mini bar chart (only non-empty buckets). Cancelled
+  // bookings are hidden from the student panel entirely.
   const breakdown = (['CONFIRMED', 'PENDING', 'WAITLISTED', 'REJECTED'] as const)
     .map((s) => ({ status: s, count: statusCounts[s] ?? 0 }))
     .filter((x) => x.count > 0);
@@ -134,12 +94,17 @@ export default async function StudentHome() {
         name={name}
         dateLabel={formatWeekdayDate(new Date())}
         active={
-          nextTrip
+          activeBooking
             ? {
-                routeName: nextTrip.routeName,
-                status: nextTrip.status,
-                created_at: nextTrip.created_at,
-                route_id: nextTrip.route_id,
+                routeName: activeBooking.routeName,
+                status: activeBooking.status,
+                isPaid: activeBooking.is_paid,
+                paymentStatus: activeBooking.payment_status,
+                billingPeriod: activeBooking.billing_period,
+                startIso: passStart,
+                pickupName,
+                busNumber,
+                route_id: activeBooking.routeId,
               }
             : null
         }
@@ -169,12 +134,11 @@ export default async function StudentHome() {
           <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
             Welcome back, <span className="text-gradient">{name}</span>.
           </h1>
-          {!app && (
-            <p className="mt-3 max-w-xl text-muted-foreground">
-              Browse your campus, choose a bus or van from a verified agency, and
-              reserve your seat for the daily route to class.
-            </p>
-          )}
+          <p className="mt-3 max-w-xl text-muted-foreground">
+            {activeBooking
+              ? 'Here’s your pass, your live bus, and everything about your daily ride.'
+              : 'Browse your campus, pick a bus from a verified agency, and reserve your seat for the daily route.'}
+          </p>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
           <Link
@@ -194,38 +158,20 @@ export default async function StudentHome() {
         </div>
       </section>
 
-      {/* Next trip highlight */}
-      {nextTrip && (
-        <section className="flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/[0.06] p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <CalendarClock className="size-6" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-primary">
-                Your active booking
-              </p>
-              <p className="mt-0.5 truncate text-lg font-semibold">{nextTrip.routeName}</p>
-              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                    (STATUS_META[nextTrip.status] ?? STATUS_META.PENDING).pill
-                  }`}
-                >
-                  {(STATUS_META[nextTrip.status] ?? STATUS_META.PENDING).label}
-                </span>
-                <span>Booked {formatShortDate(nextTrip.created_at)}</span>
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/student/bookings"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary"
-          >
-            Manage
-            <ArrowRight className="size-4" />
-          </Link>
-        </section>
+      {/* Bus pass — the headline widget */}
+      {activeBooking && (
+        <BusPassCard
+          routeName={activeBooking.routeName}
+          billingPeriod={activeBooking.billing_period}
+          status={activeBooking.status}
+          isPaid={activeBooking.is_paid}
+          paymentStatus={activeBooking.payment_status}
+          startIso={passStart}
+          pickupName={pickupName}
+          busNumber={busNumber}
+          manageHref="/student/bookings"
+          renewHref={passRenewHref}
+        />
       )}
 
       {/* Live bus tracking for the active ride */}
@@ -251,7 +197,6 @@ export default async function StudentHome() {
 
       {/* Main grid: quick actions + recent trips */}
       <section className="grid gap-5 lg:grid-cols-5">
-        {/* Quick actions */}
         <div className="grid gap-5 sm:grid-cols-2 lg:col-span-3 lg:content-start">
           <Link
             href="/student/schools"
@@ -390,9 +335,7 @@ export default async function StudentHome() {
       {featured.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-end justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Explore campuses</h2>
-            </div>
+            <h2 className="text-xl font-semibold">Explore campuses</h2>
             <Link
               href="/student/schools"
               className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
@@ -446,61 +389,6 @@ export default async function StudentHome() {
           </div>
         </section>
       )}
-
-      {/* How it works */}
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs sm:p-8">
-        <h2 className="text-xl font-semibold">How booking works</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Three simple steps from campus to confirmed seat.
-        </p>
-        <ol className="mt-6 grid gap-6 sm:grid-cols-3">
-          {STEPS.map((step, idx) => (
-            <li key={step.title} className="relative flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <step.icon className="size-5" />
-                </span>
-                <span className="text-sm font-semibold text-muted-foreground">
-                  Step {idx + 1}
-                </span>
-              </div>
-              <h3 className="font-semibold">{step.title}</h3>
-              <p className="text-sm text-muted-foreground">{step.body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* Safety / help banner */}
-      <section className="grid gap-5 sm:grid-cols-2">
-        <div className="flex items-start gap-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-success/10 text-success">
-            <ShieldCheck className="size-6" />
-          </span>
-          <div>
-            <h3 className="font-semibold">Trusted &amp; verified agencies</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every agency on Campus Conveyance is reviewed before it can offer
-              routes, so you travel with peace of mind.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-start gap-4 rounded-2xl border border-border bg-card p-6 shadow-xs">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[color:var(--viz-students)]/12 text-[color:var(--viz-students)]">
-            <LifeBuoy className="size-6" />
-          </span>
-          <div>
-            <h3 className="font-semibold">Need a hand?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Manage or cancel a reservation anytime from{' '}
-              <Link href="/student/bookings" className="font-medium text-primary hover:text-primary/70">
-                My bookings
-              </Link>
-              , or update your details in your profile.
-            </p>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }

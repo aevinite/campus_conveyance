@@ -1,11 +1,14 @@
 import Link from 'next/link';
-import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles, History, ArrowRight } from 'lucide-react';
+import { Bus, GraduationCap, MapPin, Phone, Ticket, UserCircle, Sparkles, History, ArrowRight, Users, BadgeCheck, CalendarClock } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getSessionClaims } from '@/features/auth/session';
-import { listChildren, listChildrenBookings } from '@/features/parent/repository';
+import { listChildren, listChildrenBookings, type ChildBookingRow } from '@/features/parent/repository';
 import { listInstitutions } from '@/features/catalog/repository';
+import { BusPassCard } from '@/components/bus-pass-card';
+import { computePass } from '@/lib/pass';
+import type { BillingPeriod } from '@/lib/billing';
 import RouteStopsMap, {
   type MapStop,
 } from '../student/routes/[id]/route-stops-map';
@@ -13,6 +16,9 @@ import { LinkChildForm } from './link-child-form';
 import { AddChildForm } from './add-child-form';
 import { UnlinkChildButton } from './unlink-child-button';
 import { formatShortDate } from '@/lib/format-date';
+
+const ACTIVE_STATUSES = new Set(['CONFIRMED', 'PENDING', 'WAITLISTED']);
+const firstName = (n: string | null | undefined) => (n ?? '').trim().split(/\s+/)[0] || 'Your child';
 
 // Bookings the child could actually be riding — worth showing a live bus map for.
 const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
@@ -43,10 +49,61 @@ export default async function ParentDashboard() {
     isAppRequest(),
   ]);
   const campuses = campusList.map((c) => ({ value: c.id, label: c.name }));
-  // A per-child booking CTA label: continue an active booking, else start one.
-  const ctaLabel = (status: string | null) =>
-    !status ? 'Book a bus' : status === 'WAITLISTED' ? 'View waitlist' : 'Manage booking';
   const name = (fullName ?? 'there').split(' ')[0];
+
+  // The single active booking per child (bookings are newest-first; the one-bus
+  // rule means ≤1 active per child) → powers each child's bus-pass card.
+  const activeByChild = new Map<string, ChildBookingRow>();
+  for (const b of bookings) {
+    if (ACTIVE_STATUSES.has(b.status) && !activeByChild.has(b.student_id)) {
+      activeByChild.set(b.student_id, b);
+    }
+  }
+  // Dashboard summary: how many passes are active + the soonest renewal due.
+  const activePasses = [...activeByChild.values()]
+    .filter((b) => b.status === 'CONFIRMED')
+    .map((b) => ({ b, pass: computePass(b.paid_at ?? b.created_at, b.billing_period as BillingPeriod | null) }))
+    .filter((x): x is { b: ChildBookingRow; pass: NonNullable<ReturnType<typeof computePass>> } => x.pass !== null);
+  const soonest = activePasses.length
+    ? activePasses.reduce((a, c) => (c.pass.daysLeft < a.pass.daysLeft ? c : a))
+    : null;
+
+  // Per-child pass card (or null when they have no active booking).
+  const passFor = (studentId: string) => {
+    const b = activeByChild.get(studentId);
+    if (!b) return null;
+    return (
+      <BusPassCard
+        routeName={b.route_name}
+        billingPeriod={b.billing_period as BillingPeriod | null}
+        status={b.status}
+        isPaid={b.is_paid}
+        startIso={b.paid_at ?? b.created_at}
+        pickupName={b.pickup_name}
+        busNumber={b.bus_number}
+        whoLabel={firstName(b.student_name)}
+        manageHref={`/parent/book/${studentId}`}
+        renewHref={b.route_id ? `/parent/book/${studentId}/routes/${b.route_id}` : `/parent/book/${studentId}`}
+        compact
+      />
+    );
+  };
+
+  // At-a-glance summary strip (children count · active passes · next renewal).
+  const summaryStrip =
+    children.length > 0 ? (
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile icon={<Users className="size-[1.125rem]" />} label="Children" value={String(children.length)} />
+        <StatTile icon={<BadgeCheck className="size-[1.125rem]" />} label="Active passes" value={String(activePasses.length)} />
+        <StatTile
+          icon={<CalendarClock className="size-[1.125rem]" />}
+          label="Next renewal"
+          value={soonest ? (soonest.pass.expired ? 'Due' : `${soonest.pass.daysLeft}d`) : '—'}
+          sub={soonest ? firstName(soonest.b.student_name) : 'All set'}
+          urgent={Boolean(soonest && (soonest.pass.expiring || soonest.pass.expired))}
+        />
+      </div>
+    ) : null;
 
   // Active trips get a live bus map. Group by route_id and render ONE map per
   // route (not per booking): siblings on the same route would otherwise each
@@ -114,6 +171,8 @@ export default async function ParentDashboard() {
               : `Following ${children.length} ${children.length === 1 ? 'child' : 'children'}.`}
           </p>
         </section>
+
+        {summaryStrip}
 
         {/* Add child first (primary action), then link-by-code. */}
         <AddChildForm campuses={campuses} />
@@ -190,26 +249,19 @@ export default async function ParentDashboard() {
                     </Link>
                     <UnlinkChildButton studentId={c.student_id} managed={c.managed} />
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-                    {c.active_status ? (
-                      <span
-                        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                          STATUS_PILL[c.active_status] ?? STATUS_PILL.PENDING
-                        }`}
-                      >
-                        {STATUS_LABEL[c.active_status] ?? c.active_status}
-                        {c.active_route_name ? ` · ${c.active_route_name}` : ''}
-                      </span>
-                    ) : (
+                  {activeByChild.has(c.student_id) ? (
+                    <div className="border-t border-border pt-3">{passFor(c.student_id)}</div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
                       <span className="text-xs text-muted-foreground">No active booking</span>
-                    )}
-                    <Link
-                      href={`/parent/book/${c.student_id}`}
-                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-                    >
-                      <Ticket className="size-3.5" /> {ctaLabel(c.active_status)}
-                    </Link>
-                  </div>
+                      <Link
+                        href={`/parent/book/${c.student_id}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                      >
+                        <Ticket className="size-3.5" /> Book a bus
+                      </Link>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -314,6 +366,8 @@ export default async function ParentDashboard() {
         </p>
       </section>
 
+      {summaryStrip}
+
       <LinkChildForm />
       <AddChildForm campuses={campuses} />
 
@@ -390,26 +444,19 @@ export default async function ParentDashboard() {
                     </p>
                   )}
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-4">
-                  {c.active_status ? (
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                        STATUS_PILL[c.active_status] ?? STATUS_PILL.PENDING
-                      }`}
-                    >
-                      {STATUS_LABEL[c.active_status] ?? c.active_status}
-                      {c.active_route_name ? ` · ${c.active_route_name}` : ''}
-                    </span>
-                  ) : (
+                {activeByChild.has(c.student_id) ? (
+                  <div className="mt-4 border-t border-border pt-4">{passFor(c.student_id)}</div>
+                ) : (
+                  <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-4">
                     <span className="text-xs text-muted-foreground">No active booking</span>
-                  )}
-                  <Link
-                    href={`/parent/book/${c.student_id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-                  >
-                    <Ticket className="size-4" /> {ctaLabel(c.active_status)}
-                  </Link>
-                </div>
+                    <Link
+                      href={`/parent/book/${c.student_id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Ticket className="size-4" /> Book a bus
+                    </Link>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -492,6 +539,40 @@ export default async function ParentDashboard() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+// Small summary stat tile for the parent dashboard header strip.
+function StatTile({
+  icon,
+  label,
+  value,
+  sub,
+  urgent = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  urgent?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-3 sm:p-4 ${
+        urgent ? 'border-warning/40 bg-warning/[0.08]' : 'border-border bg-card'
+      }`}
+    >
+      <span
+        className={`grid size-8 place-items-center rounded-lg ${
+          urgent ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary'
+        }`}
+      >
+        {icon}
+      </span>
+      <p className="mt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`tnum text-xl font-bold leading-tight ${urgent ? 'text-warning' : ''}`}>{value}</p>
+      {sub && <p className="truncate text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
