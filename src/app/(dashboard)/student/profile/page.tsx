@@ -20,10 +20,9 @@ import { SubmitButton } from '@/components/submit-button';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { ParentAccessCard } from './parent-access-card';
-import { formatDate, formatDateTime } from '@/lib/format-date';
+import { formatDate } from '@/lib/format-date';
 
 const fmtDate = (v?: string | null) => formatDate(v);
-const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function StudentProfilePage() {
   await requireRole('STUDENT');
@@ -58,14 +57,12 @@ export default async function StudentProfilePage() {
 
   const verified = Boolean(user?.email_confirmed_at);
   const memberSince = fmtDate(profile?.created_at);
-  const lastActive = fmtDateTime(user?.last_sign_in_at);
 
   // Read-only account facts, shown as tidy info tiles below the hero.
   const info: { label: string; value: string; icon: typeof Mail }[] = [
     { label: 'Email', value: email, icon: Mail },
     { label: 'Phone', value: phone || 'Not added', icon: Phone },
     { label: 'Member since', value: memberSince, icon: CalendarDays },
-    { label: 'Last signed in', value: lastActive, icon: Clock3 },
   ];
 
   return (
@@ -143,16 +140,12 @@ export default async function StudentProfilePage() {
         </div>
 
         {/* Quick facts strip */}
-        <div className="relative mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
+        <div className="relative mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-5">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">Member since</p>
             <p className="tnum mt-0.5 text-sm font-semibold">{memberSince}</p>
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">Last active</p>
-            <p className="tnum mt-0.5 truncate text-sm font-semibold">{lastActive}</p>
-          </div>
-          <div className="col-span-2 sm:col-span-1">
             <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">Phone</p>
             <p className="tnum mt-0.5 truncate text-sm font-semibold">{phone || 'Not added'}</p>
           </div>
@@ -183,19 +176,16 @@ export default async function StudentProfilePage() {
             </div>
           ))}
           {/* Email verification status as its own tile with a colored pill. */}
-          <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 sm:col-span-2">
+          <div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
               <ShieldCheck className="size-[1.125rem]" />
             </span>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Email status
-                </p>
-                <p className="mt-0.5 truncate text-sm font-semibold">{email}</p>
-              </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Email status
+              </p>
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                   verified
                     ? 'bg-success/10 text-success ring-1 ring-inset ring-success/25'
                     : 'bg-warning/10 text-warning ring-1 ring-inset ring-warning/25'
