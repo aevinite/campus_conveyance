@@ -11,9 +11,11 @@ import {
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { BusPassCard } from '@/components/bus-pass-card';
+import { PreBookingInfo } from '@/components/pre-booking-info';
 import RouteStopsMap, { type MapStop } from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import type { Kind } from '@/features/catalog/repository';
 import type { BillingPeriod } from '@/lib/billing';
+import type { PublicStats } from '@/lib/public-stats';
 
 type ActiveTrip = {
   routeName: string | null;
@@ -50,6 +52,8 @@ export function AppStudentHome({
   campuses,
   trackRouteId,
   trackStops = [],
+  stats,
+  helpHref,
 }: {
   name: string;
   dateLabel: string;
@@ -57,6 +61,8 @@ export function AppStudentHome({
   campuses: Campus[];
   trackRouteId?: string | null;
   trackStops?: MapStop[];
+  stats: PublicStats;
+  helpHref: string;
 }) {
   return (
     <div className="space-y-7 pb-2">
@@ -142,6 +148,9 @@ export function AppStudentHome({
         <QuickChip href="/student/bookings" icon={<Ticket className="size-5" />} label="Bookings" />
         <QuickChip href="/student/history" icon={<History className="size-5" />} label="History" />
       </section>
+
+      {/* Pre-booking info — only until the rider has an active pass. */}
+      {!active && <PreBookingInfo role="student" stats={stats} helpHref={helpHref} compact />}
 
       {/* Explore campuses — horizontal swipe carousel */}
       {campuses.length > 0 && (

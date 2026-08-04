@@ -14,6 +14,8 @@ import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { AppStudentHome } from '@/components/app-student-home';
 import { BusPassCard } from '@/components/bus-pass-card';
+import { PreBookingInfo } from '@/components/pre-booking-info';
+import { getPublicStatsSafe } from '@/lib/public-stats';
 import RouteStopsMap, { type MapStop } from './routes/[id]/route-stops-map';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
 
@@ -35,14 +37,16 @@ export default async function StudentHome() {
   await requireRole('STUDENT');
   const db = await createClient();
   const app = await isAppRequest();
-  const [{ fullName }, recentRows, statusCounts, featured, activeBooking] = await Promise.all([
+  const [{ fullName }, recentRows, statusCounts, featured, activeBooking, stats] = await Promise.all([
     getSessionClaims(db),
     listRecentBookings(db, 8),
     myBookingStatusCounts(db),
     listFeaturedInstitutions(db, 12),
     getMyActiveBooking(db),
+    getPublicStatsSafe(),
   ]);
   const name = (fullName ?? 'there').split(' ')[0];
+  const preBooking = !activeBooking;
   const recent = recentRows.slice(0, 4);
 
   // The active booking powers the bus-pass card + the live map. Fetch its stops
@@ -117,6 +121,8 @@ export default async function StudentHome() {
         }))}
         trackRouteId={trackRouteId}
         trackStops={trackStops}
+        stats={stats}
+        helpHref="/student/help"
       />
     );
   }
@@ -330,6 +336,11 @@ export default async function StudentHome() {
           )}
         </div>
       </section>
+
+      {/* Pre-booking info — only until the rider has an active pass. */}
+      {preBooking && (
+        <PreBookingInfo role="student" stats={stats} helpHref="/student/help" />
+      )}
 
       {/* Explore campuses */}
       {featured.length > 0 && (

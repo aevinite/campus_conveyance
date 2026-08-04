@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   UserRound,
   KeyRound,
+  LifeBuoy,
+  ArrowRight,
 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
@@ -233,6 +235,21 @@ export default async function ParentProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Help & Support — always reachable from the profile. */}
+      <Link
+        href="/parent/help"
+        className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <LifeBuoy className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Help &amp; Support</span>
+          <span className="block text-xs text-muted-foreground">FAQs and a direct line to our team.</span>
+        </span>
+        <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+      </Link>
 
       {/* Log out — pinned at the bottom of the profile inside the app. */}
       {app && (

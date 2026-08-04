@@ -7,6 +7,9 @@ import { getSessionClaims } from '@/features/auth/session';
 import { listChildren, listChildrenBookings, type ChildBookingRow } from '@/features/parent/repository';
 import { listInstitutions } from '@/features/catalog/repository';
 import { BusPassCard } from '@/components/bus-pass-card';
+import { StatTile } from '@/components/ui/stat-tile';
+import { PreBookingInfo } from '@/components/pre-booking-info';
+import { getPublicStatsSafe } from '@/lib/public-stats';
 import { computePass } from '@/lib/pass';
 import type { BillingPeriod } from '@/lib/billing';
 import RouteStopsMap, {
@@ -41,12 +44,13 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function ParentDashboard() {
   await requireRole('PARENT');
   const db = await createClient();
-  const [{ fullName }, children, bookings, campusList, app] = await Promise.all([
+  const [{ fullName }, children, bookings, campusList, app, stats] = await Promise.all([
     getSessionClaims(db),
     listChildren(db),
     listChildrenBookings(db),
     listInstitutions(db),
     isAppRequest(),
+    getPublicStatsSafe(),
   ]);
   const campuses = campusList.map((c) => ({ value: c.id, label: c.name }));
   const name = (fullName ?? 'there').split(' ')[0];
@@ -67,6 +71,8 @@ export default async function ParentDashboard() {
   const soonest = activePasses.length
     ? activePasses.reduce((a, c) => (c.pass.daysLeft < a.pass.daysLeft ? c : a))
     : null;
+  // Pre-booking: no child has an active pass yet → show the info block.
+  const parentPreBooking = activePasses.length === 0;
 
   // Per-child pass card (or null when they have no active booking).
   const passFor = (studentId: string) => {
@@ -334,6 +340,11 @@ export default async function ParentDashboard() {
             </div>
           )}
         </section>
+
+        {/* Pre-booking info — only until a child has an active pass. */}
+        {parentPreBooking && (
+          <PreBookingInfo role="parent" stats={stats} helpHref="/parent/help" compact />
+        )}
       </div>
     );
   }
@@ -539,40 +550,11 @@ export default async function ParentDashboard() {
           </div>
         )}
       </section>
-    </div>
-  );
-}
 
-// Small summary stat tile for the parent dashboard header strip.
-function StatTile({
-  icon,
-  label,
-  value,
-  sub,
-  urgent = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub?: string;
-  urgent?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border p-3 sm:p-4 ${
-        urgent ? 'border-warning/40 bg-warning/[0.08]' : 'border-border bg-card'
-      }`}
-    >
-      <span
-        className={`grid size-8 place-items-center rounded-lg ${
-          urgent ? 'bg-warning/15 text-warning' : 'bg-primary/10 text-primary'
-        }`}
-      >
-        {icon}
-      </span>
-      <p className="mt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`tnum text-xl font-bold leading-tight ${urgent ? 'text-warning' : ''}`}>{value}</p>
-      {sub && <p className="truncate text-xs text-muted-foreground">{sub}</p>}
+      {/* Pre-booking info — only until a child has an active pass. */}
+      {parentPreBooking && (
+        <PreBookingInfo role="parent" stats={stats} helpHref="/parent/help" />
+      )}
     </div>
   );
 }
