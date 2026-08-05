@@ -149,9 +149,6 @@ export function AppStudentHome({
         <QuickChip href="/student/history" icon={<History className="size-5" />} label="History" />
       </section>
 
-      {/* Pre-booking info — only until the rider has an active pass. */}
-      {!active && <PreBookingInfo role="student" stats={stats} helpHref={helpHref} compact />}
-
       {/* Explore campuses — horizontal swipe carousel */}
       {campuses.length > 0 && (
         <section className="space-y-3">
@@ -204,6 +201,9 @@ export function AppStudentHome({
           </div>
         </section>
       )}
+
+      {/* Pre-booking info — below Explore, only until the rider has an active pass. */}
+      {!active && <PreBookingInfo role="student" stats={stats} helpHref={helpHref} compact />}
     </div>
   );
 }

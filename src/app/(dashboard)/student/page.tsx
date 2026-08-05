@@ -337,11 +337,6 @@ export default async function StudentHome() {
         </div>
       </section>
 
-      {/* Pre-booking info — only until the rider has an active pass. */}
-      {preBooking && (
-        <PreBookingInfo role="student" stats={stats} helpHref="/student/help" />
-      )}
-
       {/* Explore campuses */}
       {featured.length > 0 && (
         <section className="space-y-4">
@@ -399,6 +394,11 @@ export default async function StudentHome() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Pre-booking info — below Explore, only until the rider has an active pass. */}
+      {preBooking && (
+        <PreBookingInfo role="student" stats={stats} helpHref="/student/help" />
       )}
     </div>
   );
