@@ -7,6 +7,7 @@ import { toErrorResponse, AppError } from '@/lib/errors/app-error';
 import { collegeSchema, slugify } from './schemas';
 import { agencyProfileSchema } from '@/features/agency/schemas';
 import { agencyReportTag } from '@/features/agency/repository';
+import { ensureEmailFreeForSignup } from '@/features/auth/services';
 
 export type FormState = { error?: string; message?: string };
 
@@ -548,4 +549,91 @@ export async function toggleCollegeAction(formData: FormData): Promise<void> {
   if (error) throw new AppError('ADMIN', error.message);
   await logAction(db, active ? 'COLLEGE_ENABLED' : 'COLLEGE_DISABLED', 'institution', id);
   revalidatePath('/aevinite/colleges');
+}
+
+// ---------------------------------------------------------------------------
+// Institution (campus) admin provisioning. A SUPER_ADMIN creates a campus-admin
+// login and links it to a college, so that person can run the /institution
+// oversight console for their campus. The account is email-confirmed on the spot
+// (admin-vouched) — no email step — and the college link (profiles.institution_id)
+// is what the access-token hook injects into their JWT as the campus claim.
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function createInstitutionAdminAction(_: FormState, formData: FormData): Promise<FormState> {
+  const collegeId = String(formData.get('collegeId') ?? '');
+  const name = String(formData.get('name') ?? '').trim();
+  const email = String(formData.get('email') ?? '').trim();
+  const password = String(formData.get('password') ?? '');
+  if (!UUID_RE.test(collegeId)) return { error: 'Missing college.' };
+  if (!name) return { error: 'Enter the admin’s name.' };
+  if (!EMAIL_RE.test(email)) return { error: 'Enter a valid email address.' };
+  if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
+
+  const admin = createAdminClient();
+
+  // The college must exist and be live before we attach an admin to it.
+  const { data: college, error: cErr } = await admin
+    .from('institutions')
+    .select('id, name, is_deleted')
+    .eq('id', collegeId)
+    .maybeSingle();
+  if (cErr) return { error: cErr.message };
+  if (!college || (college as { is_deleted: boolean }).is_deleted) return { error: 'College not found.' };
+
+  const free = await ensureEmailFreeForSignup(admin, email);
+  if (free.error) return { error: free.error };
+
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // admin-vouched — can sign in immediately, no email step
+    user_metadata: { role: 'INSTITUTION_ADMIN', full_name: name },
+  });
+  if (createErr || !created.user) {
+    return { error: createErr?.message ?? 'Could not create the account.' };
+  }
+  const uid = created.user.id;
+
+  // handle_new_user creates the profile (role INSTITUTION_ADMIN + name + email);
+  // link it to this campus. Roll the auth user back if the link fails so the
+  // email stays reusable and we don't strand an unlinked admin.
+  const { error: linkErr } = await admin
+    .from('profiles')
+    .update({ full_name: name, institution_id: collegeId })
+    .eq('id', uid);
+  if (linkErr) {
+    await admin.auth.admin.deleteUser(uid);
+    return { error: linkErr.message };
+  }
+
+  await logAction(await createClient(), 'INSTITUTION_ADMIN_CREATED', 'profile', uid, {
+    institution_id: collegeId,
+    name: (college as { name: string }).name,
+  });
+  revalidatePath(`/aevinite/colleges/${collegeId}/edit`);
+  return { message: `Campus admin created for ${(college as { name: string }).name}.` };
+}
+
+/** Unlink a campus admin from their college — they lose campus access (the panel
+ *  shows "no campus linked") but the login is preserved. Reversible by relinking. */
+export async function unlinkInstitutionAdminAction(formData: FormData): Promise<void> {
+  const profileId = String(formData.get('profileId') ?? '');
+  const collegeId = String(formData.get('collegeId') ?? '');
+  if (!UUID_RE.test(profileId) || !UUID_RE.test(collegeId)) return;
+  const admin = createAdminClient();
+  // Scope the update to this college so a stale form can't detach an admin from a
+  // campus they were since moved to.
+  const { error } = await admin
+    .from('profiles')
+    .update({ institution_id: null })
+    .eq('id', profileId)
+    .eq('institution_id', collegeId)
+    .eq('role', 'INSTITUTION_ADMIN');
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(await createClient(), 'INSTITUTION_ADMIN_UNLINKED', 'profile', profileId, {
+    institution_id: collegeId,
+  });
+  revalidatePath(`/aevinite/colleges/${collegeId}/edit`);
 }

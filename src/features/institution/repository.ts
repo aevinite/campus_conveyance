@@ -373,3 +373,388 @@ export async function liveBusesForInstitution(institutionId: string): Promise<In
   }
   return out.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
 }
+
+// ---- Shared IST "today" helpers -------------------------------------------
+// route_stop_progress / pickup_alerts key their day by the IST calendar date;
+// ride_events is a timestamp we bound to IST midnight. Compute both from one
+// clock read so a request never straddles two "days".
+
+function istToday(): { dateStr: string; midnightIso: string } {
+  const nowMs = Date.now();
+  const ist = new Date(nowMs + 5.5 * 60 * 60 * 1000); // shift into IST wall-clock
+  const y = ist.getUTCFullYear();
+  const m = ist.getUTCMonth();
+  const d = ist.getUTCDate();
+  const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // The UTC instant of IST-midnight today = IST midnight minus the +5:30 offset.
+  const midnightIso = new Date(Date.UTC(y, m, d) - 5.5 * 60 * 60 * 1000).toISOString();
+  return { dateStr, midnightIso };
+}
+
+// ---- Riders & boarding status (transportation roster) ---------------------
+
+export type BoardingStatus = 'WAITING' | 'BOARDED' | 'REACHED' | 'GOT_OFF';
+export type PickupStopStatus = 'NEXT' | 'SKIPPED' | null;
+
+export interface InstitutionRiderRow {
+  bookingId: string;
+  studentName: string | null;
+  studentEmail: string | null;
+  vehicleType: 'BUS' | 'VAN';
+  busNumber: string | null;
+  routeId: string;
+  routeName: string;
+  pickupStop: string;
+  pickupSequence: number | null;
+  bookingStatus: string; // PENDING | CONFIRMED
+  boarding: BoardingStatus;
+  stopStatus: PickupStopStatus; // status of THIS rider's pickup stop today
+  approaching: boolean; // bus came within ~1.2 km of the pickup stop today
+}
+
+/**
+ * Every active rider (PENDING/CONFIRMED booking) on this campus with their
+ * pickup stop and TODAY's live status — the campus "who's riding + where are
+ * they in the journey" view. All derived from existing tables (bookings +
+ * route_stops + route_stop_progress + ride_events + pickup_alerts + vehicles),
+ * exactly the joins the driver run-sheet does, re-scoped to the campus. Nothing
+ * here is stored per-rider; boarding is the latest ride_event today, stop status
+ * is the pickup stop's NEXT/SKIPPED marker today, "approaching" is a
+ * pickup_alerts row today.
+ */
+export async function listRidersForInstitution(
+  institutionId: string,
+  opts: { vehicleType?: 'BUS' | 'VAN' } = {},
+): Promise<InstitutionRiderRow[]> {
+  const client = db();
+  const { dateStr, midnightIso } = istToday();
+
+  const { data: bkRows, error: bkErr } = await client
+    .from('bookings')
+    .select('id, student_name, student_email, route_id, pickup_stop_id, status')
+    .eq('institution_id', institutionId)
+    .in('status', ['PENDING', 'CONFIRMED']);
+  if (bkErr) throw bkErr;
+  const bookings = (bkRows ?? []) as {
+    id: string; student_name: string | null; student_email: string | null;
+    route_id: string | null; pickup_stop_id: string | null; status: string;
+  }[];
+  if (bookings.length === 0) return [];
+
+  const routes = await mapByIds<{ id: string; name: string; vehicle_id: string | null; vehicle_type: string | null }>(
+    client,
+    'routes',
+    'id, name, vehicle_id, vehicle_type',
+    bookings.map((b) => b.route_id),
+  );
+  const vehicles = await mapByIds<{ id: string; bus_number: string | null }>(
+    client,
+    'vehicles',
+    'id, bus_number',
+    [...routes.values()].map((r) => r.vehicle_id),
+  );
+  const stops = await mapByIds<{ id: string; name: string; sequence: number | null }>(
+    client,
+    'route_stops',
+    'id, name, sequence',
+    bookings.map((b) => b.pickup_stop_id),
+  );
+
+  // Stop status today, keyed by `${route_id}:${stop_id}`.
+  const progressKey = new Map<string, PickupStopStatus>();
+  const routeIds = [...new Set(bookings.map((b) => b.route_id).filter((x): x is string => !!x))];
+  if (routeIds.length > 0) {
+    const { data: prog, error: pErr } = await client
+      .from('route_stop_progress')
+      .select('route_id, stop_id, status')
+      .eq('service_date', dateStr)
+      .in('route_id', routeIds);
+    if (pErr) throw pErr;
+    for (const p of (prog ?? []) as { route_id: string; stop_id: string; status: string }[]) {
+      progressKey.set(`${p.route_id}:${p.stop_id}`, p.status as PickupStopStatus);
+    }
+  }
+
+  // Latest boarding stage today per booking (ride_events is append-only; take the
+  // most recent row recorded since IST midnight).
+  const bookingIds = bookings.map((b) => b.id);
+  const boardingByBooking = new Map<string, BoardingStatus>();
+  {
+    const { data: ev, error: eErr } = await client
+      .from('ride_events')
+      .select('booking_id, stage, recorded_at')
+      .in('booking_id', bookingIds)
+      .gte('recorded_at', midnightIso)
+      .order('recorded_at', { ascending: false });
+    if (eErr) throw eErr;
+    for (const e of (ev ?? []) as { booking_id: string; stage: string }[]) {
+      if (!boardingByBooking.has(e.booking_id)) {
+        boardingByBooking.set(e.booking_id, e.stage as BoardingStatus);
+      }
+    }
+  }
+
+  // "Bus approaching" — a pickup_alerts row exists for this booking today.
+  const approachingBookings = new Set<string>();
+  {
+    const { data: al, error: aErr } = await client
+      .from('pickup_alerts')
+      .select('booking_id')
+      .eq('service_date', dateStr)
+      .in('booking_id', bookingIds);
+    if (aErr) throw aErr;
+    for (const a of (al ?? []) as { booking_id: string }[]) approachingBookings.add(a.booking_id);
+  }
+
+  const rows: InstitutionRiderRow[] = [];
+  for (const b of bookings) {
+    const route = b.route_id ? routes.get(b.route_id) : undefined;
+    const vehicleType = (route?.vehicle_type as 'BUS' | 'VAN') ?? 'BUS';
+    if (opts.vehicleType && vehicleType !== opts.vehicleType) continue;
+    const stop = b.pickup_stop_id ? stops.get(b.pickup_stop_id) : undefined;
+    rows.push({
+      bookingId: b.id,
+      studentName: b.student_name ?? null,
+      studentEmail: b.student_email ?? null,
+      vehicleType,
+      busNumber: route?.vehicle_id ? (vehicles.get(route.vehicle_id)?.bus_number ?? null) : null,
+      routeId: b.route_id ?? '',
+      routeName: route?.name ?? '—',
+      pickupStop: stop?.name ?? '—',
+      pickupSequence: stop?.sequence ?? null,
+      bookingStatus: b.status,
+      boarding: boardingByBooking.get(b.id) ?? 'WAITING',
+      stopStatus:
+        b.route_id && b.pickup_stop_id
+          ? (progressKey.get(`${b.route_id}:${b.pickup_stop_id}`) ?? null)
+          : null,
+      approaching: approachingBookings.has(b.id),
+    });
+  }
+
+  // Physical run-sheet order: by route, then pickup sequence (nulls last).
+  return rows.sort(
+    (a, b) =>
+      a.routeName.localeCompare(b.routeName) ||
+      (a.pickupSequence ?? 1e9) - (b.pickupSequence ?? 1e9) ||
+      (a.studentName ?? '').localeCompare(b.studentName ?? ''),
+  );
+}
+
+// ---- Drivers running this campus's routes ---------------------------------
+
+export interface InstitutionDriverRow {
+  driverId: string;
+  name: string | null;
+  phone: string | null;
+  licenseNo: string | null;
+  busNumber: string | null;
+  registration_no: string | null;
+  vehicleType: 'BUS' | 'VAN' | null;
+  routeNames: string[];
+  isOnline: boolean;
+  updated_at: string | null;
+}
+
+/**
+ * The drivers who run this campus's active routes. Drivers carry no campus FK
+ * post-marketplace, so they're derived through routes → vehicles → drivers
+ * (same join `liveBusesForInstitution` uses). One row per driver; a driver on
+ * multiple campus routes lists all of them.
+ */
+export async function listDriversForInstitution(institutionId: string): Promise<InstitutionDriverRow[]> {
+  const client = db();
+  const { data: routeRows, error: rErr } = await client
+    .from('routes')
+    .select('name, vehicle_id')
+    .eq('institution_id', institutionId)
+    .eq('is_active', true);
+  if (rErr) throw rErr;
+  const routeNamesByVehicle = new Map<string, string[]>();
+  for (const r of (routeRows ?? []) as { name: string; vehicle_id: string | null }[]) {
+    if (!r.vehicle_id) continue;
+    if (!routeNamesByVehicle.has(r.vehicle_id)) routeNamesByVehicle.set(r.vehicle_id, []);
+    routeNamesByVehicle.get(r.vehicle_id)!.push(r.name);
+  }
+  const vehicleIds = [...routeNamesByVehicle.keys()];
+  if (vehicleIds.length === 0) return [];
+
+  const { data: vehRows, error: vErr } = await client
+    .from('vehicles')
+    .select('id, bus_number, registration_no, vehicle_type, driver_id, driver_name')
+    .in('id', vehicleIds);
+  if (vErr) throw vErr;
+  const vehicles = (vehRows ?? []) as {
+    id: string; bus_number: string | null; registration_no: string | null;
+    vehicle_type: string | null; driver_id: string | null; driver_name: string | null;
+  }[];
+
+  const driverIds = [...new Set(vehicles.map((v) => v.driver_id).filter((x): x is string => !!x))];
+  if (driverIds.length === 0) return [];
+
+  const [drivers, locByDriver] = await Promise.all([
+    mapByIds<{ id: string; profile_id: string | null; license_no: string | null }>(
+      client,
+      'drivers',
+      'id, profile_id, license_no',
+      driverIds,
+    ),
+    (async () => {
+      const { data: locRows, error: lErr } = await client
+        .from('driver_locations')
+        .select('driver_id, is_online, updated_at')
+        .in('driver_id', driverIds);
+      if (lErr) throw lErr;
+      const now = Date.now();
+      const map = new Map<string, { isOnline: boolean; updated_at: string | null }>();
+      for (const l of (locRows ?? []) as { driver_id: string; is_online: boolean; updated_at: string | null }[]) {
+        const fresh = !!l.updated_at && now - new Date(l.updated_at).getTime() <= LIVE_FRESH_MS;
+        map.set(l.driver_id, { isOnline: !!l.is_online && fresh, updated_at: l.updated_at });
+      }
+      return map;
+    })(),
+  ]);
+
+  const profiles = await mapByIds<{ id: string; phone: string | null }>(
+    client,
+    'profiles',
+    'id, phone',
+    [...drivers.values()].map((d) => d.profile_id),
+  );
+
+  // One row per driver — merge the vehicles/routes they cover.
+  const byDriver = new Map<string, InstitutionDriverRow>();
+  for (const v of vehicles) {
+    if (!v.driver_id) continue;
+    const d = drivers.get(v.driver_id);
+    const loc = locByDriver.get(v.driver_id);
+    const existing = byDriver.get(v.driver_id);
+    const routeNames = routeNamesByVehicle.get(v.id) ?? [];
+    if (existing) {
+      existing.routeNames = [...new Set([...existing.routeNames, ...routeNames])];
+      continue;
+    }
+    byDriver.set(v.driver_id, {
+      driverId: v.driver_id,
+      name: v.driver_name ?? null,
+      phone: d?.profile_id ? (profiles.get(d.profile_id)?.phone ?? null) : null,
+      licenseNo: d?.license_no ?? null,
+      busNumber: v.bus_number ?? null,
+      registration_no: v.registration_no ?? null,
+      vehicleType: (v.vehicle_type as 'BUS' | 'VAN') ?? null,
+      routeNames,
+      isOnline: loc?.isOnline ?? false,
+      updated_at: loc?.updated_at ?? null,
+    });
+  }
+  return [...byDriver.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+}
+
+// ---- Governance: agency service-area requests for this campus -------------
+
+export interface InstitutionServiceRequestRow {
+  id: string;
+  agencyName: string;
+  name: string;
+  description: string | null;
+  vehicleType: 'BUS' | 'VAN';
+  status: string; // PENDING | APPROVED | REJECTED
+  rejectedReason: string | null;
+  created_at: string | null;
+}
+
+/**
+ * Agencies asking to serve THIS campus. The campus admin approves/rejects them
+ * (the only write capability of the panel). PENDING first, then most-recent.
+ */
+export async function listServiceRequestsForInstitution(
+  institutionId: string,
+): Promise<InstitutionServiceRequestRow[]> {
+  const client = db();
+  const { data, error } = await client
+    .from('agency_service_requests')
+    .select('id, agency_id, name, description, vehicle_type, status, rejected_reason, created_at')
+    .eq('institution_id', institutionId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as {
+    id: string; agency_id: string; name: string; description: string | null;
+    vehicle_type: string | null; status: string; rejected_reason: string | null; created_at: string | null;
+  }[];
+  const agencies = await mapByIds<{ id: string; name: string }>(
+    client,
+    'agencies',
+    'id, name',
+    rows.map((r) => r.agency_id),
+  );
+  const out: InstitutionServiceRequestRow[] = rows.map((r) => ({
+    id: r.id,
+    agencyName: agencies.get(r.agency_id)?.name ?? '—',
+    name: r.name,
+    description: r.description,
+    vehicleType: (r.vehicle_type as 'BUS' | 'VAN') ?? 'BUS',
+    status: r.status,
+    rejectedReason: r.rejected_reason,
+    created_at: r.created_at,
+  }));
+  // PENDING first (needs action), then the rest already in most-recent order.
+  return out.sort((a, b) => (a.status === 'PENDING' ? 0 : 1) - (b.status === 'PENDING' ? 0 : 1));
+}
+
+// ---- Reviews of agencies serving the campus -------------------------------
+
+export interface CampusAgencyReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string | null;
+}
+export interface CampusAgencyReviews {
+  agencyId: string;
+  agencyName: string;
+  ratingAvg: number;
+  ratingCount: number;
+  reviews: CampusAgencyReview[];
+}
+
+/**
+ * Aggregate rating + recent VISIBLE reviews for each agency serving this campus.
+ * Read-only oversight of rider sentiment. Reviewer identity is omitted (the
+ * campus admin isn't the review owner) — only rating + comment, like the public
+ * route-detail block.
+ */
+export async function listCampusAgencyReviews(institutionId: string): Promise<CampusAgencyReviews[]> {
+  const client = db();
+  const agencies = await listAgenciesForInstitution(institutionId);
+  if (agencies.length === 0) return [];
+  const agencyIds = agencies.map((a) => a.id);
+
+  const [{ data: agencyRatings }, { data: reviewRows }] = await Promise.all([
+    client.from('agencies').select('id, rating_avg, rating_count').in('id', agencyIds),
+    client
+      .from('reviews')
+      .select('id, agency_id, rating, comment, created_at')
+      .in('agency_id', agencyIds)
+      .eq('is_hidden', false)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  const ratingById = new Map<string, { avg: number; count: number }>();
+  for (const a of (agencyRatings ?? []) as { id: string; rating_avg: number | string | null; rating_count: number | null }[]) {
+    ratingById.set(a.id, { avg: Number(a.rating_avg) || 0, count: a.rating_count ?? 0 });
+  }
+  const reviewsByAgency = new Map<string, CampusAgencyReview[]>();
+  for (const r of (reviewRows ?? []) as { id: string; agency_id: string; rating: number; comment: string | null; created_at: string | null }[]) {
+    if (!reviewsByAgency.has(r.agency_id)) reviewsByAgency.set(r.agency_id, []);
+    const list = reviewsByAgency.get(r.agency_id)!;
+    if (list.length < 5) list.push({ id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at });
+  }
+
+  return agencies.map((a) => ({
+    agencyId: a.id,
+    agencyName: a.name,
+    ratingAvg: ratingById.get(a.id)?.avg ?? 0,
+    ratingCount: ratingById.get(a.id)?.count ?? 0,
+    reviews: reviewsByAgency.get(a.id) ?? [],
+  }));
+}
