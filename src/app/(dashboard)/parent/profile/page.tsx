@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import {
-  ArrowLeft,
   Mail,
   Phone,
   ShieldCheck,
@@ -13,6 +12,7 @@ import {
   LifeBuoy,
   ArrowRight,
 } from 'lucide-react';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
@@ -68,15 +68,7 @@ export default async function ParentProfilePage() {
   return (
     <section className="space-y-8">
       <div>
-        {!app && (
-          <Link
-            href="/parent"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            Back to dashboard
-          </Link>
-        )}
+        {!app && <AppBackLink href="/parent" label="Back to dashboard" />}
         <h1 className={`${app ? '' : 'mt-3'} text-2xl font-bold tracking-tight sm:text-3xl`}>
           Profile &amp; settings
         </h1>

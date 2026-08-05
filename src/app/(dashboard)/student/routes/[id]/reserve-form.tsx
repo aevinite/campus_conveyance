@@ -419,7 +419,7 @@ export function ReserveForm({
 
   // ---------- The UPI pay panel (shared by modal) --------------------------
   const upiPanel = (
-    <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-8">
+    <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-8 lg:max-w-3xl">
       <div className="flex items-start justify-between">
         <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1 text-sm font-medium text-success">
           <CheckCircle2 className="size-4" /> Request approved
@@ -456,9 +456,9 @@ export function ReserveForm({
           Online payments aren&apos;t set up yet. Please try again shortly or contact support.
         </p>
       ) : (
-        <>
-          {/* QR + VPA */}
-          <div className="mt-5 flex flex-col items-center gap-4 rounded-2xl border border-border bg-background p-5">
+        <div className="mt-5 grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-6">
+          {/* Pay — QR + VPA + open-app */}
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-border bg-background p-5">
             {upiString ? (
               <div className="rounded-xl bg-white p-3">
                 <QRCodeSVG value={upiString} size={180} includeMargin={false} />
@@ -499,36 +499,37 @@ export function ReserveForm({
             <p className="text-center text-xs text-muted-foreground">Reference: {reference}</p>
           </div>
 
-          {/* UTR */}
-          <div className="mt-5 space-y-2">
-            <Label htmlFor="utr">Enter your UPI reference (UTR) after paying</Label>
-            <Input
-              id="utr"
-              inputMode="numeric"
-              maxLength={12}
-              value={utr}
-              onChange={(e) => setUtr(e.target.value.replace(/\D/g, ''))}
-              placeholder="12-digit reference from your UPI app"
-              className="text-center text-lg font-semibold tracking-[0.2em]"
-            />
-            <Button className="w-full" onClick={onSubmitUtr} disabled={submitting || utr.trim().length !== 12}>
-              {submitting ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="size-4 animate-spin" /> Submitting…
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  I&apos;ve paid — submit reference <ArrowRight className="size-4" />
-                </span>
-              )}
-            </Button>
+          {/* Confirm — enter the UTR after paying */}
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="utr">Enter your UPI reference (UTR) after paying</Label>
+              <Input
+                id="utr"
+                inputMode="numeric"
+                maxLength={12}
+                value={utr}
+                onChange={(e) => setUtr(e.target.value.replace(/\D/g, ''))}
+                placeholder="12-digit reference from your UPI app"
+                className="text-center text-lg font-semibold tracking-[0.2em]"
+              />
+              <Button className="w-full" onClick={onSubmitUtr} disabled={submitting || utr.trim().length !== 12}>
+                {submitting ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" /> Submitting…
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    I&apos;ve paid — submit reference <ArrowRight className="size-4" />
+                  </span>
+                )}
+              </Button>
+            </div>
+            <p className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5 shrink-0" /> We confirm your seat once the payment is verified.
+            </p>
           </div>
-        </>
+        </div>
       )}
-
-      <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <ShieldCheck className="size-3.5" /> We confirm your seat once the payment is verified.
-      </p>
 
       <button
         type="button"

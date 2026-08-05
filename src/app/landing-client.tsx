@@ -292,8 +292,8 @@ export default function Home() {
 
       {/* Header */}
       <header
-        className={`dark fixed inset-x-0 top-0 z-50 border-b text-foreground transition-all duration-300 ${
-          scrolled ? 'border-white/10 bg-background/85 shadow-lg backdrop-blur-xl' : 'border-transparent bg-background/30 backdrop-blur-sm'
+        className={`fixed inset-x-0 top-0 z-50 border-b text-foreground transition-all duration-300 ${
+          scrolled ? 'border-border bg-background/85 shadow-lg backdrop-blur-xl' : 'border-transparent bg-background/30 backdrop-blur-sm'
         }`}
       >
         <div className="mx-auto max-w-6xl px-6 sm:px-10">
@@ -356,8 +356,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero — premium dark "ink" band with electric-yellow accents */}
-      <section id="home" className="dark relative isolate overflow-hidden bg-background pt-28 pb-16 text-foreground md:pt-36 md:pb-24">
+      {/* Hero — theme-aware band (light in light mode, dark in dark) with warm accents */}
+      <section id="home" className="relative isolate overflow-hidden bg-background pt-28 pb-16 text-foreground md:pt-36 md:pb-24">
         <div aria-hidden className="bg-aurora pointer-events-none absolute inset-0 -z-10 opacity-95" />
         <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 -z-10 opacity-[0.1] [mask-image:radial-gradient(75%_60%_at_50%_0%,black,transparent)]" />
         <div aria-hidden className="bg-lanes pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-40 opacity-[0.15]" />
@@ -398,7 +398,7 @@ export default function Home() {
 
             {/* Sign-in role picker */}
             <Reveal delay={0.2}>
-              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-xl backdrop-blur-md sm:p-7">
+              <div className="rounded-3xl border border-border bg-card p-6 shadow-xl sm:p-7">
                 <div className="mb-5 flex items-center gap-2">
                   <span className="brand-gradient h-4 w-1.5 rounded-full" />
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sign in to your portal</p>
@@ -408,7 +408,7 @@ export default function Home() {
                     <Link
                       key={role.key}
                       href={role.href}
-                      className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition-all duration-200 hover:border-primary/50 hover:bg-white/[0.07] hover:shadow-md"
+                      className="group flex items-center gap-4 rounded-2xl border border-border bg-background p-4 transition-all duration-200 hover:border-primary/50 hover:bg-muted hover:shadow-md"
                     >
                       <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                         <role.icon className="size-5" />
@@ -431,7 +431,7 @@ export default function Home() {
               {STAT_ITEMS.map((s) => (
                 <div
                   key={s.key}
-                  className="group rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-white/[0.07] sm:p-6"
+                  className="group rounded-2xl border border-border bg-card p-5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-muted sm:p-6"
                 >
                   <div className="mb-4 grid size-10 place-items-center rounded-xl bg-primary/15 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
                     <s.icon className="size-5" />

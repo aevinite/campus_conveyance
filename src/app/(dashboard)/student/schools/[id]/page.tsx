@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Ticket, ArrowLeft } from 'lucide-react';
+import { Ticket } from 'lucide-react';
 import { InstitutionLogo } from '@/components/institution-logo';
 import { VerifiedBadge } from '@/components/verified-badge';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
@@ -47,12 +48,7 @@ export default async function SchoolDetailPage({
     <section className="space-y-6">
       {app ? (
         <div className="space-y-3">
-          <Link
-            href="/student/schools"
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors active:bg-muted"
-          >
-            <ArrowLeft className="size-4 text-primary" /> Campuses
-          </Link>
+          <AppBackLink href="/student/schools" label="Campuses" />
           {/* Compact campus header — logo tile + name inline, no gradient hero. */}
           <div className="flex items-center gap-3">
             <InstitutionLogo
@@ -79,9 +75,7 @@ export default async function SchoolDetailPage({
       ) : (
         <>
           <div className="space-y-4">
-            <Link href="/student/schools" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-              ← All campuses
-            </Link>
+            <AppBackLink href="/student/schools" label="All campuses" />
             <BookingSteps active={2} />
             <div className="overflow-hidden rounded-3xl border border-border bg-card">
               <div

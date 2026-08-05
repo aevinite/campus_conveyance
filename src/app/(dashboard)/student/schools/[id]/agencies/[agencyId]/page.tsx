@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { Ticket, ArrowLeft, Building2 } from 'lucide-react';
+import { Ticket, Building2 } from 'lucide-react';
 import { StarRating } from '@/components/ui/star-rating';
+import { AppBackLink } from '@/components/ui/app-back-link';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
@@ -92,12 +93,7 @@ export default async function AgencyRoutesPage({
     <section className="space-y-6">
       {app ? (
         <div className="space-y-3">
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors active:bg-muted"
-          >
-            <ArrowLeft className="size-4 text-primary" /> Agencies
-          </Link>
+          <AppBackLink href={backHref} label="Agencies" />
           <div className="flex items-center gap-3">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-base font-bold text-primary ring-1 ring-inset ring-primary/15">
               {isCampus ? <Building2 className="size-6" /> : initials(agency.name)}
@@ -116,9 +112,7 @@ export default async function AgencyRoutesPage({
       ) : (
         <>
           <div className="space-y-4">
-            <Link href={backHref} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-              ← Agencies at {inst.name}
-            </Link>
+            <AppBackLink href={backHref} label={`Agencies at ${inst.name}`} />
             <BookingSteps active={3} />
             <div className="flex items-center gap-4 rounded-3xl border border-border bg-card p-5 sm:p-6">
               <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-xl font-bold tracking-tight text-primary ring-1 ring-inset ring-primary/15 sm:size-20">
