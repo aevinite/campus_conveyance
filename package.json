@@ -20,6 +20,7 @@
     "@base-ui/react": "^1.6.0",
     "@capacitor/android": "^7.6.8",
     "@capacitor/app": "^7.1.2",
+    "@capacitor/app-launcher": "^7.0.0",
     "@capacitor/browser": "^7.0.5",
     "@capacitor/core": "^7.6.8",
     "@capacitor/splash-screen": "^7.0.5",

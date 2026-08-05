@@ -39,6 +39,16 @@
         </provider>
     </application>
 
+    <!-- Package visibility (Android 11+): without this the WebView/AppLauncher
+         cannot resolve a upi:// intent, so tapping "Open a UPI app to pay" would
+         silently fail. Declaring the upi VIEW intent lets the UPI-app chooser open. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

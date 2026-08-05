@@ -21,6 +21,7 @@ import {
   Circle,
 } from 'lucide-react';
 import { reserveSeatAction, submitUpiPaymentAction, bookingStatusAction, cancelBookingAction } from '@/features/booking/actions';
+import { isNativeApp } from '@/lib/native-google-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -197,8 +198,13 @@ export function ReserveForm({
   const [utr, setUtr] = useState('');
   const [planIdx, setPlanIdx] = useState(0);
   const [payDismissed, setPayDismissed] = useState(false);
+  // True when running inside the Capacitor Android app. The UA marker is only
+  // readable on the client, so resolve it after mount.
+  const [isApp, setIsApp] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
+
+  useEffect(() => setIsApp(isNativeApp()), []);
 
   // Reset back to a clean request step and pull fresh server data (seat counts)
   // via a client-side refresh — no full-page reload.
@@ -398,6 +404,19 @@ export function ReserveForm({
     );
   }
 
+  // Inside the Android app the WebView swallows the upi:// anchor, so fire it as
+  // a native intent instead (opens the UPI-app chooser). On the web the plain
+  // <a href="upi://…"> handles this, so this path is app-only.
+  async function openUpiApp() {
+    if (!upiString) return;
+    try {
+      const { AppLauncher } = await import('@capacitor/app-launcher');
+      await AppLauncher.openUrl({ url: upiString });
+    } catch {
+      toast.error('No UPI app found. Scan the QR or copy the UPI ID to pay.');
+    }
+  }
+
   // ---------- The UPI pay panel (shared by modal) --------------------------
   const upiPanel = (
     <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-xl sm:p-8">
@@ -460,14 +479,23 @@ export function ReserveForm({
                 <Copy className="size-3.5" /> Copy
               </button>
             </div>
-            {upiString && (
-              <a
-                href={upiString}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                <Smartphone className="size-4" /> Open a UPI app to pay
-              </a>
-            )}
+            {upiString &&
+              (isApp ? (
+                <button
+                  type="button"
+                  onClick={openUpiApp}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Smartphone className="size-4" /> Open a UPI app to pay
+                </button>
+              ) : (
+                <a
+                  href={upiString}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  <Smartphone className="size-4" /> Open a UPI app to pay
+                </a>
+              ))}
             <p className="text-center text-xs text-muted-foreground">Reference: {reference}</p>
           </div>
 
