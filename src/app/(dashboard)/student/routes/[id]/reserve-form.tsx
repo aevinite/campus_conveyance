@@ -535,7 +535,7 @@ export function ReserveForm({
         type="button"
         onClick={onCancelHold}
         disabled={cancelling}
-        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+        className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-background py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
       >
         {cancelling ? (
           <>
@@ -886,7 +886,7 @@ function Overlay({
       onMouseDown={(e) => {
         if (onClose && e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/50 p-4 backdrop-blur-xs outline-none"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/50 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-xs outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={label}
