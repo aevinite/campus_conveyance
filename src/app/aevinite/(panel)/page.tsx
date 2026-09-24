@@ -1,5 +1,3 @@
-import Link from 'next/link';
-import { Inbox, Building2, Users, School, LayoutDashboard } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminReport, countPendingAgencies } from '@/features/admin/repository';
 import { formatDateTime } from '@/lib/format-date';
@@ -8,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
 import { DownloadReportButton } from '@/components/download-report-button';
+import { PageHeader } from '@/components/admin/page-header';
+import { StatStrip } from '@/components/admin/stat-strip';
 
 // Currency uses the shared rupees() helper (was a duplicated local formatter).
 const inr = rupees;
@@ -21,10 +21,10 @@ export default async function AdminDashboard() {
   const { counts, providers, totals, payments } = report;
 
   const cards = [
-    { label: 'Pending requests', value: livePending, href: '/aevinite/requests', icon: Inbox },
-    { label: 'Service providers', value: counts.agencies, href: '/aevinite/providers', icon: Building2 },
-    { label: 'Students', value: counts.students, href: '/aevinite/students', icon: Users },
-    { label: 'Colleges & schools', value: counts.colleges, href: '/aevinite/colleges', icon: School },
+    { label: 'Pending requests', value: livePending, href: '/aevinite/requests' },
+    { label: 'Service providers', value: counts.agencies, href: '/aevinite/providers' },
+    { label: 'Students', value: counts.students, href: '/aevinite/students' },
+    { label: 'Colleges & schools', value: counts.colleges, href: '/aevinite/colleges' },
   ];
 
   const fleetData = providers.map((p) => ({
@@ -39,37 +39,23 @@ export default async function AdminDashboard() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
-            <LayoutDashboard className="size-3.5" />
-            Overview
-          </span>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Admin Report &amp; Dashboard</h1>
-          <p className="text-muted-foreground">Platform overview across all service providers.</p>
-          <p className="print-only mt-1 text-sm text-muted-foreground">Generated {generated}</p>
-        </div>
-        <DownloadReportButton />
-      </div>
+      <PageHeader
+        eyebrow="Dashboard"
+        title="Admin Report & Dashboard"
+        subtitle="Platform overview across all service providers."
+        actions={<DownloadReportButton />}
+      />
+      <p className="print-only text-sm text-muted-foreground">Generated {generated}</p>
 
       {/* Headline counts */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Link key={c.label} href={c.href} className="print-block">
-            <Card className="rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
-              <CardContent className="flex items-center gap-4 py-6">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary sm:size-11">
-                  <c.icon className="size-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="tnum text-2xl font-bold text-gradient sm:text-3xl">{c.value}</p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{c.label}</p>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <StatStrip
+        items={cards.map((c) => ({
+          label: c.label,
+          value: c.value,
+          href: c.href,
+        }))}
+        className="print-block"
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Fleet per provider */}

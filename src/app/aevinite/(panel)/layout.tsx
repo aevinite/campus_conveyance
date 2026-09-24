@@ -1,34 +1,56 @@
-import Link from 'next/link';
-import { PlusCircle } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
-import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { createClient } from '@/lib/supabase/server';
+import { getSessionClaims } from '@/features/auth/session';
+import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
+import { AdminShell, type AdminNavGroup } from '@/components/admin/admin-shell';
 
-const ITEMS: SidebarItem[] = [
-  { label: 'Dashboard', href: '/aevinite', icon: 'LayoutDashboard' },
-  // Operations — full read-only visibility into the live platform.
-  { label: 'Buses & Vans', href: '/aevinite/fleet', icon: 'Bus' },
-  { label: 'Routes & Stops', href: '/aevinite/routes', icon: 'Route' },
-  { label: 'Bookings', href: '/aevinite/bookings', icon: 'Ticket' },
-  { label: 'Payments', href: '/aevinite/payments', icon: 'Wallet' },
-  { label: 'Live Rides', href: '/aevinite/live', icon: 'Radio' },
-  { label: 'Drivers', href: '/aevinite/drivers', icon: 'IdCard' },
-  { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },
-  { label: 'Notifications', href: '/aevinite/notifications', icon: 'Bell' },
-  { label: 'Contact Inquiries', href: '/aevinite/inquiries', icon: 'Mail' },
-  { label: 'Agency Reviews', href: '/aevinite/reviews', icon: 'Star' },
-  // Marketplace governance.
-  { label: 'Service Provider Requests', href: '/aevinite/requests', icon: 'Inbox' },
-  { label: 'Service Area Requests', href: '/aevinite/service-requests', icon: 'ClipboardList' },
-  { label: 'Manage Students', href: '/aevinite/students', icon: 'Users' },
-  { label: 'Deleted Students', href: '/aevinite/deleted-students', icon: 'UserMinus' },
-  { label: 'Manage Service Providers', href: '/aevinite/providers', icon: 'Building2' },
-  { label: 'Deleted Service Providers', href: '/aevinite/deleted-providers', icon: 'Building' },
-  { label: 'Add College', href: '/aevinite/add-college', icon: 'PlusCircle' },
-  { label: 'Manage College', href: '/aevinite/colleges', icon: 'School' },
-  { label: 'Deleted Colleges', href: '/aevinite/deleted-colleges', icon: 'Trash2' },
-  { label: 'Activity Log', href: '/aevinite/audit', icon: 'History' },
-  { label: 'Profile', href: '/aevinite/profile', icon: 'UserCircle' },
-  { label: 'Settings', href: '/aevinite/settings', icon: 'Settings' },
+// Grouped nav — mirrors the reference's OPERATE / MANAGE / … sections while
+// keeping every existing admin destination. Icons are referenced by name and
+// resolved on the client inside AdminShell.
+const GROUPS: AdminNavGroup[] = [
+  {
+    heading: 'Operate',
+    items: [
+      { label: 'Dashboard', href: '/aevinite', icon: 'LayoutDashboard' },
+      { label: 'Live Rides', href: '/aevinite/live', icon: 'Radio' },
+      { label: 'Bookings', href: '/aevinite/bookings', icon: 'Ticket' },
+      { label: 'Payments', href: '/aevinite/payments', icon: 'Wallet' },
+      { label: 'Buses & Vans', href: '/aevinite/fleet', icon: 'Bus' },
+      { label: 'Routes & Stops', href: '/aevinite/routes', icon: 'Route' },
+      { label: 'Drivers', href: '/aevinite/drivers', icon: 'IdCard' },
+      { label: 'Parents', href: '/aevinite/parents', icon: 'UsersRound' },
+    ],
+  },
+  {
+    heading: 'Manage',
+    items: [
+      { label: 'Students', href: '/aevinite/students', icon: 'Users' },
+      { label: 'Service Providers', href: '/aevinite/providers', icon: 'Building2' },
+      { label: 'Colleges & Schools', href: '/aevinite/colleges', icon: 'School' },
+      { label: 'Add College', href: '/aevinite/add-college', icon: 'PlusCircle' },
+      { label: 'Provider Requests', href: '/aevinite/requests', icon: 'Inbox' },
+      { label: 'Service Area Requests', href: '/aevinite/service-requests', icon: 'ClipboardList' },
+      { label: 'Agency Reviews', href: '/aevinite/reviews', icon: 'Star' },
+      { label: 'Contact Inquiries', href: '/aevinite/inquiries', icon: 'Mail' },
+      { label: 'Notifications', href: '/aevinite/notifications', icon: 'Bell' },
+    ],
+  },
+  {
+    heading: 'Recycle bin',
+    items: [
+      { label: 'Deleted Students', href: '/aevinite/deleted-students', icon: 'UserMinus' },
+      { label: 'Deleted Providers', href: '/aevinite/deleted-providers', icon: 'Building' },
+      { label: 'Deleted Colleges', href: '/aevinite/deleted-colleges', icon: 'Trash2' },
+    ],
+  },
+  {
+    heading: 'Platform',
+    items: [
+      { label: 'Activity Log', href: '/aevinite/audit', icon: 'History' },
+      { label: 'Profile', href: '/aevinite/profile', icon: 'UserCircle' },
+      { label: 'Settings', href: '/aevinite/settings', icon: 'Settings' },
+    ],
+  },
 ];
 
 export default async function AdminPanelLayout({
@@ -37,19 +59,23 @@ export default async function AdminPanelLayout({
   children: React.ReactNode;
 }) {
   await requireRole('SUPER_ADMIN', '/aevinite/login');
+  const db = await createClient();
+  const { userId } = await getSessionClaims(db);
+  const [notifications, unread] = await Promise.all([
+    listNotifications(db),
+    unreadNotificationCount(db),
+  ]);
+
   return (
-    <PanelSidebar items={ITEMS} homeHref="/aevinite" greeting="Admin">
-      {/* Persistent quick action — add a college/school from any admin section. */}
-      <div className="mb-5 flex justify-end">
-        <Link
-          href="/aevinite/add-college"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-        >
-          <PlusCircle className="size-4" />
-          Add College / School
-        </Link>
-      </div>
+    <AdminShell
+      groups={GROUPS}
+      homeHref="/aevinite"
+      footer="Campus Conveyance · Transit OS"
+      notifications={notifications}
+      unread={unread}
+      userId={userId}
+    >
       {children}
-    </PanelSidebar>
+    </AdminShell>
   );
 }
