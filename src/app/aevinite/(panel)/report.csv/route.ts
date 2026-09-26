@@ -23,10 +23,15 @@ export async function GET(request: Request) {
   const report = await getAdminReport();
   const rupees = (cents: number) => ((cents || 0) / 100).toFixed(2);
 
-  // RFC-4180 escaping: quote fields with comma/quote/newline; double any quotes.
+  // RFC-4180 escaping: quote fields with comma/quote/newline/CR; double any
+  // quotes. Plus a formula-injection guard: a STRING cell (e.g. an agency-set
+  // provider name) starting with a formula trigger (= + - @, tab, CR) is
+  // prefixed with a quote so Excel/Sheets treat it as text, not a live formula.
+  // Numbers are left untouched.
   const cell = (v: string | number) => {
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v);
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const row = (...cells: (string | number)[]) => cells.map(cell).join(',');
 

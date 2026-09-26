@@ -42,7 +42,6 @@ export default async function ParentBookRoute({
   const upi = { vpa: upiSettings.vpa, payee: upiSettings.payeeName, configured: upiSettings.active && !!upiSettings.vpa };
   const childName = child.full_name ?? 'your child';
   const soldOut = availability.available <= 0;
-  const notBookable = availability.total <= 0;
 
   const planOptions = checkoutPlans(data.route, data.route.price_cents).map((p) => ({
     period: p.period,
@@ -52,6 +51,9 @@ export default async function ParentBookRoute({
     amountRupees: String(Math.round(p.cents / 100)),
     legacy: p.legacy,
   }));
+  // Not bookable if there are no seats configured, or no usable price (which
+  // would otherwise create a ₹0 seat).
+  const notBookable = availability.total <= 0 || planOptions.length === 0;
 
   const activeHere = active && active.route_id === routeId ? active : null;
   const activeElsewhere = active && active.route_id !== routeId ? active : null;

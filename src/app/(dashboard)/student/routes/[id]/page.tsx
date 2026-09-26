@@ -78,10 +78,6 @@ export default async function RouteDetailPage({
   const activeBooking = currentBooking?.routeId === id ? currentBooking : null;
   const otherBooking = currentBooking && currentBooking.routeId !== id ? currentBooking : null;
   const soldOut = availability.available <= 0;
-  // A zero-capacity route isn't sold out — it's not bookable at all (a waitlist
-  // entry here could never be promoted). Kept distinct from soldOut so the panel
-  // shows "not accepting bookings" instead of a dead "Join waitlist" button.
-  const notBookable = availability.total <= 0;
   // The plans the agency priced for this route — the student picks one at checkout.
   const planOptions = checkoutPlans(data.route, data.route.price_cents).map((p) => ({
     period: p.period,
@@ -91,6 +87,12 @@ export default async function RouteDetailPage({
     amountRupees: String(Math.round(p.cents / 100)),
     legacy: p.legacy,
   }));
+  // A zero-capacity route isn't sold out — it's not bookable at all (a waitlist
+  // entry here could never be promoted). Kept distinct from soldOut so the panel
+  // shows "not accepting bookings" instead of a dead "Join waitlist" button.
+  // A route with NO usable price (no per-period price and no legacy price_cents)
+  // is likewise not bookable — otherwise it would create a ₹0 seat.
+  const notBookable = availability.total <= 0 || planOptions.length === 0;
   const priceSummary =
     planOptions.length > 0
       ? planOptions.map((p) => `${p.amount}${p.suffix}`).join(' · ')

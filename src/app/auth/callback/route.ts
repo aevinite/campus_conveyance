@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
 import { isAccountDeactivated } from '@/features/auth/account-status';
-import { dashboardFor } from '@/lib/rbac/roles';
+import { dashboardFor, roleFromClaims } from '@/lib/rbac/roles';
 
 // Cookie-authed, per-request OAuth/verification callback — declare the runtime
 // explicitly to match the other route handlers.
@@ -56,12 +56,17 @@ export async function GET(request: NextRequest) {
       if (!role) {
         // The role claim can lag a brand-new OAuth signup: the access-token hook
         // (or the profile-default trigger) may not be reflected in the token we
-        // just exchanged. Refresh once to pick it up; if it's STILL absent, send
-        // the user to the default (STUDENT) dashboard rather than bouncing an
-        // authenticated user back to /login (a confusing dead-end).
+        // just exchanged. Refresh once to pick it up, then read the claims FRESH
+        // via getClaims() — getSessionClaims() is cache()-memoized by `db`, so it
+        // would return the stale pre-refresh value here. If the role is STILL
+        // absent, send the user to the default (STUDENT) dashboard rather than
+        // bouncing an authenticated user back to /login (a confusing dead-end).
         await db.auth.refreshSession();
-        const refreshed = await getSessionClaims(db);
-        dest = refreshed.role ? dashboardFor(refreshed.role) : '/student';
+        const { data: fresh } = await db.auth.getClaims();
+        const freshRole = roleFromClaims(
+          (fresh?.claims as { app_metadata?: unknown } | null)?.app_metadata,
+        );
+        dest = freshRole ? dashboardFor(freshRole) : '/student';
       }
       return NextResponse.redirect(`${origin}${dest}`);
     }

@@ -80,7 +80,11 @@ export async function drainPushOutbox(batchSize = 20): Promise<void> {
             body: row.body,
             url: row.url ?? '/',
           });
-          await Promise.all(
+          // allSettled, not all: one device failing (non-404/410) must not reject
+          // the batch and leave the row unsent — that would re-deliver a DUPLICATE
+          // to the healthy devices on the next drain. Dead endpoints are still
+          // pruned inside sendOne; the row is marked sent best-effort below.
+          await Promise.allSettled(
             (subs as Sub[]).map((s) => sendOne(db, s, payload)),
           );
         }

@@ -1044,15 +1044,25 @@ export async function hideStudentAction(formData: FormData): Promise<void> {
   // void actions (the ?notice pattern was silent: the students page never renders
   // it). Don't hide the student unless the seats were actually freed.
   if (rowsErr) throw new AppError('AGENCY', rowsErr.message);
-  // Route through services.rejectBooking, which THROWS on a failed RPC — db.rpc()
-  // resolves with { error } and would NOT reject the Promise.all, so a genuine
-  // cancel failure would otherwise slip through and hide the student with a seat
-  // still reserved.
-  await Promise.all((rows ?? []).map((b) => rejectBooking(db, b.id as string)));
-  const { error: hideErr } = await db.from('agency_hidden_students').upsert({
-    agency_id: agency.id,
-    student_id: studentId,
-  });
+  // Use agency_remove_student_booking (0119), NOT reject_booking: for a PAID
+  // (CONFIRMED) seat that would forfeit the rider's money with no refund. The RPC
+  // rejects unpaid holds but flags a refund request + HOLDS a paid seat until the
+  // admin processes the refund. Throw on any RPC error so we never hide a student
+  // while a booking wasn't handled.
+  await Promise.all(
+    (rows ?? []).map(async (b) => {
+      const { error } = await db.rpc('agency_remove_student_booking', {
+        p_booking_id: b.id as string,
+      });
+      if (error) throw new AppError('AGENCY', error.message);
+    }),
+  );
+  // Reset purged_at/hidden_at on re-hide so a previously-purged student who was
+  // restored (or re-added) doesn't stay stuck with a stale purge flag.
+  const { error: hideErr } = await db.from('agency_hidden_students').upsert(
+    { agency_id: agency.id, student_id: studentId, purged_at: null, hidden_at: new Date().toISOString() },
+    { onConflict: 'agency_id,student_id' },
+  );
   if (hideErr) throw new AppError('AGENCY', hideErr.message);
   revalidatePath('/agency/students');
   revalidatePath('/agency/deleted-students');

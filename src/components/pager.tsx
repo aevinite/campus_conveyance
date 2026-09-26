@@ -58,6 +58,7 @@ export function Pager({
 
 /** Clamp a raw ?page value and return { page, offset } for a given page size. */
 export function pageParams(raw: string | undefined, size: number): { page: number; offset: number } {
-  const page = Math.max(1, Number(raw) || 1);
+  // floor so a crafted "?page=2.5" can't produce a fractional offset into .range().
+  const page = Math.max(1, Math.floor(Number(raw) || 1));
   return { page, offset: (page - 1) * size };
 }
