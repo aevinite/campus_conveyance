@@ -36,6 +36,11 @@ export function CancelBookingButton({
   const [state, action] = useActionState<CancelState, FormData>(cancelBookingAction, {});
   const [phase, setPhase] = useState<Phase>('idle');
   const [method, setMethod] = useState<Method>('UPI');
+  // Locally remember a just-made paid cancellation so the button flips to the
+  // locked "Refund pending" state immediately — without it, a parent whose page
+  // doesn't pass refundPending could click Cancel again (cancel_booking no-ops,
+  // but the UI would misleadingly re-toast "requested").
+  const [requested, setRequested] = useState(false);
   const lastShown = useRef<CancelState>({});
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -49,6 +54,8 @@ export function CancelBookingButton({
       // runtime-correct, not a cascading-render hazard.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPhase('idle');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (paid) setRequested(true);
     }
     lastShown.current = state;
   }, [state]);
@@ -57,7 +64,7 @@ export function CancelBookingButton({
   useModalFocusTrap(open, dialogRef, () => setPhase('idle'));
 
   // Already requested — the seat is held until the admin processes the refund.
-  if (refundPending) {
+  if (refundPending || requested) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">
         Refund pending

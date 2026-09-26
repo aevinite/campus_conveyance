@@ -41,7 +41,7 @@ const FAIL_HOLD_MS = 1700; // how long the red failed row shows before we bail o
 // The three approval checks, IN THE ORDER they light up.
 const CHECKS = ['Seat availability', 'Your pickup stop', 'Campus eligibility'] as const;
 
-type Phase = 'reserve' | 'approving' | 'payment' | 'submitted' | 'waitlisted' | 'expired';
+type Phase = 'reserve' | 'approving' | 'payment' | 'submitted' | 'expired';
 
 // The live outcome that drives the approving checklist animation. `ok` → all
 // three pass then payment; `fail` → rows up to failStep pass, failStep goes red,
@@ -56,6 +56,7 @@ type ApproveOutcome =
 function stepForCode(code?: string): 0 | 1 | 2 | null {
   switch (code) {
     case 'P0004': // no seats configured / not accepting → seat availability
+    case 'P0014': // bus full → seat availability
       return 0;
     case 'P0012': // invalid pickup stop for this route
       return 1;
@@ -347,17 +348,9 @@ export function ReserveForm({
       setOutcome({ kind: 'fail', failStep: step, message: res.error });
       return;
     }
-    if (res.status === 'WAITLISTED') {
-      // Bus is full. Per product decision we treat this as a failed seat-
-      // availability check and cancel the hold rather than waitlisting.
-      setOutcome({
-        kind: 'fail',
-        failStep: 0,
-        message: 'This bus is full — there are no seats available right now.',
-        bookingId: res.bookingId,
-      });
-      return;
-    }
+    // A full bus now raises P0014 server-side (no waitlist row is created), so it
+    // arrives via res.error above and maps to the seat-availability row — there's
+    // no WAITLISTED status to handle here anymore.
     setOutcome({ kind: 'ok', bookingId: res.bookingId ?? '', expiresAt: res.expiresAt ?? null });
   }
 
@@ -690,24 +683,6 @@ export function ReserveForm({
     );
   }
 
-  if (phase === 'waitlisted') {
-    return (
-      <div className="space-y-3">
-        <PanelSteps active={1} />
-        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
-          <Clock3 className="mt-0.5 size-4 shrink-0" />
-          <span>Bus is full — you are on the waitlist. We&apos;ll notify you if a seat opens up.</span>
-        </div>
-        <Link
-          href={bookingsHref}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
-        >
-          View in My bookings <ArrowRight className="size-4" />
-        </Link>
-      </div>
-    );
-  }
-
   if (phase === 'expired') {
     return (
       <div className="space-y-3">
@@ -857,8 +832,8 @@ export function ReserveForm({
         </div>
       </div>
 
-      <Button type="submit" className="w-full" disabled={busy || stops.length === 0}>
-        {busy ? 'Sending request…' : soldOut ? 'Join waitlist' : 'Request seat'}
+      <Button type="submit" className="w-full" disabled={busy || stops.length === 0 || soldOut}>
+        {busy ? 'Sending request…' : soldOut ? 'Sold out' : 'Request seat'}
       </Button>
       <p className="text-xs text-muted-foreground">
         Your request is approved automatically once we confirm the seat, pickup and eligibility — then you

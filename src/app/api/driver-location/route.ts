@@ -62,7 +62,11 @@ export async function POST(req: Request) {
   // of riders newly alerted (bell + queued email/push rows); only drain the
   // outboxes when there's something to send, so the hot ping path stays cheap.
   // Fully best-effort — a geofence/drain failure never affects the ping result.
-  if (!error) {
+  // Throttle the geofence scan to ~once / 30s per driver instead of every ~9s
+  // ping: it's a multi-join scan over the driver's CONFIRMED riders, and a 1.2km
+  // arrival radius doesn't need 9s resolution. rateLimit returns 0 (run) at most
+  // once per window and fails open, so alerts still fire promptly and reliably.
+  if (!error && (await rateLimit('geofence', String(sub), 1, 30)) === 0) {
     try {
       const { data: alerted } = await db.rpc('check_pickup_geofence', { p_lat: lat, p_lng: lng });
       if (typeof alerted === 'number' && alerted > 0) {
