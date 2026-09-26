@@ -23,7 +23,7 @@ import { SeatMap } from './seat-map';
 import RouteStopsMap from './route-stops-map';
 import BusGallery from './bus-gallery';
 import { formatTime } from '@/lib/format-date';
-import { offeredPlans, planPrice, periodLabel } from '@/lib/billing';
+import { checkoutPlans, planPrice, periodLabel } from '@/lib/billing';
 
 // 0 means the agency never set a price — treat it like "not set".
 const inr = (cents: number | null) =>
@@ -83,12 +83,13 @@ export default async function RouteDetailPage({
   // shows "not accepting bookings" instead of a dead "Join waitlist" button.
   const notBookable = availability.total <= 0;
   // The plans the agency priced for this route — the student picks one at checkout.
-  const planOptions = offeredPlans(data.route).map((p) => ({
+  const planOptions = checkoutPlans(data.route, data.route.price_cents).map((p) => ({
     period: p.period,
     label: p.label,
     suffix: p.suffix,
     amount: `₹${Math.round(p.cents / 100).toLocaleString('en-IN')}`,
     amountRupees: String(Math.round(p.cents / 100)),
+    legacy: p.legacy,
   }));
   const priceSummary =
     planOptions.length > 0

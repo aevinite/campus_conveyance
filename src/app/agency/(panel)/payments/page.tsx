@@ -8,10 +8,9 @@ import {
 import { DataTable } from '@/components/data-table';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
+import { rupees as inr } from '@/lib/format';
 
 const PAGE_SIZE = 20;
-
-const inr = (cents: number) => `₹${Math.round((cents ?? 0) / 100).toLocaleString('en-IN')}`;
 
 export default async function AgencyPaymentsPage({
   searchParams,

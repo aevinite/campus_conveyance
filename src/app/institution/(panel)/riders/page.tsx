@@ -88,8 +88,8 @@ export default async function InstitutionRidersPage({
         </div>
       ) : (
         <div className="space-y-6">
-          {[...groups.values()].map((g) => (
-            <div key={g.name} className="space-y-2">
+          {[...groups.entries()].map(([routeId, g]) => (
+            <div key={routeId} className="space-y-2">
               <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
                 <Bus className="size-5 text-primary" />
                 {g.name}

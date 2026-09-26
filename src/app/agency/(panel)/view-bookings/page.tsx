@@ -106,7 +106,7 @@ export default async function AgencyViewBookingsPage({
               }
             />
           ))}
-          <Pager page={page} totalPages={totalPages} basePath="/agency/view-bookings" />
+          <Pager page={page} totalPages={totalPages} basePath="/agency/view-bookings" params={{ status: statusArg }} />
         </div>
       )}
     </section>

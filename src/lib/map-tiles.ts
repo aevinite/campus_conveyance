@@ -45,16 +45,36 @@ export const TILE_URL = MAPTILER_URL ?? OSM_URL;
  * placeholder tile). The keyless OSM fallback is lightly muted (see the
  * `.cc-tile-muted` rule in globals.css) so it still reads as a calm, light map.
  */
+// Loading/zoom tuning shared by both providers:
+//  • keepBuffer — keep extra rings of tiles around the viewport cached, so
+//    panning and zoom-out show instantly instead of flashing grey while loading.
+//  • updateWhenZooming:false — don't fire a storm of tile requests DURING the
+//    pinch/zoom animation; load once the zoom settles. Fewer requests = faster,
+//    and it stops the mid-zoom flicker.
+//  • updateWhenIdle:false — still refresh tiles while panning (mobile default is
+//    true, which can leave gaps until you lift your finger).
+const SHARED: LeafletNS.TileLayerOptions = {
+  keepBuffer: 4,
+  updateWhenZooming: false,
+  updateWhenIdle: false,
+};
+
 export const TILE_OPTIONS: LeafletNS.TileLayerOptions = USING_MAPTILER
   ? {
+      ...SHARED,
+      // MapTiler serves native tiles well past street level, so we can allow a
+      // deeper crisp zoom than the OSM fallback.
       maxZoom: 20,
       maxNativeZoom: 20,
       attribution:
         '© <a href="https://www.maptiler.com/">MapTiler</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }
   : {
+      ...SHARED,
       subdomains: 'abc',
-      maxZoom: 20,
+      // OSM standard tiles only exist to z19 — cap the user's zoom AT the native
+      // level so we never upscale (blurry) tiles. Deeper zoom needs MapTiler.
+      maxZoom: 19,
       maxNativeZoom: 19,
       className: 'cc-tile-muted',
       attribution:

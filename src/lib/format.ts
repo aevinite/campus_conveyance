@@ -1,10 +1,18 @@
 // Small shared display formatters that `format-date.ts` doesn't cover.
 // (Date/time formatting lives in format-date.ts, pinned to IST — use that.)
 
-/** Paise/cents → "₹1,200" (Indian grouping). Null/undefined → "—". */
+/**
+ * Paise/cents → "₹1,200" (Indian grouping). Null/undefined → "—".
+ * Shows paise ("₹1,200.50") only when the amount has a fractional rupee part,
+ * so whole-rupee prices stay clean while sub-rupee amounts aren't rounded away.
+ */
 export function rupees(cents: number | null | undefined): string {
   if (cents == null) return '—';
-  return `₹${Math.round(cents / 100).toLocaleString('en-IN')}`;
+  const hasPaise = cents % 100 !== 0;
+  return `₹${(cents / 100).toLocaleString('en-IN', {
+    minimumFractionDigits: hasPaise ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 /** "5 min ago" style relative label for recent activity feeds. */

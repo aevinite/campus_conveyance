@@ -125,6 +125,8 @@ export type PlanOption = {
   amount: string;
   /** Plain integer rupees for the UPI `am` field, e.g. "9000". */
   amountRupees: string;
+  /** True for the synthetic legacy flat-price plan — no billing period is sent. */
+  legacy?: boolean;
 };
 
 export function ReserveForm({
@@ -792,7 +794,9 @@ export function ReserveForm({
       <PanelSteps active={1} />
       <input type="hidden" name="routeId" value={routeId} />
       {bookForStudentId && <input type="hidden" name="studentId" value={bookForStudentId} />}
-      {selectedPlan && <input type="hidden" name="billingPeriod" value={selectedPlan.period} />}
+      {selectedPlan && !selectedPlan.legacy && (
+        <input type="hidden" name="billingPeriod" value={selectedPlan.period} />
+      )}
 
       {plans.length > 0 && (
         <div className="space-y-2">

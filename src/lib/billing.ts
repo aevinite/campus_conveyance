@@ -31,6 +31,12 @@ export interface OfferedPlan {
   cents: number;
   label: string;
   suffix: string;
+  /**
+   * True for the synthetic single plan built from a route's legacy flat
+   * `price_cents` (no per-period pricing). The checkout omits the billing period
+   * for it so the server falls back to `price_cents`, matching what's displayed.
+   */
+  legacy?: boolean;
 }
 
 /** The plans an agency actually priced for a route, in period order. */
@@ -48,6 +54,25 @@ export function offeredPlans(r: RoutePlanPrices): OfferedPlan[] {
     label: p.label,
     suffix: p.suffix,
   }));
+}
+
+/**
+ * The plans to show at checkout. Prefers the agency's per-period prices; if a
+ * route has none but still carries a legacy flat `price_cents`, returns a single
+ * "Full fare" plan so the route stays payable end-to-end (the server likewise
+ * falls back to `price_cents` when a booking has no billing period). Empty only
+ * when the route has no usable price at all.
+ */
+export function checkoutPlans(
+  r: RoutePlanPrices,
+  legacyCents: number | null | undefined,
+): OfferedPlan[] {
+  const offered = offeredPlans(r);
+  if (offered.length > 0) return offered;
+  if (legacyCents != null && legacyCents > 0) {
+    return [{ period: 'MONTHLY', cents: legacyCents, label: 'Full fare', suffix: '', legacy: true }];
+  }
+  return [];
 }
 
 export function periodLabel(p: BillingPeriod | null | undefined): string {

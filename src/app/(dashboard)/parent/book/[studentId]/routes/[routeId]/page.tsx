@@ -8,7 +8,7 @@ import { getRouteWithStops, getAvailability } from '@/features/booking/repositor
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
 import { getUpiSettings } from '@/lib/upi-settings';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { offeredPlans, planPrice, periodLabel, type BillingPeriod } from '@/lib/billing';
+import { checkoutPlans, planPrice, periodLabel, type BillingPeriod } from '@/lib/billing';
 import { formatTime } from '@/lib/format-date';
 import { ReserveForm } from '../../../../../student/routes/[id]/reserve-form';
 import { SeatMap } from '../../../../../student/routes/[id]/seat-map';
@@ -44,12 +44,13 @@ export default async function ParentBookRoute({
   const soldOut = availability.available <= 0;
   const notBookable = availability.total <= 0;
 
-  const planOptions = offeredPlans(data.route).map((p) => ({
+  const planOptions = checkoutPlans(data.route, data.route.price_cents).map((p) => ({
     period: p.period,
     label: p.label,
     suffix: p.suffix,
     amount: `₹${Math.round(p.cents / 100).toLocaleString('en-IN')}`,
     amountRupees: String(Math.round(p.cents / 100)),
+    legacy: p.legacy,
   }));
 
   const activeHere = active && active.route_id === routeId ? active : null;
