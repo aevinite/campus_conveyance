@@ -20,6 +20,10 @@ const PUBLIC = [
   // proxy redirects the fetch to /login and the numbers never load for
   // logged-out visitors.
   '/api/public-stats',
+  // Server-to-server cron endpoint (pg_cron → outbox drain). It carries no
+  // session cookie — only a service-role bearer it validates itself — so the
+  // proxy must not redirect it to /login.
+  '/api/cron',
   // Public portals for the other actors. These exact prefixes do NOT match
   // the protected '/agency' and '/aevinite' dashboards (guarded by their layouts).
   '/agency/login', '/agency/register', '/agency/forgot', '/aevinite/login', '/driver/login',
@@ -53,7 +57,9 @@ export async function proxy(request: NextRequest) {
       // OUTSIDE /auth — without these, emailed confirmation/reset links become
       // dead ends whenever maintenance mode is on.
       path === '/confirm' ||
-      path === '/reset';
+      path === '/reset' ||
+      // The cron drain must keep working while maintenance mode is on.
+      path.startsWith('/api/cron');
     if (!allowed) {
       return NextResponse.rewrite(new URL('/maintenance', request.url));
     }
