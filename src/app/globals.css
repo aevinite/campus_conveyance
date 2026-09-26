@@ -336,10 +336,16 @@ input[type="password"]::-ms-clear {
 }
 .print-only { display: none; }
 
-/* ---- Leaflet: always-light professional map (matches CARTO Positron) ---- */
+/* ---- Leaflet: always-light professional map (MapTiler dataviz-light) ---- */
 .leaflet-container {
   font: inherit;
   background: #eaeaec; /* light neutral behind tiles */
+}
+/* Keyless OpenStreetMap fallback (no MapTiler key set): lightly desaturate +
+   brighten so the standard OSM tiles still read as a calm, light basemap close
+   to the branded look. Applied only to the fallback layer (see map-tiles.ts). */
+.cc-tile-muted {
+  filter: saturate(0.72) brightness(1.04) contrast(0.96);
 }
 /* Custom numbered pin — remove Leaflet's default white icon box + add depth. */
 .cc-pin {

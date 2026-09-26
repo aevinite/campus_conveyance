@@ -12,6 +12,7 @@ import {
   type LatLng,
 } from '@/lib/bus-marker';
 import { escapeHtml } from '@/lib/escape-html';
+import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
 
 export interface MapStop {
   name: string;
@@ -20,9 +21,6 @@ export interface MapStop {
   description?: string | null;
   address?: string | null;
 }
-
-// Clean, professional light basemap (CARTO Positron) — always light, no key.
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
 // How often to poll for the live bus position (balanced freshness vs. load).
 const LIVE_POLL_MS = 5000;
@@ -120,7 +118,7 @@ export default function RouteStopsMap({
       const m = L.map(containerRef.current, { attributionControl: false, scrollWheelZoom: false });
       mapRef.current = m;
       centeredOnBus.current = false; // fresh map — allow the next fix to recenter
-      L.tileLayer(TILE_URL, { subdomains: 'abcd', maxZoom: 20 }).addTo(m);
+      L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
       pts.forEach((s, i) => {
         const desc = s.description?.trim();
         const addr = s.address?.trim();

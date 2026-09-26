@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import type * as LeafletNS from 'leaflet';
 import { LocateFixed, MapPin, Search, X } from 'lucide-react';
 import { escapeHtml } from '@/lib/escape-html';
+import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
 
 export interface Stop {
   name: string;
@@ -19,9 +20,6 @@ interface Suggestion {
   lat: number;
   lng: number;
 }
-
-// Clean, professional light basemap (CARTO Positron) — always light, no key.
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
 // Custom numbered teardrop pin in the brand colour — far nicer than the default.
 function numberedPin(L: typeof import('leaflet'), n: number): LeafletNS.DivIcon {
@@ -121,7 +119,7 @@ export default function MapStopPicker({
         attributionControl: false,
         scrollWheelZoom: false, // page scroll shouldn't zoom; use pinch or the +/- buttons
       }).setView([23.0225, 72.5714], 12);
-      L.tileLayer(TILE_URL, { subdomains: 'abcd', maxZoom: 20 }).addTo(m);
+      L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
       layerRef.current = L.layerGroup().addTo(m);
       mapRef.current = m;
       // Click-to-drop: the copy has always promised this, but the handler was

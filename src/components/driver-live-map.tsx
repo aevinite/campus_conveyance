@@ -14,8 +14,8 @@ import {
 } from '@/lib/bus-marker';
 import { escapeHtml } from '@/lib/escape-html';
 import { cn } from '@/lib/utils';
+import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 // Below this, treat the fix as jitter (bus stationary) — don't rotate or speed.
 const MOVE_MIN_M = 8;
 // Re-fetch the area label only after the bus has moved this far.
@@ -185,7 +185,7 @@ export function DriverLiveMap({
       leafletRef.current = L;
       const m = L.map(containerRef.current, { attributionControl: false });
       mapRef.current = m;
-      L.tileLayer(TILE_URL, { subdomains: 'abcd', maxZoom: 20 }).addTo(m);
+      L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
       // Light route context — small dots for the pickup stops.
       stops.forEach((s) =>
         L.circleMarker([s.lat, s.lng], {
