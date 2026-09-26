@@ -21,6 +21,11 @@ export default async function AddRoutePage() {
   const colleges = [...collegeMap.entries()].map(([id, name]) => ({ id, name }));
 
   // A bus can only be on one route — hide buses already assigned to a route.
+  // Surface a read error rather than silently treating "no rows" as "no buses
+  // used" (which would offer an already-assigned bus and fail at add_route).
+  if ('error' in usedRes && usedRes.error) {
+    throw new Error(`Could not load assigned buses: ${usedRes.error.message}`);
+  }
   const usedVehicleIds = new Set<string>();
   for (const r of (usedRes.data ?? []) as { vehicle_id: string | null }[]) {
     if (r.vehicle_id) usedVehicleIds.add(r.vehicle_id);

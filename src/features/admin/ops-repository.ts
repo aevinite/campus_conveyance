@@ -1375,7 +1375,7 @@ export async function listReviews(opts: PageOpts = {}): Promise<Paged<OpsReviewR
   const client = db();
   let q = client
     .from('reviews')
-    .select('id, rating, comment, is_hidden, created_at, agency_id, booking_id', { count: 'exact' })
+    .select('id, rating, comment, is_hidden, created_at, agency_id, booking_id, student_id', { count: 'exact' })
     .order('created_at', { ascending: false });
   q = range(q, opts);
   const { data, error, count } = await q;
@@ -1395,6 +1395,27 @@ export async function listReviews(opts: PageOpts = {}): Promise<Paged<OpsReviewR
     'id, student_name',
     rows.map((r) => r.booking_id as string | null),
   );
+  // Fall back to the student's own name when the review's booking was deleted
+  // (booking_id is on delete set null) — otherwise every such review shows the
+  // generic "Rider". Resolve student → profile (or managed-child) name.
+  const students = await mapByIds<{ id: string; full_name: string | null; profile_id: string | null }>(
+    client,
+    'students',
+    'id, full_name, profile_id',
+    rows.map((r) => r.student_id as string | null),
+  );
+  const profiles = await mapByIds<{ id: string; full_name: string | null }>(
+    client,
+    'profiles',
+    'id, full_name',
+    [...students.values()].map((s) => s.profile_id),
+  );
+  const studentName = (studentId: string | null): string | null => {
+    if (!studentId) return null;
+    const s = students.get(studentId);
+    if (!s) return null;
+    return (s.profile_id ? profiles.get(s.profile_id)?.full_name : null) ?? s.full_name ?? null;
+  };
   return {
     rows: rows.map((r) => ({
       id: r.id as string,
@@ -1403,7 +1424,10 @@ export async function listReviews(opts: PageOpts = {}): Promise<Paged<OpsReviewR
       is_hidden: !!r.is_hidden,
       created_at: r.created_at as string,
       agencyName: agencies.get(r.agency_id as string)?.name ?? '—',
-      reviewer: (r.booking_id ? bookings.get(r.booking_id as string)?.student_name : null) ?? 'Rider',
+      reviewer:
+        (r.booking_id ? bookings.get(r.booking_id as string)?.student_name : null) ??
+        studentName(r.student_id as string | null) ??
+        'Rider',
     })),
     total: count ?? 0,
   };

@@ -100,11 +100,18 @@ export interface InstitutionOverview {
 
 export async function institutionOverview(institutionId: string): Promise<InstitutionOverview> {
   const client = db();
-  const [routes, studentsByRoute, agencies] = await Promise.all([
+  const [routes, agencies] = await Promise.all([
     listInstitutionRoutes(client, institutionId),
-    studentCountsByRoute(client, institutionId),
     listAgenciesForInstitution(institutionId),
   ]);
+  // Count riders only on the routes shown in the breakdown, so the headline
+  // "Students riding" can't exceed the sum of the per-route rows (bookings on a
+  // suspended/hidden-agency route are excluded from both).
+  const studentsByRoute = await studentCountsByRoute(
+    client,
+    institutionId,
+    new Set(routes.map((r) => r.id)),
+  );
 
   const total = routes.reduce((s, r) => s + (r.total ?? 0), 0);
   const available = routes.reduce((s, r) => s + (r.available ?? 0), 0);
@@ -129,6 +136,7 @@ export async function institutionOverview(institutionId: string): Promise<Instit
 async function studentCountsByRoute(
   client: SupabaseClient,
   institutionId: string,
+  visibleRouteIds: Set<string>,
 ): Promise<{ perRoute: Map<string, Set<string>>; allStudents: Set<string> }> {
   const { data, error } = await client
     .from('bookings')
@@ -139,7 +147,8 @@ async function studentCountsByRoute(
   const perRoute = new Map<string, Set<string>>();
   const allStudents = new Set<string>();
   for (const b of (data ?? []) as { route_id: string | null; student_id: string | null }[]) {
-    if (!b.route_id || !b.student_id) continue;
+    // Only routes shown in the breakdown, so the headline matches the rows.
+    if (!b.route_id || !b.student_id || !visibleRouteIds.has(b.route_id)) continue;
     if (!perRoute.has(b.route_id)) perRoute.set(b.route_id, new Set());
     perRoute.get(b.route_id)!.add(b.student_id);
     allStudents.add(b.student_id);

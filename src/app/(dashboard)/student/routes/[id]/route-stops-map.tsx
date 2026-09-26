@@ -302,8 +302,11 @@ export default function RouteStopsMap({
                 ...pickupEta(pos),
               });
             } else {
-              // Stationary: snap to correct drift, report stopped.
+              // Stationary: snap to correct drift, report stopped. Cancel any
+              // in-flight glide first, else its next frame overrides the snap
+              // back toward the old target (brief marker jitter).
               speedRef.current = 0;
+              animCancel.current?.();
               busMarkerRef.current.setLatLng(pos);
               setLive({ busNumber: data.busNumber, speedKmh: 0, area: areaRef.current, stopped: true, ...pickupEta(pos) });
             }

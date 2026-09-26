@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
 
@@ -24,7 +25,11 @@ function authorized(req: Request): boolean {
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) return false; // misconfigured — refuse rather than run open
   const header = req.headers.get('authorization') ?? '';
-  return header === `Bearer ${secret}`;
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const got = Buffer.from(header);
+  // Constant-time compare; timingSafeEqual throws on a length mismatch, which is
+  // itself a non-match.
+  return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
 async function drain(req: Request): Promise<NextResponse> {

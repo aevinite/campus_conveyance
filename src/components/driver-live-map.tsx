@@ -115,7 +115,10 @@ export function DriverLiveMap({
             Math.min(Math.max(dt * 1000, 500), 4000),
           );
         } else {
+          // Cancel any in-flight glide before snapping, else its next frame
+          // overrides the snap back toward the old target (brief jitter).
           speed = 0;
+          animCancel.current?.();
           markerRef.current.setLatLng(pos);
         }
         headingRef.current = heading;
