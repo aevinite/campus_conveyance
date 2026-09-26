@@ -80,6 +80,9 @@ export default function RouteStopsMap({
   // Read the latest pickup stop from a ref so the poll effect (keyed on
   // liveRouteId) never has to re-subscribe when the prop object identity changes.
   const pickupRef = useRef(pickupStop);
+  // Keep the latest pickup stop in a ref the interval poll reads, so the poll
+  // effect (keyed on liveRouteId) never re-subscribes on a prop identity change.
+  // eslint-disable-next-line react-hooks/refs
   pickupRef.current = pickupStop;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletNS.Map | null>(null);

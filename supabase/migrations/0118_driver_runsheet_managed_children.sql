@@ -11,6 +11,10 @@
 -- profile → students → booking snapshot, matching every other rider-facing RPC
 -- (0103, 0117). Same return signature as 0096, so `create or replace` is enough.
 
+-- Drop a dead no-arg overload left over from an early migration (the app only
+-- ever calls the (p_limit, p_offset) form). Harmless if it doesn't exist.
+drop function if exists public.driver_bookings();
+
 create or replace function public.driver_bookings(
   p_limit int default null, p_offset int default 0
 )

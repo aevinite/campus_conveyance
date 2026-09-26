@@ -32,6 +32,9 @@ export function AddChildForm({ campuses }: { campuses: CampusOption[] }) {
     else if (state.ok) {
       toast.success(`${state.childName ?? 'Child'} added — you can book a bus for them now.`);
       formRef.current?.reset(); // SelectMenu resets its own value on the form reset
+      // Reacting to a completed useActionState result (guarded by `seen`) —
+      // runtime-correct, not a cascading-render hazard.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(false);
     }
   }, [state]);

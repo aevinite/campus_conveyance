@@ -206,6 +206,9 @@ export function ReserveForm({
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
+  // Client-only UA probe (the app marker isn't readable during SSR), so resolve
+  // it once after mount — a deliberate one-shot, not a cascading-render hazard.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setIsApp(isNativeApp()), []);
 
   // Reset back to a clean request step and pull fresh server data (seat counts)

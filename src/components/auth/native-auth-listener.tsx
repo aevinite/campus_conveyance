@@ -24,8 +24,16 @@ export function NativeAuthListener() {
       const { Browser } = await import('@capacitor/browser');
       const { createClient } = await import('@/lib/supabase/client');
 
+      // A cold start can deliver the SAME deep link through both getLaunchUrl and
+      // the appUrlOpen listener. Guard so a one-time PKCE code is never exchanged
+      // twice (the second exchange fails on a consumed code and would bounce the
+      // user to /login?error).
+      const handled = new Set<string>();
+
       const handleUrl = async (url: string) => {
         if (!url || !url.startsWith('campusconveyance://auth')) return;
+        if (handled.has(url)) return;
+        handled.add(url);
         await Browser.close().catch(() => {});
         try {
           // Parse the custom-scheme URL by hand — new URL()'s hash handling is

@@ -52,7 +52,18 @@ export async function GET(request: NextRequest) {
     // No explicit destination (e.g. Google sign-in or email verification) →
     // send the user straight to the dashboard that matches their role.
     if (!next) {
-      return NextResponse.redirect(`${origin}${dashboardFor(role)}`);
+      let dest = dashboardFor(role);
+      if (!role) {
+        // The role claim can lag a brand-new OAuth signup: the access-token hook
+        // (or the profile-default trigger) may not be reflected in the token we
+        // just exchanged. Refresh once to pick it up; if it's STILL absent, send
+        // the user to the default (STUDENT) dashboard rather than bouncing an
+        // authenticated user back to /login (a confusing dead-end).
+        await db.auth.refreshSession();
+        const refreshed = await getSessionClaims(db);
+        dest = refreshed.role ? dashboardFor(refreshed.role) : '/student';
+      }
+      return NextResponse.redirect(`${origin}${dest}`);
     }
   }
   return NextResponse.redirect(`${origin}${next ?? '/login'}`);

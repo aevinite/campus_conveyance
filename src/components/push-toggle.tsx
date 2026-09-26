@@ -43,6 +43,9 @@ export function PushToggle() {
       'PushManager' in window &&
       'Notification' in window &&
       !!VAPID_PUBLIC;
+    // Client-only capability probe (window/navigator are unavailable during SSR),
+    // so it must run after mount — not a cascading-render hazard.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSupported(ok);
     if (!ok) return;
 

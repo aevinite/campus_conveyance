@@ -40,7 +40,25 @@ export async function rateLimit(
   windowSeconds: number,
   opts?: { failClosed?: boolean },
 ): Promise<number> {
-  const onError = () => (opts?.failClosed ? Math.max(1, windowSeconds) : 0);
+  // A MISSING limiter function (migration drift / deploy error) must NOT fail
+  // closed: that would return a positive back-off for EVERY call and lock all
+  // logins + OTP out — the documented "rate_limit_hit not applied → Too many
+  // failed attempts on every login" incident. Detect that specific case, log it
+  // loudly, and fail OPEN so auth stays up. Genuine transient store errors still
+  // honour the caller's fail-open/closed policy.
+  const onError = (err?: { code?: string; message?: string } | null) => {
+    const code = err?.code ?? '';
+    const msg = err?.message ?? '';
+    const missingFn =
+      code === 'PGRST202' ||
+      code === '42883' ||
+      /rate_limit_hit|does not exist|schema cache|find the function/i.test(msg);
+    if (missingFn) {
+      console.error(`rate-limit RPC unavailable (${scope}) — failing OPEN:`, msg || err);
+      return 0;
+    }
+    return opts?.failClosed ? Math.max(1, windowSeconds) : 0;
+  };
   try {
     const admin = createAdminClient();
     const key = subject.trim().toLowerCase();
@@ -50,10 +68,10 @@ export async function rateLimit(
       p_max: max,
       p_window_seconds: windowSeconds,
     });
-    if (error) return onError();
+    if (error) return onError(error);
     return typeof data === 'number' ? data : 0;
-  } catch {
-    return onError();
+  } catch (e) {
+    return onError(e as { code?: string; message?: string });
   }
 }
 

@@ -5,9 +5,11 @@
 //
 // There are TWO independent switches:
 //   • website — pauses ordinary browser visitors.
-//   • app     — pauses the installed PWA / packaged APK (standalone display).
-// The proxy tells the two apart from a `client_kind` cookie (see
-// components/client-kind.tsx) and blocks only the matching audience.
+//   • app     — pauses the packaged Capacitor APK.
+// The proxy tells the two apart from the `CampusConveyanceApp` User-Agent marker
+// the native app sends (see APP_UA_MARKER in proxy.ts) and blocks only the
+// matching audience. Note: a standalone-installed PWA has no UA marker, so it is
+// treated as `website`.
 //
 // The proxy checks this on every request, so we keep a short in-process cache to
 // avoid a DB round-trip per request. Each instance converges on the latest value
@@ -54,8 +56,8 @@ export async function getMaintenance(): Promise<MaintenanceState> {
   }
 }
 
-// Is the given audience currently paused? `kind` comes from the client_kind
-// cookie/marker; anything that isn't the app is treated as the website.
+// Is the given audience currently paused? `kind` comes from the app UA marker
+// (see proxy.ts); anything that isn't the app is treated as the website.
 export async function isMaintenanceOn(kind: MaintenanceTarget): Promise<boolean> {
   const state = await getMaintenance();
   return kind === 'app' ? state.app : state.website;
