@@ -12,15 +12,14 @@ import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { AgencyProfileForm } from './agency-profile-form';
 import { ServiceForm } from './service-form';
 import { formatDate, formatDateTime } from '@/lib/format-date';
+import { StatusBadge } from '@/components/status-badge';
+import { serviceRequestStage, STAGE_LABEL, STAGE_TONE } from '@/lib/service-request-stage';
 
 const fmtDate = (v?: string | null) => formatDate(v);
 const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
-const STATUS_STYLE: Record<string, string> = {
-  PENDING: 'border-warning/40 bg-warning/10 text-warning',
-  APPROVED: 'border-success/40 bg-success/10 text-success',
-  REJECTED: 'border-destructive/40 bg-destructive/10 text-destructive',
-};
+// Agency approval status (agencies.status) — distinct from the two-stage
+// service-request stage shown per request row.
 const STATUS_LABEL: Record<string, string> = {
   PENDING: 'Awaiting admin',
   APPROVED: 'Approved',
@@ -224,10 +223,12 @@ function RequestRow({
     name: string;
     vehicle_type: string;
     status: string;
+    campus_status: string;
     rejected_reason: string | null;
     institutionName: string;
   };
 }) {
+  const stage = serviceRequestStage(r.status, r.campus_status);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/40 p-3 transition-colors hover:border-primary/30">
       <div className="min-w-0">
@@ -236,16 +237,12 @@ function RequestRow({
         </p>
         <p className="truncate text-sm text-muted-foreground">
           {r.institutionName}
-          {r.status === 'REJECTED' && r.rejected_reason ? ` · Reason: ${r.rejected_reason}` : ''}
+          {(stage === 'CAMPUS_REJECTED' || stage === 'ADMIN_REJECTED') && r.rejected_reason
+            ? ` · Reason: ${r.rejected_reason}`
+            : ''}
         </p>
       </div>
-      <span
-        className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-          STATUS_STYLE[r.status] ?? 'border-border text-muted-foreground'
-        }`}
-      >
-        {STATUS_LABEL[r.status] ?? r.status}
-      </span>
+      <StatusBadge value={STAGE_LABEL[stage]} tone={STAGE_TONE[stage]} />
     </div>
   );
 }

@@ -395,7 +395,10 @@ export async function requestServiceAction(_: FormState, formData: FormData): Pr
     return { error: toErrorResponse(e).message };
   }
   revalidatePath('/agency/account');
-  return { message: 'Request submitted — an admin will review it shortly.' };
+  return {
+    message:
+      'Request sent to the school/college for review. Once they accept it, the platform admin gives final approval to make it live.',
+  };
 }
 
 /** A URL only counts if it points at our own vehicle-photos storage bucket. */

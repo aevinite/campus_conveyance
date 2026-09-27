@@ -26,7 +26,12 @@ function refresh() {
   revalidatePath('/institution');
 }
 
-/** Approve an agency's request to serve this campus → create the live service. */
+/**
+ * Campus accepts an agency's request to serve this campus. This is the FIRST of
+ * two stages: it does NOT create the live service — it forwards the request to
+ * the platform admin, who gives the final approval (which creates the service).
+ * Flips campus_status PENDING→APPROVED; the admin's `status` stays PENDING.
+ */
 export async function approveCampusServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
@@ -37,15 +42,17 @@ export async function approveCampusServiceRequestAction(formData: FormData): Pro
   const { userId } = await getSessionClaims(server);
   const admin = createAdminClient();
 
-  // Atomic claim: flip PENDING→APPROVED only if the request is still pending AND
-  // belongs to this campus. A double-click / cross-campus id matches nothing.
+  // Atomic claim: flip campus_status PENDING→APPROVED only if still pending at
+  // the campus AND belonging to this campus. A double-click / cross-campus id
+  // matches nothing. No agency_services row is created here — that's the admin's
+  // final approval step.
   const { data: claimed, error: claimErr } = await admin
     .from('agency_service_requests')
-    .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: userId })
+    .update({ campus_status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: userId })
     .eq('id', id)
-    .eq('status', 'PENDING')
+    .eq('campus_status', 'PENDING')
     .eq('institution_id', campus)
-    .select('id, agency_id, institution_id, vehicle_type, name, description')
+    .select('id, agency_id')
     .maybeSingle();
   if (claimErr) throw claimErr;
   if (!claimed) {
@@ -53,27 +60,14 @@ export async function approveCampusServiceRequestAction(formData: FormData): Pro
     return; // already handled, or not this campus's request
   }
 
-  // Upsert (never duplicate) the live service — backed by the unique index on
-  // (agency_id, institution_id, vehicle_type). Mirrors the SUPER_ADMIN flow.
-  const { error: insErr } = await admin.from('agency_services').upsert(
-    {
-      agency_id: claimed.agency_id,
-      institution_id: claimed.institution_id,
-      vehicle_type: claimed.vehicle_type,
-      name: claimed.name,
-      description: claimed.description,
-    },
-    { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true },
-  );
-  if (insErr) throw insErr;
-
-  // The agency's own dashboard "services" tile is cached per-agency — bust it so
-  // it doesn't lag behind the approval.
+  // The agency's own "requests" tile shows the stage — bust its per-agency cache
+  // so "Awaiting admin" doesn't lag behind the campus's accept.
   updateTag(agencyReportTag(claimed.agency_id as string));
   refresh();
 }
 
-/** Reject an agency's request to serve this campus. */
+/** Campus rejects an agency's request. Terminal — the request never reaches the
+ *  admin as actionable; the admin sees it as "Rejected by campus". */
 export async function rejectCampusServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
@@ -85,16 +79,20 @@ export async function rejectCampusServiceRequestAction(formData: FormData): Prom
   const { userId } = await getSessionClaims(server);
   const admin = createAdminClient();
 
+  // Mark BOTH columns REJECTED: campus_status records who said no, and clearing
+  // status out of 'PENDING' frees the partial unique index so the agency can
+  // file a fresh request later.
   await admin
     .from('agency_service_requests')
     .update({
+      campus_status: 'REJECTED',
       status: 'REJECTED',
       rejected_reason: reason || null,
       reviewed_at: new Date().toISOString(),
       reviewed_by: userId,
     })
     .eq('id', id)
-    .eq('status', 'PENDING')
+    .eq('campus_status', 'PENDING')
     .eq('institution_id', campus);
   refresh();
 }

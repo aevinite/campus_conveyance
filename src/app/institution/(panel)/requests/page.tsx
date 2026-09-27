@@ -12,14 +12,15 @@ import { StatusBadge } from '@/components/status-badge';
 import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/format-date';
+import { serviceRequestStage, STAGE_LABEL, STAGE_TONE } from '@/lib/service-request-stage';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionRequestsPage() {
   const institutionId = await resolveInstitutionId();
   const requests = institutionId ? await listServiceRequestsForInstitution(institutionId) : [];
-  const pending = requests.filter((r) => r.status === 'PENDING');
-  const decided = requests.filter((r) => r.status !== 'PENDING');
+  const pending = requests.filter((r) => r.campusStatus === 'PENDING');
+  const decided = requests.filter((r) => r.campusStatus !== 'PENDING');
 
   return (
     <section className="space-y-5">
@@ -30,7 +31,8 @@ export default async function InstitutionRequestsPage() {
         </span>
         <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Agency requests</h1>
         <p className="text-muted-foreground">
-          Agencies asking to serve your campus. Approving adds them as a live provider under Agencies.
+          Agencies asking to serve your campus. Accepting forwards the request to the platform admin
+          for final approval — the agency goes live under Agencies once the admin approves.
         </p>
       </div>
 
@@ -60,8 +62,8 @@ export default async function InstitutionRequestsPage() {
                 <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
                   <form action={approveCampusServiceRequestAction}>
                     <input type="hidden" name="requestId" value={r.id} />
-                    <SubmitButton size="sm" pendingText="Approving…">
-                      Approve
+                    <SubmitButton size="sm" pendingText="Accepting…">
+                      Accept &amp; forward
                     </SubmitButton>
                   </form>
                   <form action={rejectCampusServiceRequestAction} className="flex items-end gap-2">
@@ -82,20 +84,23 @@ export default async function InstitutionRequestsPage() {
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Reviewed</h2>
           <div className="divide-y divide-border rounded-2xl border border-border bg-card">
-            {decided.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {r.agencyName} · {r.name}{' '}
-                    <span className="text-muted-foreground">({r.vehicleType === 'VAN' ? 'Van' : 'Bus'})</span>
-                  </p>
-                  {r.status === 'REJECTED' && r.rejectedReason && (
-                    <p className="text-xs text-muted-foreground">Reason: {r.rejectedReason}</p>
-                  )}
+            {decided.map((r) => {
+              const stage = serviceRequestStage(r.status, r.campusStatus);
+              return (
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {r.agencyName} · {r.name}{' '}
+                      <span className="text-muted-foreground">({r.vehicleType === 'VAN' ? 'Van' : 'Bus'})</span>
+                    </p>
+                    {stage === 'CAMPUS_REJECTED' && r.rejectedReason && (
+                      <p className="text-xs text-muted-foreground">Reason: {r.rejectedReason}</p>
+                    )}
+                  </div>
+                  <StatusBadge value={STAGE_LABEL[stage]} tone={STAGE_TONE[stage]} />
                 </div>
-                <StatusBadge value={r.status} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -701,7 +701,8 @@ export interface InstitutionServiceRequestRow {
   name: string;
   description: string | null;
   vehicleType: 'BUS' | 'VAN';
-  status: string; // PENDING | APPROVED | REJECTED
+  status: string; // admin's final decision: PENDING | APPROVED | REJECTED
+  campusStatus: string; // this campus's decision: PENDING | APPROVED | REJECTED
   rejectedReason: string | null;
   created_at: string | null;
 }
@@ -716,13 +717,14 @@ export async function listServiceRequestsForInstitution(
   const client = db();
   const { data, error } = await client
     .from('agency_service_requests')
-    .select('id, agency_id, name, description, vehicle_type, status, rejected_reason, created_at')
+    .select('id, agency_id, name, description, vehicle_type, status, campus_status, rejected_reason, created_at')
     .eq('institution_id', institutionId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   const rows = (data ?? []) as {
     id: string; agency_id: string; name: string; description: string | null;
-    vehicle_type: string | null; status: string; rejected_reason: string | null; created_at: string | null;
+    vehicle_type: string | null; status: string; campus_status: string;
+    rejected_reason: string | null; created_at: string | null;
   }[];
   const agencies = await mapByIds<{ id: string; name: string }>(
     client,
@@ -737,11 +739,12 @@ export async function listServiceRequestsForInstitution(
     description: r.description,
     vehicleType: (r.vehicle_type as 'BUS' | 'VAN') ?? 'BUS',
     status: r.status,
+    campusStatus: r.campus_status,
     rejectedReason: r.rejected_reason,
     created_at: r.created_at,
   }));
-  // PENDING first (needs action), then the rest already in most-recent order.
-  return out.sort((a, b) => (a.status === 'PENDING' ? 0 : 1) - (b.status === 'PENDING' ? 0 : 1));
+  // Awaiting-campus first (needs action), then the rest in most-recent order.
+  return out.sort((a, b) => (a.campusStatus === 'PENDING' ? 0 : 1) - (b.campusStatus === 'PENDING' ? 0 : 1));
 }
 
 // ---- Reviews of agencies serving the campus -------------------------------

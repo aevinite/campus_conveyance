@@ -138,17 +138,60 @@ export interface ServiceRequest {
   created_at: string;
   agencyName: string;
   institutionName: string;
+  status: string; // admin's final decision
+  campusStatus: string; // the campus's decision
 }
 
-/** Pending agency service-area requests, for admin review. */
+const SR_SELECT =
+  'id, name, description, vehicle_type, status, campus_status, created_at, agencies(name), institutions(name)';
+
+function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
+  const ag = r.agencies as { name: string } | { name: string }[] | null;
+  const inst = r.institutions as { name: string } | { name: string }[] | null;
+  return {
+    id: r.id as string,
+    name: r.name as string,
+    description: (r.description as string) ?? '',
+    vehicle_type: r.vehicle_type as string,
+    status: r.status as string,
+    campusStatus: r.campus_status as string,
+    created_at: r.created_at as string,
+    agencyName: (Array.isArray(ag) ? ag[0]?.name : ag?.name) ?? '—',
+    institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
+  };
+}
+
+/**
+ * Requests the admin can act on NOW: the campus has accepted (campus_status
+ * APPROVED) and the admin hasn't decided yet (status PENDING). Oldest first
+ * (FIFO). Not paginated — this actionable set is naturally small.
+ */
+export async function listActionableServiceRequests(db: SupabaseClient): Promise<ServiceRequest[]> {
+  const { data, error } = await db
+    .from('agency_service_requests')
+    .select(SR_SELECT)
+    .eq('campus_status', 'APPROVED')
+    .eq('status', 'PENDING')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapServiceRequest);
+}
+
+/**
+ * The rest of the pipeline (everything NOT currently awaiting the admin) — for
+ * read-only visibility: awaiting campus, rejected by campus, live, rejected by
+ * admin. Most-recent first, paginated.
+ */
 export async function listServiceRequests(
   db: SupabaseClient,
   opts: { limit?: number; offset?: number } = {},
 ): Promise<ServiceRequest[]> {
   let q = db
     .from('agency_service_requests')
-    .select('id, name, description, vehicle_type, created_at, agencies(name), institutions(name)')
-    .eq('status', 'PENDING')
+    .select(SR_SELECT)
+    // NOT (campus_status=APPROVED AND status=PENDING) — that set is the
+    // actionable list shown separately.
+    .or('campus_status.neq.APPROVED,status.neq.PENDING')
     .order('created_at', { ascending: false });
   if (opts.limit != null) {
     const off = opts.offset ?? 0;
@@ -156,27 +199,15 @@ export async function listServiceRequests(
   }
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []).map((r) => {
-    const ag = r.agencies as { name: string } | { name: string }[] | null;
-    const inst = r.institutions as { name: string } | { name: string }[] | null;
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      description: (r.description as string) ?? '',
-      vehicle_type: r.vehicle_type as string,
-      created_at: r.created_at as string,
-      agencyName: (Array.isArray(ag) ? ag[0]?.name : ag?.name) ?? '—',
-      institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
-    };
-  });
+  return (data ?? []).map(mapServiceRequest);
 }
 
-/** Count of pending service-area requests, for that page's pager. */
+/** Count of pipeline (non-actionable) requests, for that page's pager. */
 export async function countServiceRequests(db: SupabaseClient): Promise<number> {
   const { count, error } = await db
     .from('agency_service_requests')
     .select('id', { count: 'exact', head: true })
-    .eq('status', 'PENDING');
+    .or('campus_status.neq.APPROVED,status.neq.PENDING');
   if (error) throw error;
   return count ?? 0;
 }

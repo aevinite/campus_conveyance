@@ -283,6 +283,9 @@ export async function approveServiceRequestAction(formData: FormData): Promise<v
     .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: await reviewerId(db) })
     .eq('id', id)
     .eq('status', 'PENDING')
+    // Final approval is only available AFTER the campus has accepted (two-stage
+    // flow, migration 0124). A request the campus hasn't accepted matches nothing.
+    .eq('campus_status', 'APPROVED')
     .select('id, agency_id, institution_id, vehicle_type, name, description')
     .maybeSingle();
   // A failed write also yields claimed=null — surface it instead of treating it
@@ -330,10 +333,12 @@ export async function rejectServiceRequestAction(formData: FormData): Promise<vo
       reviewed_by: await reviewerId(db),
     })
     .eq('id', id)
-    // Only a still-PENDING request can be rejected — mirrors approve's atomic
-    // claim, so a reject-after-approve race can't flip an APPROVED request back
-    // to REJECTED while leaving the live agency_services row in place.
+    // Only a still-PENDING request the campus has accepted can be rejected here —
+    // mirrors approve's atomic claim (two-stage flow, migration 0124), so a
+    // reject-after-approve race can't flip an APPROVED request back to REJECTED
+    // while leaving the live agency_services row in place.
     .eq('status', 'PENDING')
+    .eq('campus_status', 'APPROVED')
     .select('id')
     .maybeSingle();
   if (error) throw new AppError('ADMIN', error.message);

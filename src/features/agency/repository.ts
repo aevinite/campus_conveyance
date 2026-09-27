@@ -147,6 +147,7 @@ export interface ServiceRequestRow {
   name: string;
   vehicle_type: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  campus_status: 'PENDING' | 'APPROVED' | 'REJECTED';
   rejected_reason: string | null;
   institutionName: string;
   created_at: string;
@@ -159,7 +160,7 @@ export async function listMyServiceRequests(
 ): Promise<ServiceRequestRow[]> {
   const { data, error } = await db
     .from('agency_service_requests')
-    .select('id, name, vehicle_type, status, rejected_reason, created_at, institutions(name)')
+    .select('id, name, vehicle_type, status, campus_status, rejected_reason, created_at, institutions(name)')
     .eq('agency_id', agencyId)
     .order('created_at', { ascending: false })
     .limit(1000); // defensive cap (owner-scoped, naturally small)
@@ -171,6 +172,7 @@ export async function listMyServiceRequests(
       name: r.name as string,
       vehicle_type: r.vehicle_type as string,
       status: r.status as ServiceRequestRow['status'],
+      campus_status: r.campus_status as ServiceRequestRow['campus_status'],
       rejected_reason: (r.rejected_reason as string) ?? null,
       institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
       created_at: r.created_at as string,
