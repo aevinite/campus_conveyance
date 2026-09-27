@@ -2,12 +2,12 @@ import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
 import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
-import { AdminShell, type AdminNavGroup } from '@/components/admin/admin-shell';
+import { PanelShell, type PanelNavGroup } from '@/components/panel/panel-shell';
 
 // Grouped nav — mirrors the reference's OPERATE / MANAGE / … sections while
 // keeping every existing admin destination. Icons are referenced by name and
-// resolved on the client inside AdminShell.
-const GROUPS: AdminNavGroup[] = [
+// resolved on the client inside PanelShell.
+const GROUPS: PanelNavGroup[] = [
   {
     heading: 'Operate',
     items: [
@@ -67,15 +67,16 @@ export default async function AdminPanelLayout({
   ]);
 
   return (
-    <AdminShell
+    <PanelShell
       groups={GROUPS}
       homeHref="/aevinite"
+      subtitle="Platform admin"
       footer="Campus Conveyance · Transit OS"
       notifications={notifications}
       unread={unread}
       userId={userId}
     >
       {children}
-    </AdminShell>
+    </PanelShell>
   );
 }

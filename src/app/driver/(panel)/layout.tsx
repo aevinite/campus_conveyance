@@ -1,27 +1,19 @@
 import { ShieldAlert } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { getSessionClaims } from '@/features/auth/session';
 import { isAppRequest } from '@/lib/app-context';
 import { getDriverProfile, getDriverStatus, listDriverBuses } from '@/features/driver/repository';
-import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
+import { PanelShell, type PanelNavGroup } from '@/components/panel/panel-shell';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { DriverTracker } from '@/components/driver-tracker';
 import { DriverBottomNav, type DriverNavItem } from '@/components/driver-bottom-nav';
+import { NotificationBell } from '@/components/notification-bell';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { logoutAction } from '@/features/auth/actions';
 import { SubmitButton } from '@/components/submit-button';
-
-const BASE_ITEMS: SidebarItem[] = [
-  { label: 'Dashboard', href: '/driver', icon: 'LayoutDashboard' },
-  { label: 'My Buses', href: '/driver/buses', icon: 'BusFront' },
-  { label: 'My Riders', href: '/driver/riders', icon: 'Users' },
-  { label: 'Profile', href: '/driver/profile', icon: 'UserCircle' },
-];
-// "Live map" and "Route progress" are only useful to a driver actually driving
-// a bus today, so they show on the same condition as the online/offline toggle.
-const LIVE_ITEM: SidebarItem = { label: 'Live map', href: '/driver/live', icon: 'Route' };
-const STOPS_ITEM: SidebarItem = { label: 'Route progress', href: '/driver/stops', icon: 'Milestone' };
 
 export default async function DriverPanelLayout({ children }: { children: React.ReactNode }) {
   await requireRole('DRIVER', '/driver/login');
@@ -68,10 +60,35 @@ export default async function DriverPanelLayout({ children }: { children: React.
     );
   }
 
-  // Dashboard, Live map, Route progress, then My Buses / My Riders / Profile.
-  const items = drivesToday
-    ? [BASE_ITEMS[0], LIVE_ITEM, STOPS_ITEM, ...BASE_ITEMS.slice(1)]
-    : BASE_ITEMS;
+  // Grouped nav. "Live map" + "Route progress" only show for a driver actually
+  // driving a bus today (same condition as the online/offline toggle).
+  const driveItems: PanelNavGroup['items'] = [
+    { label: 'Dashboard', href: '/driver', icon: 'LayoutDashboard' },
+    ...(drivesToday
+      ? ([
+          { label: 'Live map', href: '/driver/live', icon: 'Route' },
+          { label: 'Route progress', href: '/driver/stops', icon: 'Milestone' },
+        ] as PanelNavGroup['items'])
+      : []),
+  ];
+  const groups: PanelNavGroup[] = [
+    { heading: 'Drive', items: driveItems },
+    {
+      heading: 'Manage',
+      items: [
+        { label: 'My Buses', href: '/driver/buses', icon: 'BusFront' },
+        { label: 'My Riders', href: '/driver/riders', icon: 'Users' },
+      ],
+    },
+    { heading: 'Account', items: [{ label: 'Profile', href: '/driver/profile', icon: 'UserCircle' }] },
+  ];
+
+  // Notifications for the header bell (RLS-scoped), shared by app + website chrome.
+  const { userId } = await getSessionClaims(db);
+  const [notifications, unread] = await Promise.all([
+    listNotifications(db),
+    unreadNotificationCount(db),
+  ]);
 
   // Native app: an app-native shell — compact top bar + a fixed bottom tab bar
   // instead of the desktop sidebar. On a trip the tabs surface Live + Stops (My
@@ -95,13 +112,14 @@ export default async function DriverPanelLayout({ children }: { children: React.
     return (
       <div className="flex min-h-screen flex-col bg-muted/30">
         <header
-          className="dark sticky top-0 z-20 border-b border-sidebar-border bg-sidebar/95 text-sidebar-foreground backdrop-blur-xl"
+          className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur-xl"
           // Clear the native app's status bar (edge-to-edge).
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <Logo href="/driver" />
             <div className="flex items-center gap-2">
+              <NotificationBell items={notifications} unread={unread} userId={userId} />
               <ThemeToggle />
               <form action={logoutAction}>
                 <SubmitButton variant="outline" size="sm" pendingText="…">
@@ -122,9 +140,17 @@ export default async function DriverPanelLayout({ children }: { children: React.
   }
 
   return (
-    <PanelSidebar items={items} homeHref="/driver" greeting={me.name ? `Hi, ${me.name}` : 'Driver'}>
+    <PanelShell
+      groups={groups}
+      homeHref="/driver"
+      subtitle={me.name ? me.name : 'Driver'}
+      footer="Campus Conveyance · Driver"
+      notifications={notifications}
+      unread={unread}
+      userId={userId}
+    >
       {drivesToday && <DriverTracker initialOnline={status?.is_online ?? false} />}
       {children}
-    </PanelSidebar>
+    </PanelShell>
   );
 }

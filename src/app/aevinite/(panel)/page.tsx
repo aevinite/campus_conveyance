@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
 import { DownloadReportButton } from '@/components/download-report-button';
-import { PageHeader } from '@/components/admin/page-header';
-import { StatStrip } from '@/components/admin/stat-strip';
+import { PageHeader } from '@/components/panel/page-header';
+import { StatStrip } from '@/components/panel/stat-strip';
 
 // Currency uses the shared rupees() helper (was a duplicated local formatter).
 const inr = rupees;

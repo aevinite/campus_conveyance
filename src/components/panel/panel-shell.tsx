@@ -15,7 +15,10 @@ import {
   Ticket,
   Wallet,
   Bus,
+  BusFront,
   Route,
+  MapPlus,
+  Milestone,
   IdCard,
   UsersRound,
   Users,
@@ -26,10 +29,12 @@ import {
   PlusCircle,
   Inbox,
   ClipboardList,
+  Eye,
   Star,
   Mail,
   Bell,
   Trash2,
+  ReceiptText,
   History,
   UserCircle,
   Settings,
@@ -43,15 +48,19 @@ import type { NotificationRow } from '@/features/notifications/repository';
 import { cn } from '@/lib/utils';
 
 // A Server Component can't pass component functions across the server→client
-// boundary, so the layout references each icon by name (a string) and we resolve
-// it to the Lucide component here on the client.
+// boundary, so a layout references each icon by name (a string) and we resolve
+// it to the Lucide component here on the client. This registry covers every
+// panel (admin / agency / institution / driver).
 const ICONS = {
   LayoutDashboard,
   Radio,
   Ticket,
   Wallet,
   Bus,
+  BusFront,
   Route,
+  MapPlus,
+  Milestone,
   IdCard,
   UsersRound,
   Users,
@@ -62,26 +71,28 @@ const ICONS = {
   PlusCircle,
   Inbox,
   ClipboardList,
+  Eye,
   Star,
   Mail,
   Bell,
   Trash2,
+  ReceiptText,
   History,
   UserCircle,
   Settings,
 } as const;
 
-export type AdminIcon = keyof typeof ICONS;
+export type PanelIcon = keyof typeof ICONS;
 
-export interface AdminNavItem {
+export interface PanelNavItem {
   label: string;
   href: string;
-  icon: AdminIcon;
+  icon: PanelIcon;
 }
 
-export interface AdminNavGroup {
+export interface PanelNavGroup {
   heading: string;
-  items: AdminNavItem[];
+  items: PanelNavItem[];
 }
 
 function LogoutButton() {
@@ -100,13 +111,13 @@ function LogoutButton() {
 }
 
 /** The grouped nav list, shared by the desktop rail and the mobile drawer. */
-function AdminNav({
+function PanelNav({
   groups,
   pathname,
   homeHref,
   onNavigate,
 }: {
-  groups: AdminNavGroup[];
+  groups: PanelNavGroup[];
   pathname: string;
   homeHref: string;
   onNavigate?: () => void;
@@ -120,7 +131,7 @@ function AdminNav({
           </p>
           <div className="space-y-0.5">
             {group.items.map((it) => {
-              // Exact match for the dashboard root, prefix match for sub-pages.
+              // Exact match for the home root, prefix match for sub-pages.
               const active =
                 pathname === it.href ||
                 (it.href !== homeHref && pathname.startsWith(it.href + '/'));
@@ -155,35 +166,44 @@ function AdminNav({
   );
 }
 
-/** Brand block at the top of the rail — mark + product name + role subtitle. */
-function BrandBlock({ homeHref }: { homeHref: string }) {
+/** Brand block at the top of the rail — mark + product name + a role/org subtitle. */
+function BrandBlock({ homeHref, subtitle }: { homeHref: string; subtitle: string }) {
   return (
-    <Link href={homeHref} className="group flex items-center gap-3" aria-label="Campus Conveyance admin">
+    <Link href={homeHref} className="group flex items-center gap-3" aria-label="Campus Conveyance">
       <BrandMark className="size-10 shrink-0 rounded-[12px] shadow-sm transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105" />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="truncate font-heading text-[15px] font-bold tracking-tight text-foreground">
           Campus Conveyance
         </span>
-        <span className="truncate text-xs text-muted-foreground">Platform admin</span>
+        <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
       </span>
     </Link>
   );
 }
 
-export function AdminShell({
+/**
+ * The shared panel chrome — a light, grouped desktop rail + a top bar (Live
+ * chip, notifications, theme, logout) + a mobile slide-over drawer. Used by the
+ * admin / agency / institution / driver desktop (website) panels so every role
+ * gets the same look. Purely presentational apart from the notification data it
+ * threads to the bell.
+ */
+export function PanelShell({
   groups,
   homeHref,
+  subtitle,
   footer,
-  notifications,
-  unread,
+  notifications = [],
+  unread = 0,
   userId,
   children,
 }: {
-  groups: AdminNavGroup[];
+  groups: PanelNavGroup[];
   homeHref: string;
+  subtitle: string;
   footer?: string;
-  notifications: NotificationRow[];
-  unread: number;
+  notifications?: NotificationRow[];
+  unread?: number;
   userId?: string | null;
   children: React.ReactNode;
 }) {
@@ -206,9 +226,9 @@ export function AdminShell({
       {/* Desktop rail — light, grouped. */}
       <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
         <div className="px-5 py-5">
-          <BrandBlock homeHref={homeHref} />
+          <BrandBlock homeHref={homeHref} subtitle={subtitle} />
         </div>
-        <AdminNav groups={groups} pathname={pathname} homeHref={homeHref} />
+        <PanelNav groups={groups} pathname={pathname} homeHref={homeHref} />
         {footer && (
           <p className="border-t border-sidebar-border px-5 py-3.5 text-xs text-muted-foreground">
             {footer}
@@ -228,12 +248,12 @@ export function AdminShell({
             >
               <Menu className="size-5" />
             </button>
-            <Link href={homeHref} className="flex items-center gap-2 lg:hidden" aria-label="Campus Conveyance admin">
+            <Link href={homeHref} className="flex items-center gap-2 lg:hidden" aria-label="Campus Conveyance">
               <BrandMark className="size-8 shrink-0 rounded-[10px] shadow-sm" />
-              <span className="font-heading text-sm font-bold tracking-tight">Admin</span>
+              <span className="truncate font-heading text-sm font-bold tracking-tight">{subtitle}</span>
             </Link>
             {/* Live status — the panel auto-refreshes; this mirrors the reference's
-                "Live" chip so an operator knows the data is current. */}
+                "Live" chip so the operator knows the data is current. */}
             <span className="ml-1 hidden items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-600 sm:inline-flex dark:text-emerald-400">
               <Activity className="size-3.5" />
               Live
@@ -269,7 +289,7 @@ export function AdminShell({
             className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl outline-none"
           >
             <div className="flex items-center justify-between gap-2 px-5 py-5">
-              <BrandBlock homeHref={homeHref} />
+              <BrandBlock homeHref={homeHref} subtitle={subtitle} />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -279,7 +299,7 @@ export function AdminShell({
                 <X className="size-5" />
               </button>
             </div>
-            <AdminNav
+            <PanelNav
               groups={groups}
               pathname={pathname}
               homeHref={homeHref}

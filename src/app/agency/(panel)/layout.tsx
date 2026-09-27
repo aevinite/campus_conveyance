@@ -1,33 +1,58 @@
 import { Clock3, ShieldAlert } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { getSessionClaims } from '@/features/auth/session';
 import { isAppRequest } from '@/lib/app-context';
 import { getMyAgency } from '@/features/agency/repository';
-import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
+import { PanelShell, type PanelNavGroup } from '@/components/panel/panel-shell';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { AgencyBottomNav } from '@/components/agency-bottom-nav';
+import { NotificationBell } from '@/components/notification-bell';
 import { Logo } from '@/components/brand';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { logoutAction } from '@/features/auth/actions';
 import { SubmitButton } from '@/components/submit-button';
 
-const ITEMS: SidebarItem[] = [
-  { label: 'Dashboard', href: '/agency', icon: 'LayoutDashboard' },
-  { label: 'Manage Students', href: '/agency/students', icon: 'Users' },
-  { label: 'Deleted Students', href: '/agency/deleted-students', icon: 'UserMinus' },
-  { label: 'Manage Booking', href: '/agency/bookings', icon: 'ClipboardList' },
-  { label: 'View Booking', href: '/agency/view-bookings', icon: 'Eye' },
-  { label: 'Completed Payments', href: '/agency/payments', icon: 'Wallet' },
-  { label: 'Cancellations & Refunds', href: '/agency/refunds', icon: 'ReceiptText' },
-  { label: 'Reviews', href: '/agency/reviews', icon: 'Star' },
-  { label: 'Add Bus', href: '/agency/add-bus', icon: 'Bus' },
-  { label: 'Manage Buses', href: '/agency/buses', icon: 'BusFront' },
-  { label: 'Add Route', href: '/agency/add-route', icon: 'MapPlus' },
-  { label: 'Manage Routes', href: '/agency/routes', icon: 'Route' },
-  { label: 'Manage Drivers', href: '/agency/drivers', icon: 'IdCard' },
-  { label: 'Deleted Drivers', href: '/agency/deleted-drivers', icon: 'Trash2' },
-  { label: 'Profile', href: '/agency/account', icon: 'UserCircle' },
-  { label: 'Settings', href: '/agency/settings', icon: 'Settings' },
+// Grouped nav — same sectioned style as the admin panel, keeping every agency
+// destination. Icons resolve by name inside PanelShell.
+const GROUPS: PanelNavGroup[] = [
+  {
+    heading: 'Operate',
+    items: [
+      { label: 'Dashboard', href: '/agency', icon: 'LayoutDashboard' },
+      { label: 'Manage Booking', href: '/agency/bookings', icon: 'ClipboardList' },
+      { label: 'View Booking', href: '/agency/view-bookings', icon: 'Eye' },
+      { label: 'Completed Payments', href: '/agency/payments', icon: 'Wallet' },
+      { label: 'Cancellations & Refunds', href: '/agency/refunds', icon: 'ReceiptText' },
+      { label: 'Reviews', href: '/agency/reviews', icon: 'Star' },
+    ],
+  },
+  {
+    heading: 'Fleet & routes',
+    items: [
+      { label: 'Add Bus', href: '/agency/add-bus', icon: 'Bus' },
+      { label: 'Manage Buses', href: '/agency/buses', icon: 'BusFront' },
+      { label: 'Add Route', href: '/agency/add-route', icon: 'MapPlus' },
+      { label: 'Manage Routes', href: '/agency/routes', icon: 'Route' },
+    ],
+  },
+  {
+    heading: 'People',
+    items: [
+      { label: 'Manage Students', href: '/agency/students', icon: 'Users' },
+      { label: 'Deleted Students', href: '/agency/deleted-students', icon: 'UserMinus' },
+      { label: 'Manage Drivers', href: '/agency/drivers', icon: 'IdCard' },
+      { label: 'Deleted Drivers', href: '/agency/deleted-drivers', icon: 'Trash2' },
+    ],
+  },
+  {
+    heading: 'Account',
+    items: [
+      { label: 'Profile', href: '/agency/account', icon: 'UserCircle' },
+      { label: 'Settings', href: '/agency/settings', icon: 'Settings' },
+    ],
+  },
 ];
 
 export default async function AgencyPanelLayout({
@@ -75,19 +100,30 @@ export default async function AgencyPanelLayout({
     );
   }
 
-  // Native app: compact top bar + fixed bottom tab bar (with a "More" sheet for
-  // the long tail of sections) instead of the desktop sidebar. Website keeps the
-  // PanelSidebar shell below.
+  // Notifications for the header bell (RLS-scoped to this user), shared by the
+  // app + website chrome.
+  const { userId } = await getSessionClaims(db);
+  const [notifications, unread] = await Promise.all([
+    listNotifications(db),
+    unreadNotificationCount(db),
+  ]);
+
+  // Native app: a light top bar (matching the panel redesign) + fixed bottom tab
+  // bar (with a grouped "More" sheet) instead of the desktop sidebar. Website
+  // keeps the PanelShell rail below.
   if (app) {
     return (
       <div className="flex min-h-screen flex-col bg-muted/30">
         <header
-          className="dark sticky top-0 z-20 border-b border-sidebar-border bg-sidebar/95 text-sidebar-foreground backdrop-blur-xl"
+          className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur-xl"
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <Logo href="/agency" />
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <NotificationBell items={notifications} unread={unread} userId={userId} />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         <main className="flex-1 p-4 pb-28"><AutoRefresh />{children}</main>
@@ -97,8 +133,16 @@ export default async function AgencyPanelLayout({
   }
 
   return (
-    <PanelSidebar items={ITEMS} homeHref="/agency" greeting={`Hi, ${agency.name}`}>
+    <PanelShell
+      groups={GROUPS}
+      homeHref="/agency"
+      subtitle={agency.name}
+      footer="Campus Conveyance · Service provider"
+      notifications={notifications}
+      unread={unread}
+      userId={userId}
+    >
       {children}
-    </PanelSidebar>
+    </PanelShell>
   );
 }

@@ -14,15 +14,25 @@ export interface StatItem {
 
 /**
  * A single bordered container split into evenly-divided stat cells — the
- * headline "N active / N · issues · online · orders" strip from the reference.
- * Cells stack on small screens and divide horizontally from `sm` up.
+ * headline strip from the reference. Cells stack two-up on small screens and
+ * divide horizontally from `sm` up. `cols` controls the wide-screen column count.
  */
-export function StatStrip({ items, className }: { items: StatItem[]; className?: string }) {
+export function StatStrip({
+  items,
+  cols = 4,
+  className,
+}: {
+  items: StatItem[];
+  cols?: 3 | 4;
+  className?: string;
+}) {
+  const wide = cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-4';
   return (
     <div
       className={cn(
         'grid grid-cols-2 divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-xs',
-        'sm:grid-cols-4 sm:divide-x',
+        wide,
+        'sm:divide-x',
         className,
       )}
     >
@@ -38,7 +48,7 @@ export function StatStrip({ items, className }: { items: StatItem[]; className?:
         );
         const cellClass = cn(
           'px-5 py-5',
-          // Row dividers on the 2-col mobile layout; the sm:divide-x handles wide.
+          // Row dividers for the 2-col mobile layout; sm:divide-x handles wide.
           i >= 2 && 'border-t sm:border-t-0',
           i % 2 === 1 && 'border-l sm:border-l-0',
         );

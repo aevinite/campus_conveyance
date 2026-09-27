@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils';
 
 /**
- * Standard admin page header — a small brand-tone eyebrow (breadcrumb-style),
+ * Standard panel page header — a small brand-tone eyebrow (breadcrumb-style),
  * a bold display title, an optional subtitle, and a right-aligned actions slot.
- * Gives every admin page the same "Dashboard / big title / actions" rhythm as
- * the reference layout. Purely presentational.
+ * Gives every panel page the same "eyebrow / big title / actions" rhythm as the
+ * reference layout. Purely presentational.
  */
 export function PageHeader({
   eyebrow,

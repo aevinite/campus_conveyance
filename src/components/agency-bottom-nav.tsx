@@ -18,6 +18,8 @@ import {
   Trash2,
   UserCircle,
   Settings,
+  Wallet,
+  ReceiptText,
   LogOut,
   type LucideIcon,
 } from 'lucide-react';
@@ -25,6 +27,7 @@ import { logoutAction } from '@/features/auth/actions';
 import { cn } from '@/lib/utils';
 
 type Item = { href: string; label: string; Icon: LucideIcon };
+type Group = { heading: string; items: Item[] };
 
 // Four daily-use tabs; everything else lives behind the "More" sheet.
 const TABS: Item[] = [
@@ -34,18 +37,43 @@ const TABS: Item[] = [
   { href: '/agency/buses', label: 'Buses', Icon: BusFront },
 ];
 
-const MORE: Item[] = [
-  { href: '/agency/routes', label: 'Routes', Icon: Route },
-  { href: '/agency/add-bus', label: 'Add Bus', Icon: Bus },
-  { href: '/agency/add-route', label: 'Add Route', Icon: MapPlus },
-  { href: '/agency/drivers', label: 'Drivers', Icon: IdCard },
-  { href: '/agency/view-bookings', label: 'View Booking', Icon: Eye },
-  { href: '/agency/reviews', label: 'Reviews', Icon: Star },
-  { href: '/agency/deleted-students', label: 'Deleted Students', Icon: UserMinus },
-  { href: '/agency/deleted-drivers', label: 'Deleted Drivers', Icon: Trash2 },
-  { href: '/agency/account', label: 'Profile', Icon: UserCircle },
-  { href: '/agency/settings', label: 'Settings', Icon: Settings },
+// The rest, grouped into sections that mirror the desktop rail.
+const MORE_GROUPS: Group[] = [
+  {
+    heading: 'Operate',
+    items: [
+      { href: '/agency/view-bookings', label: 'View Booking', Icon: Eye },
+      { href: '/agency/payments', label: 'Payments', Icon: Wallet },
+      { href: '/agency/refunds', label: 'Refunds', Icon: ReceiptText },
+      { href: '/agency/reviews', label: 'Reviews', Icon: Star },
+    ],
+  },
+  {
+    heading: 'Fleet & routes',
+    items: [
+      { href: '/agency/routes', label: 'Routes', Icon: Route },
+      { href: '/agency/add-bus', label: 'Add Bus', Icon: Bus },
+      { href: '/agency/add-route', label: 'Add Route', Icon: MapPlus },
+    ],
+  },
+  {
+    heading: 'People',
+    items: [
+      { href: '/agency/drivers', label: 'Drivers', Icon: IdCard },
+      { href: '/agency/deleted-students', label: 'Deleted Students', Icon: UserMinus },
+      { href: '/agency/deleted-drivers', label: 'Deleted Drivers', Icon: Trash2 },
+    ],
+  },
+  {
+    heading: 'Account',
+    items: [
+      { href: '/agency/account', label: 'Profile', Icon: UserCircle },
+      { href: '/agency/settings', label: 'Settings', Icon: Settings },
+    ],
+  },
 ];
+
+const MORE: Item[] = MORE_GROUPS.flatMap((g) => g.items);
 
 /**
  * Fixed bottom tab bar for the agency panel inside the native app — the
@@ -70,26 +98,35 @@ export function AgencyBottomNav() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
-            <div className="grid grid-cols-3 gap-3">
-              {MORE.map(({ href, label, Icon }) => {
-                const active = pathname.startsWith(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMoreOpen(false)}
-                    className={cn(
-                      'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-colors',
-                      active
-                        ? 'border-primary/40 bg-primary/[0.06] text-primary'
-                        : 'border-border bg-background/50 text-foreground',
-                    )}
-                  >
-                    <Icon className={cn('size-5', active ? 'text-primary' : 'text-primary/80')} />
-                    <span className="text-[11px] font-medium leading-tight">{label}</span>
-                  </Link>
-                );
-              })}
+            <div className="max-h-[65vh] space-y-4 overflow-y-auto">
+              {MORE_GROUPS.map((group) => (
+                <div key={group.heading}>
+                  <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/80">
+                    {group.heading}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {group.items.map(({ href, label, Icon }) => {
+                      const active = pathname.startsWith(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMoreOpen(false)}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-colors',
+                            active
+                              ? 'border-primary/40 bg-primary/[0.06] text-primary'
+                              : 'border-border bg-background/50 text-foreground',
+                          )}
+                        >
+                          <Icon className={cn('size-5', active ? 'text-primary' : 'text-primary/80')} />
+                          <span className="text-[11px] font-medium leading-tight">{label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             <form action={logoutAction} className="mt-3">
               <button

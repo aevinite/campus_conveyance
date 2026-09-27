@@ -8,6 +8,8 @@ import {
   countDriverBookings,
 } from '@/features/driver/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/panel/page-header';
+import { StatStrip } from '@/components/panel/stat-strip';
 
 export default async function DriverDashboard() {
   const db = await createClient();
@@ -29,19 +31,11 @@ export default async function DriverDashboard() {
 
   return (
     <section className="space-y-6 sm:space-y-8">
-      <div className="space-y-1">
-        {!app && (
-          <p className="text-xs font-semibold tracking-wider text-primary uppercase">
-            Driver dashboard
-          </p>
-        )}
-        <h1 className="text-2xl font-heading font-bold tracking-tight sm:text-3xl">
-          Welcome{me?.name ? `, ${me.name}` : ''}
-        </h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          {me?.agency_name ? `Driver at ${me.agency_name}.` : 'Your driving overview.'}
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={app ? undefined : 'Driver dashboard'}
+        title={`Welcome${me?.name ? `, ${me.name}` : ''}`}
+        subtitle={me?.agency_name ? `Driver at ${me.agency_name}.` : 'Your driving overview.'}
+      />
 
       {app ? (
         // Compact 3-up stat chips (stacked-card grid is too tall on a phone).
@@ -62,26 +56,10 @@ export default async function DriverDashboard() {
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {cards.map((c) => {
-            const Icon = c.icon;
-            return (
-              <Link key={c.label} href={c.href} className="group block">
-                <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
-                  <CardContent className="flex items-center gap-4 py-6">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                      <Icon className="size-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="tnum text-3xl font-bold tracking-tight">{c.value}</p>
-                      <p className="mt-0.5 text-sm text-muted-foreground">{c.label}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+        <StatStrip
+          cols={3}
+          items={cards.map((c) => ({ label: c.label, value: c.value, href: c.href }))}
+        />
       )}
 
       <Card>

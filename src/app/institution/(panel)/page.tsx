@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { Building2, Route, Users, Ticket, LayoutDashboard } from 'lucide-react';
 import { resolveInstitutionId, institutionOverview } from '@/features/institution/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/data-table';
+import { PageHeader } from '@/components/panel/page-header';
+import { StatStrip } from '@/components/panel/stat-strip';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,10 @@ export default async function InstitutionDashboard() {
       };
 
   const cards = [
-    { label: 'Routes serving campus', value: overview.routeCount, href: '/institution/routes', icon: Route },
-    { label: 'Agencies serving campus', value: overview.agencyCount, href: '/institution/agencies', icon: Building2 },
-    { label: 'Students riding', value: overview.studentsBooked, href: '/institution/riders', icon: Users },
-    { label: 'Seats reserved', value: overview.seats.reserved, href: '/institution/bookings', icon: Ticket },
+    { label: 'Routes serving campus', value: overview.routeCount, href: '/institution/routes' },
+    { label: 'Agencies serving campus', value: overview.agencyCount, href: '/institution/agencies' },
+    { label: 'Students riding', value: overview.studentsBooked, href: '/institution/riders' },
+    { label: 'Seats reserved', value: overview.seats.reserved, href: '/institution/bookings' },
   ];
 
   const utilisation =
@@ -32,34 +33,13 @@ export default async function InstitutionDashboard() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
-          <LayoutDashboard className="size-3.5" />
-          Dashboard
-        </span>
-        <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Campus overview</h1>
-        <p className="mt-1 text-muted-foreground">
-          Transport serving your campus — routes, agencies, riders and seat utilisation.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Dashboard"
+        title="Campus overview"
+        subtitle="Transport serving your campus — routes, agencies, riders and seat utilisation."
+      />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Link key={c.label} href={c.href} className="group">
-            <Card className="h-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md">
-              <CardContent className="flex items-start justify-between gap-3 py-6">
-                <div className="min-w-0">
-                  <p className="tnum text-2xl font-bold text-gradient sm:text-3xl">{c.value}</p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{c.label}</p>
-                </div>
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
-                  <c.icon className="size-5" />
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <StatStrip items={cards.map((c) => ({ label: c.label, value: c.value, href: c.href }))} />
 
       <Card>
         <CardHeader>

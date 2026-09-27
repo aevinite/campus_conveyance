@@ -1,26 +1,43 @@
 import { Building2, Clock } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
+import { getSessionClaims } from '@/features/auth/session';
 import { resolveInstitutionId, getCampusApproval } from '@/features/institution/repository';
 import { getInstitution } from '@/features/catalog/repository';
-import { PanelSidebar, type SidebarItem } from '@/components/panel-sidebar';
+import { listNotifications, unreadNotificationCount } from '@/features/notifications/repository';
+import { PanelShell, type PanelNavGroup } from '@/components/panel/panel-shell';
 import { logoutAction } from '@/features/auth/actions';
 import { SubmitButton } from '@/components/submit-button';
 
 // Campus oversight console. Read-only across the board EXCEPT "Agency Requests",
 // where the campus admin approves/rejects which agencies may serve this campus
 // (the panel's one write path). Web/desktop only — no native bottom-nav branch.
-const ITEMS: SidebarItem[] = [
-  { label: 'Dashboard', href: '/institution', icon: 'LayoutDashboard' },
-  { label: 'Routes', href: '/institution/routes', icon: 'Route' },
-  { label: 'Agencies', href: '/institution/agencies', icon: 'Building2' },
-  { label: 'Agency Requests', href: '/institution/requests', icon: 'ClipboardList' },
-  { label: 'Riders', href: '/institution/riders', icon: 'UsersRound' },
-  { label: 'Bookings', href: '/institution/bookings', icon: 'Ticket' },
-  { label: 'Drivers', href: '/institution/drivers', icon: 'IdCard' },
-  { label: 'Live', href: '/institution/live', icon: 'Radio' },
-  { label: 'Reviews', href: '/institution/reviews', icon: 'Star' },
-  { label: 'Settings', href: '/institution/settings', icon: 'Settings' },
+const GROUPS: PanelNavGroup[] = [
+  {
+    heading: 'Operate',
+    items: [
+      { label: 'Dashboard', href: '/institution', icon: 'LayoutDashboard' },
+      { label: 'Live', href: '/institution/live', icon: 'Radio' },
+      { label: 'Riders', href: '/institution/riders', icon: 'UsersRound' },
+      { label: 'Bookings', href: '/institution/bookings', icon: 'Ticket' },
+    ],
+  },
+  {
+    heading: 'Network',
+    items: [
+      { label: 'Routes', href: '/institution/routes', icon: 'Route' },
+      { label: 'Agencies', href: '/institution/agencies', icon: 'Building2' },
+      { label: 'Agency Requests', href: '/institution/requests', icon: 'ClipboardList' },
+      { label: 'Drivers', href: '/institution/drivers', icon: 'IdCard' },
+    ],
+  },
+  {
+    heading: 'More',
+    items: [
+      { label: 'Reviews', href: '/institution/reviews', icon: 'Star' },
+      { label: 'Settings', href: '/institution/settings', icon: 'Settings' },
+    ],
+  },
 ];
 
 export default async function InstitutionPanelLayout({
@@ -95,11 +112,24 @@ export default async function InstitutionPanelLayout({
   }
 
   const db = await createClient();
-  const campus = await getInstitution(db, institutionId);
+  const [campus, { userId }, notifications, unread] = await Promise.all([
+    getInstitution(db, institutionId),
+    getSessionClaims(db),
+    listNotifications(db),
+    unreadNotificationCount(db),
+  ]);
 
   return (
-    <PanelSidebar items={ITEMS} homeHref="/institution" greeting={campus?.name ?? 'Your campus'}>
+    <PanelShell
+      groups={GROUPS}
+      homeHref="/institution"
+      subtitle={campus?.name ?? 'Your campus'}
+      footer="Campus Conveyance · Campus admin"
+      notifications={notifications}
+      unread={unread}
+      userId={userId}
+    >
       {children}
-    </PanelSidebar>
+    </PanelShell>
   );
 }

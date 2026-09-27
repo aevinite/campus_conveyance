@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { Bus, ClipboardList, IndianRupee, Route, TrendingUp, Users, Wallet } from 'lucide-react';
+import { ClipboardList, IndianRupee, TrendingUp, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
 import { getMyAgency, getAgencyReport } from '@/features/agency/repository';
@@ -8,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
 import { DonutChart } from '@/components/charts/donut-chart';
 import { DownloadReportButton } from '@/components/download-report-button';
+import { PageHeader } from '@/components/panel/page-header';
+import { StatStrip } from '@/components/panel/stat-strip';
 
 export default async function AgencyDashboard() {
   const db = await createClient();
@@ -31,10 +32,10 @@ export default async function AgencyDashboard() {
     );
 
   const cards = [
-    { label: 'Buses & vans', value: counts.buses, href: '/agency/buses', icon: Bus },
-    { label: 'Routes', value: counts.routes, href: '/agency/routes', icon: Route },
-    { label: 'Active students', value: studentsCount, href: '/agency/students', icon: Users },
-    { label: 'Pending bookings', value: counts.pending, href: '/agency/bookings', icon: ClipboardList },
+    { label: 'Buses & vans', value: counts.buses, href: '/agency/buses' },
+    { label: 'Routes', value: counts.routes, href: '/agency/routes' },
+    { label: 'Active students', value: studentsCount, href: '/agency/students' },
+    { label: 'Pending bookings', value: counts.pending, href: '/agency/bookings' },
   ];
 
   const fleetData = fleetByCollege.map((c) => ({
@@ -50,36 +51,16 @@ export default async function AgencyDashboard() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Dashboard</span>
-          <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">
-            {agency ? `${agency.name}` : 'Service Provider Dashboard'}
-          </h1>
-          <p className="mt-1 text-muted-foreground">Overview of your fleet, routes and bookings.</p>
-          <p className="print-only mt-1 text-sm text-muted-foreground">Generated {generated}</p>
-        </div>
-        <DownloadReportButton />
-      </div>
+      <PageHeader
+        eyebrow="Dashboard"
+        title={agency ? agency.name : 'Service Provider Dashboard'}
+        subtitle="Overview of your fleet, routes and bookings."
+        actions={<DownloadReportButton />}
+      />
+      <p className="print-only text-sm text-muted-foreground">Generated {generated}</p>
 
       {/* Headline counts */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Link key={c.label} href={c.href} className="print-block group">
-            <Card className="h-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md">
-              <CardContent className="flex items-start justify-between gap-3 py-6">
-                <div className="min-w-0">
-                  <p className="tnum text-2xl font-bold text-gradient sm:text-3xl">{c.value}</p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{c.label}</p>
-                </div>
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:size-11">
-                  <c.icon className="size-5" />
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <StatStrip items={cards.map((c) => ({ label: c.label, value: c.value, href: c.href }))} className="print-block" />
 
       {/* Revenue */}
       <Card className="print-block">
