@@ -88,6 +88,31 @@ export async function resolveInstitutionId(): Promise<string | null> {
   return ((data?.institution_id as string) ?? null) || null;
 }
 
+export interface CampusApproval {
+  name: string;
+  isActive: boolean;
+  isVerified: boolean;
+  isDeleted: boolean;
+}
+
+/**
+ * The approval state of a campus, read WITHOUT the `is_active` filter that
+ * `getInstitution` applies — so the panel can tell a self-registered campus that
+ * is still awaiting a SUPER_ADMIN's approval (is_active=false) apart from a live
+ * one, and show a "pending verification" notice instead of a hollow console.
+ * Service-role read, scoped to the one resolved campus id.
+ */
+export async function getCampusApproval(institutionId: string): Promise<CampusApproval | null> {
+  const { data } = await db()
+    .from('institutions')
+    .select('name, is_active, is_verified, is_deleted')
+    .eq('id', institutionId)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as { name: string; is_active: boolean; is_verified: boolean; is_deleted: boolean };
+  return { name: r.name, isActive: r.is_active, isVerified: r.is_verified, isDeleted: r.is_deleted };
+}
+
 // ---- Overview (dashboard home KPIs + charts) ------------------------------
 
 export interface InstitutionOverview {

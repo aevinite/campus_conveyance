@@ -552,6 +552,61 @@ export async function toggleCollegeAction(formData: FormData): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// SELF-REGISTERED campus applications. A school/college that signed itself up
+// (via /institution/register) lands as a hidden, unverified institution with a
+// linked campus admin. A SUPER_ADMIN reviews it here and either approves it
+// (goes live + verified, visible to agencies/students) or rejects it (soft-
+// deletes the campus AND its admin login so a bogus application can't operate).
+// ---------------------------------------------------------------------------
+
+/** Approve a self-registered campus → make it live (active) and verified. */
+export async function approveCampusApplicationAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!UUID_RE.test(id)) return;
+  const db = await createClient();
+  // Guarded write: only flip an application that's still pending (hidden +
+  // unverified + not deleted), so a stale double-click can't "re-approve" and a
+  // wrong id matches zero rows.
+  const { error } = await db
+    .from('institutions')
+    .update({ is_active: true, is_verified: true })
+    .eq('id', id)
+    .eq('is_active', false)
+    .eq('is_verified', false)
+    .eq('is_deleted', false);
+  if (error) throw new AppError('ADMIN', error.message);
+  await logAction(db, 'CAMPUS_APPLICATION_APPROVED', 'institution', id);
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite'); updateTag('admin-report');
+}
+
+/** Reject a self-registered campus → soft-delete it and deactivate its admins. */
+export async function rejectCampusApplicationAction(formData: FormData): Promise<void> {
+  const id = String(formData.get('id') ?? '');
+  if (!UUID_RE.test(id)) return;
+  const admin = createAdminClient();
+  // Soft-delete the campus (reversible from Deleted Colleges) …
+  const { error } = await admin
+    .from('institutions')
+    .update({ is_deleted: true, deleted_at: new Date().toISOString(), is_active: false })
+    .eq('id', id)
+    .eq('is_active', false)
+    .eq('is_deleted', false);
+  if (error) throw new AppError('ADMIN', error.message);
+  // … and soft-delete its campus admin(s) so the rejected login loses all access
+  // (isAccountDeactivated gates on profiles.is_deleted for INSTITUTION_ADMIN).
+  await admin
+    .from('profiles')
+    .update({ is_deleted: true })
+    .eq('institution_id', id)
+    .eq('role', 'INSTITUTION_ADMIN');
+  await logAction(await createClient(), 'CAMPUS_APPLICATION_REJECTED', 'institution', id);
+  revalidatePath('/aevinite/colleges');
+  revalidatePath('/aevinite/deleted-colleges');
+  revalidatePath('/aevinite'); updateTag('admin-report');
+}
+
+// ---------------------------------------------------------------------------
 // Institution (campus) admin provisioning. A SUPER_ADMIN creates a campus-admin
 // login and links it to a college, so that person can run the /institution
 // oversight console for their campus. The account is email-confirmed on the spot

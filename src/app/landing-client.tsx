@@ -58,6 +58,13 @@ const roles = [
     icon: User,
     href: '/driver/login',
   },
+  {
+    key: 'institution',
+    title: 'School / College',
+    desc: 'Oversee your campus routes, riders, agencies, and live buses.',
+    icon: Building2,
+    href: '/institution/login',
+  },
 ];
 
 // Live stats band — values come from the database via /api/public-stats and
@@ -679,6 +686,7 @@ export default function Home() {
                 <li><Link href="/login" className="transition-colors hover:text-foreground">Student Portal</Link></li>
                 <li><Link href="/agency/login" className="transition-colors hover:text-foreground">Agency Portal</Link></li>
                 <li><Link href="/driver/login" className="transition-colors hover:text-foreground">Driver Portal</Link></li>
+                <li><Link href="/institution/login" className="transition-colors hover:text-foreground">School / College Portal</Link></li>
               </ul>
             </div>
             <div>

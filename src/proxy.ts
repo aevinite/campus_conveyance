@@ -27,6 +27,9 @@ const PUBLIC = [
   // Public portals for the other actors. These exact prefixes do NOT match
   // the protected '/agency' and '/aevinite' dashboards (guarded by their layouts).
   '/agency/login', '/agency/register', '/agency/forgot', '/aevinite/login', '/driver/login',
+  // School / college self-signup + login portal (the '/institution' dashboard
+  // itself stays protected by its panel layout).
+  '/institution/login', '/institution/register', '/institution/forgot',
 ];
 
 export async function proxy(request: NextRequest) {
@@ -74,7 +77,9 @@ export async function proxy(request: NextRequest) {
         ? '/agency/login'
         : path.startsWith('/driver')
           ? '/driver/login'
-          : '/login';
+          : path.startsWith('/institution')
+            ? '/institution/login'
+            : '/login';
     return NextResponse.redirect(new URL(loginPath, request.url));
   }
   // NOTE: we intentionally do NOT auto-redirect a logged-in user away from the

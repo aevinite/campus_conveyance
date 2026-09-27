@@ -23,11 +23,11 @@ export function dashboardFor(role: Role | undefined): string {
 
 // Canonical login screen per role — the single source of truth shared by the
 // dashboard guards (requireRole loginPath) and post-reset redirects, so the two
-// gates never disagree on where a given role signs in. Admin + institution
-// admin both use the admin (aevinite) login.
+// gates never disagree on where a given role signs in. Campus admins have their
+// own school/college login; super-admins use the admin (aevinite) login.
 export const LOGIN_BY_ROLE: Record<Role, string> = {
   SUPER_ADMIN: '/aevinite/login',
-  INSTITUTION_ADMIN: '/aevinite/login',
+  INSTITUTION_ADMIN: '/institution/login',
   STUDENT: '/login',
   PARENT: '/login',
   DRIVER: '/driver/login',

@@ -309,6 +309,62 @@ async function colleges(db: SupabaseClient, deleted: boolean, opts: PageOpts = {
 export const listColleges = (db: SupabaseClient, opts?: PageOpts) => colleges(db, false, opts);
 export const listDeletedColleges = (db: SupabaseClient, opts?: PageOpts) => colleges(db, true, opts);
 
+export interface PendingCampusApplication {
+  id: string;
+  name: string;
+  kind: string;
+  city: string | null;
+  area: string | null;
+  adminName: string | null;
+  adminEmail: string | null;
+  createdAt: string;
+}
+
+/**
+ * Self-registered campuses awaiting a SUPER_ADMIN's review: hidden (is_active=
+ * false) + unverified + not deleted, AND with at least one live campus admin
+ * linked — the last condition distinguishes a genuine application from an admin-
+ * created college that was merely disabled. Service-role read (joins profiles).
+ */
+export async function listPendingCampusApplications(): Promise<PendingCampusApplication[]> {
+  const admin = createAdminClient();
+  const { data: insts, error } = await admin
+    .from('institutions')
+    .select('id, name, kind, city, area, created_at')
+    .eq('is_deleted', false)
+    .eq('is_active', false)
+    .eq('is_verified', false)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = (insts ?? []) as {
+    id: string; name: string; kind: string; city: string | null; area: string | null; created_at: string;
+  }[];
+  if (rows.length === 0) return [];
+
+  const { data: adminRows } = await admin
+    .from('profiles')
+    .select('institution_id, full_name, email')
+    .eq('role', 'INSTITUTION_ADMIN')
+    .eq('is_deleted', false)
+    .in('institution_id', rows.map((r) => r.id));
+  const byInst = new Map<string, { full_name: string | null; email: string | null }>();
+  for (const a of (adminRows ?? []) as { institution_id: string; full_name: string | null; email: string | null }[]) {
+    if (!byInst.has(a.institution_id)) byInst.set(a.institution_id, { full_name: a.full_name, email: a.email });
+  }
+  return rows
+    .filter((r) => byInst.has(r.id)) // only campuses that actually have an applicant admin
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      kind: r.kind,
+      city: r.city,
+      area: r.area,
+      adminName: byInst.get(r.id)?.full_name ?? null,
+      adminEmail: byInst.get(r.id)?.email ?? null,
+      createdAt: r.created_at,
+    }));
+}
+
 export interface AdminCounts {
   requests: number;
   agencies: number;

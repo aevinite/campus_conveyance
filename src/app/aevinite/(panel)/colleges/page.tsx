@@ -1,9 +1,14 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { School } from 'lucide-react';
+import { School, Clock, Mail } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { listColleges, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
-import { deleteCollegeAction, toggleCollegeAction } from '@/features/admin/actions';
+import { listColleges, listPendingCampusApplications, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
+import {
+  deleteCollegeAction,
+  toggleCollegeAction,
+  approveCampusApplicationAction,
+  rejectCampusApplicationAction,
+} from '@/features/admin/actions';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { SubmitButton } from '@/components/submit-button';
@@ -23,6 +28,8 @@ export default async function ManageCollegePage({
   const { rows: colleges, total } = await listColleges(db, { limit: ADMIN_PAGE_SIZE, offset });
   const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
   if (total > 0 && page > totalPages) redirect(`/aevinite/colleges?page=${totalPages}`);
+  // Self-registered campuses awaiting review — only shown on the first page.
+  const pending = page === 1 ? await listPendingCampusApplications() : [];
 
   return (
     <section className="space-y-4">
@@ -38,6 +45,67 @@ export default async function ManageCollegePage({
           Add College
         </Link>
       </div>
+
+      {pending.length > 0 && (
+        <div className="space-y-3 rounded-2xl border border-primary/30 bg-primary/[0.04] p-4">
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Clock className="size-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold">Pending campus applications</h2>
+              <p className="text-xs text-muted-foreground">
+                Schools / colleges that registered themselves. Approve to make them live &amp; visible, or reject.
+              </p>
+            </div>
+            <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+              {pending.length}
+            </span>
+          </div>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+            {pending.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    {p.name}
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                      {p.kind === 'COLLEGE' ? 'College / University' : 'School'}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    {(p.city || p.area) && <span>{[p.area, p.city].filter(Boolean).join(', ')}</span>}
+                    {p.adminEmail && (
+                      <span className="inline-flex items-center gap-1">
+                        <Mail className="size-3" />
+                        {p.adminName ? `${p.adminName} · ` : ''}{p.adminEmail}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <form action={approveCampusApplicationAction}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <SubmitButton size="sm" pendingText="Approving…">
+                      Approve
+                    </SubmitButton>
+                  </form>
+                  <ConfirmSubmit
+                    action={rejectCampusApplicationAction}
+                    fields={{ id: p.id }}
+                    triggerLabel="Reject"
+                    triggerVariant="outline"
+                    title="Reject this campus application?"
+                    description={`“${p.name}” will be moved to Deleted Colleges and its admin login deactivated. You can restore it later.`}
+                    confirmLabel="Reject"
+                    pendingText="Rejecting…"
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {colleges.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
           <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">
