@@ -42,7 +42,14 @@ export async function proxy(request: NextRequest) {
   // if already signed in). In a browser, '/' still shows the full landing page.
   const isApp = (request.headers.get('user-agent') ?? '').includes(APP_UA_MARKER);
   if (isApp && path === '/') {
-    return NextResponse.redirect(new URL(user ? dashboardFor(role) : '/login', request.url));
+    // A brand-new Google signup can land here before the role claim is minted
+    // (the access-token hook / profile-default trigger lags the first token).
+    // Fall back to the STUDENT dashboard for an authenticated-but-roleless user
+    // rather than bouncing them to /login — a dead-end at the app login chooser.
+    // Mirrors the web /auth/callback fallback; the dashboard guard re-checks and
+    // redirects if the resolved role turns out to be something else.
+    const dest = user ? (role ? dashboardFor(role) : '/student') : '/login';
+    return NextResponse.redirect(new URL(dest, request.url));
   }
 
   // Maintenance mode: block everyone except the admin (who needs the panel to
@@ -55,6 +62,10 @@ export async function proxy(request: NextRequest) {
       path === '/maintenance' ||
       path === '/aevinite/login' ||
       path.startsWith('/aevinite') ||
+      // Campus admins are operators (like the platform admin), not the public
+      // audience the website switch targets — don't collateral-block their
+      // console + login when website maintenance is on.
+      path.startsWith('/institution') ||
       path.startsWith('/auth') ||
       // /confirm (signup) and /reset (password) are client-hash flows that live
       // OUTSIDE /auth — without these, emailed confirmation/reset links become

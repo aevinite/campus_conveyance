@@ -21,16 +21,23 @@ export type ReserveState = {
 export type CancelState = { ok?: boolean; error?: string };
 export type DetailsState = { ok?: boolean; error?: string };
 export type SubmitUpiState = { status?: string; error?: string; code?: string };
-export type BookingStatusResult = { status?: string; paymentStatus?: string | null; error?: string };
+export type BookingStatusResult = {
+  status?: string;
+  paymentStatus?: string | null;
+  /** ISO payment deadline — the payment screen re-arms its countdown from this
+   *  when a rejected payment reopens the pay window. */
+  expiresAt?: string | null;
+  error?: string;
+};
 
-/** Polled by the payment screen to detect when the admin confirms the seat. */
+/** Polled by the payment screen to detect when the admin confirms (or rejects). */
 export async function bookingStatusAction(bookingId: string): Promise<BookingStatusResult> {
   if (!/^[0-9a-f-]{36}$/i.test(bookingId)) return { error: 'Invalid booking.' };
   const db = await createClient();
   try {
     const r = await getBookingStatus(db, bookingId);
     if (!r) return {};
-    return { status: r.status, paymentStatus: r.paymentStatus };
+    return { status: r.status, paymentStatus: r.paymentStatus, expiresAt: r.expiresAt };
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }

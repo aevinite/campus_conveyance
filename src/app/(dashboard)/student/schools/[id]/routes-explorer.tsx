@@ -34,7 +34,7 @@ function seatsPill(r: CampusRoute) {
   if (r.total === 0)
     return <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">Seats not set</span>;
   if (r.available === 0)
-    return <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">Full — waitlist open</span>;
+    return <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">Sold out</span>;
   const low = r.available <= 5;
   return (
     <span
@@ -184,7 +184,7 @@ export function RoutesExplorer({
                 <div className="shrink-0 text-right">
                   {fare && <p className="tnum text-lg font-bold">{fare}</p>}
                   <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
-                    {r.total > 0 && r.available === 0 ? 'Waitlist' : 'View & book'}
+                    {r.total > 0 && r.available === 0 ? 'View' : 'View & book'}
                     <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
                   </span>
                 </div>

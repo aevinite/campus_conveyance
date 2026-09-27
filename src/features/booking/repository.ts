@@ -98,7 +98,7 @@ export interface BookingRow {
 }
 
 /**
- * Release every approved-but-unpaid booking whose 20-minute payment window has
+ * Release every approved-but-unpaid booking whose 10-minute payment window has
  * passed (RPC, trigger frees the seats). Called before availability/booking
  * reads so a lapsed window never blocks a seat. Best-effort — a failure must
  * not break the page.

@@ -1,5 +1,5 @@
 'use server';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -113,6 +113,9 @@ export async function verifyUpiPaymentAction(formData: FormData): Promise<void> 
     /* logging is best-effort */
   }
   revalidatePath('/aevinite/payments');
+  // Approving a UPI payment is the moment money is recognised — refresh the
+  // dashboard "Paid"/revenue KPI + report CSV (60s-cached under this tag).
+  if (approve) updateTag('admin-report');
 }
 
 // Process a refund for a cancelled paid booking: the admin sent the money (or

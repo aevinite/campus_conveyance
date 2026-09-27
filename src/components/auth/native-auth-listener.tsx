@@ -68,6 +68,12 @@ export function NativeAuthListener() {
           } else {
             return; // nothing actionable
           }
+          // A brand-new Google signup's first token can predate the role claim
+          // (the access-token hook derives it from the freshly-created profile).
+          // Refresh once so the cookie the proxy reads carries the role — mirrors
+          // the web /auth/callback. Best-effort: the proxy also falls back to a
+          // sensible dashboard for a still-roleless session.
+          await supabase.auth.refreshSession().catch(() => {});
           // Full navigation so the SSR layer reads the fresh session cookies and
           // routes the user to the right dashboard.
           window.location.assign('/');

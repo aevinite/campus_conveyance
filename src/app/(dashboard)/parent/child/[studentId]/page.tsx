@@ -92,9 +92,15 @@ export default async function ParentChildHub({
             <p className="text-xs font-medium uppercase tracking-wide text-primary">Bus booking</p>
             {child.active_status ? (
               <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm">
-                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[child.active_status] ?? STATUS_PILL.PENDING}`}>
-                  {STATUS_LABEL[child.active_status] ?? child.active_status}
-                </span>
+                {child.active_status === 'CONFIRMED' && child.active_cancel_requested_at ? (
+                  <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">
+                    Refund pending
+                  </span>
+                ) : (
+                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[child.active_status] ?? STATUS_PILL.PENDING}`}>
+                    {STATUS_LABEL[child.active_status] ?? child.active_status}
+                  </span>
+                )}
                 {child.active_route_name && <span className="font-medium">{child.active_route_name}</span>}
               </p>
             ) : (

@@ -98,8 +98,16 @@ export default async function RouteDetailPage({
       ? planOptions.map((p) => `${p.amount}${p.suffix}`).join(' · ')
       : null;
   // For a resumed (already-requested) booking the plan is fixed — show its price.
+  // Fall back through every price column (|| skips 0/null) so a resume never
+  // shows a blank amount if the plan's own column was later cleared/unpriced.
+  const rt = data.route;
   const resumePlanCents = activeBooking
-    ? planPrice(data.route, activeBooking.billing_period) ?? data.route.price_cents
+    ? planPrice(rt, activeBooking.billing_period) ||
+      rt.price_cents ||
+      rt.price_monthly_cents ||
+      rt.price_semester_cents ||
+      rt.price_yearly_cents ||
+      null
     : null;
   const resumeFare = inr(resumePlanCents);
   const resumeAmountRupees = resumePlanCents ? String(Math.round(resumePlanCents / 100)) : null;

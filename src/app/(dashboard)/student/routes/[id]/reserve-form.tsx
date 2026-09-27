@@ -276,8 +276,11 @@ export function ReserveForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [failStep]);
 
-  // While a payment is "verifying", poll for the admin's confirmation. The moment
-  // the seat is CONFIRMED, show the success popup and (below) redirect home.
+  // While a payment is "verifying", poll for the admin's decision. On CONFIRMED,
+  // show the success popup and (below) redirect home. On REJECTED, the admin
+  // couldn't verify the UTR — verify_upi_payment reopens a fresh 20-min pay
+  // window, so drop back to the pay panel (re-armed countdown) instead of
+  // looping on "verifying…" forever.
   useEffect(() => {
     if (phase !== 'submitted' || !bookingId || confirmed) return;
     let stopped = false;
@@ -287,6 +290,13 @@ export function ReserveForm({
       if (r.status === 'CONFIRMED') {
         setConfirmed(true);
         clearInterval(iv);
+      } else if (r.paymentStatus === 'REJECTED') {
+        clearInterval(iv);
+        setUtr('');
+        setPayByAt(r.expiresAt ?? null);
+        setPayDismissed(false);
+        setPhase('payment');
+        toast.error('We couldn’t verify your payment. Please pay again and re-enter the reference.');
       }
     }, 5000);
     return () => {

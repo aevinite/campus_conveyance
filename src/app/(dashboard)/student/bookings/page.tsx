@@ -266,7 +266,11 @@ export default async function BookingsPage({
                       <CancelBookingButton
                         bookingId={b.id}
                         routeId={b.routeId}
-                        paid={b.is_paid}
+                        // A SUBMITTED payment means the rider already sent UPI
+                        // money (awaiting admin verify) — treat it as paid so
+                        // cancelling collects refund details + holds the seat,
+                        // instead of a no-refund "unpaid" cancel.
+                        paid={b.is_paid || b.payment_status === 'SUBMITTED'}
                         refundPending={!!b.cancelRequestedAt}
                       />
                     )}

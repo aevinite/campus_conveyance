@@ -86,13 +86,15 @@ export async function submitUpiPayment(
 export async function getBookingStatus(
   db: SupabaseClient,
   bookingId: string,
-): Promise<{ status: string; paymentStatus: string | null; routeId: string | null } | null> {
+): Promise<{ status: string; paymentStatus: string | null; routeId: string | null; expiresAt: string | null } | null> {
   const { data, error } = await db.rpc('check_booking_status', { p_booking_id: bookingId });
   if (error) throw new AppError('BOOKING', error.message);
   const row = (Array.isArray(data) ? data[0] : data) as
-    | { status: string; payment_status: string | null; route_id: string | null }
+    | { status: string; payment_status: string | null; route_id: string | null; expires_at: string | null }
     | undefined;
-  return row ? { status: row.status, paymentStatus: row.payment_status, routeId: row.route_id } : null;
+  return row
+    ? { status: row.status, paymentStatus: row.payment_status, routeId: row.route_id, expiresAt: row.expires_at }
+    : null;
 }
 
 export async function reserveSeat(

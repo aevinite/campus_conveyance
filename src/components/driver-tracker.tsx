@@ -130,27 +130,46 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
     };
   }, []);
 
-  // Heartbeat: while online, re-send the last known fix if nothing has been sent
-  // recently. Keeps a stationary bus's location fresh (watchPosition only fires
-  // on movement), so it doesn't fall out of the 2-minute freshness window.
+  // Heartbeat: while online, keep a stationary bus's location fresh (watchPosition
+  // only fires on movement). Crucially, each tick fetches a NEW fix rather than
+  // re-sending the cached one forever — otherwise a mid-trip GPS drop (or a
+  // parked/forgotten tab that's still alive) would keep pushing the last known
+  // coords and riders would see a frozen "Bus live" marker indefinitely. If the
+  // fresh fix fails (GPS lost), we send nothing and let the server's 2-minute
+  // freshness window mark the bus offline.
   useEffect(() => {
     if (!online) return;
     const id = setInterval(() => {
-      const c = lastCoords.current;
-      if (!c || !onlineRef.current) return;
+      if (!onlineRef.current || typeof navigator === 'undefined' || !navigator.geolocation) return;
       if (Date.now() - lastSent.current < HEARTBEAT_MS) return; // movement kept it fresh
-      lastSent.current = Date.now();
-      setLastFix(Date.now());
-      sendLocation(c.lat, c.lng);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (!onlineRef.current) return; // went offline while the fix was in flight
+          lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          lastSent.current = Date.now();
+          setLastFix(Date.now());
+          sendLocation(pos.coords.latitude, pos.coords.longitude);
+        },
+        () => {
+          // GPS unavailable right now — do NOT re-send stale coords. Skipping the
+          // beat lets the bus fall out of the freshness window and go offline.
+        },
+        { enableHighAccuracy: true, maximumAge: 20000, timeout: 15000 },
+      );
     }, HEARTBEAT_MS);
     return () => clearInterval(id);
   }, [online]);
 
   async function toggle() {
     const next = !online;
-    // Gate location writes on the new state immediately (before the async
-    // round-trip), so any in-flight GPS/heartbeat callback stops writing at once.
-    onlineRef.current = next;
+    // Gating is asymmetric on purpose:
+    //  - Going OFFLINE: stop writes IMMEDIATELY (before the round-trip), so an
+    //    in-flight GPS/heartbeat callback can't keep streaming.
+    //  - Going ONLINE: do NOT enable writes yet. If the watch's first fix (or the
+    //    heartbeat) fired during the approval round-trip and the server call then
+    //    failed, a premature ping would mark the bus online while the UI shows
+    //    offline. Writes are enabled only after the server confirms (below).
+    if (!next) onlineRef.current = false;
     setBusy(true);
     if (next) {
       // Confirm we can actually track BEFORE flipping online. watchPosition()
@@ -204,6 +223,8 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
       return;
     }
     setOnline(next);
+    // Server confirmed → now it's safe to let GPS/heartbeat callbacks stream.
+    if (next) onlineRef.current = true;
     // Push the first fix right away so the bus appears on rider maps instantly,
     // instead of waiting for the next throttled watch/heartbeat tick.
     if (next && lastCoords.current) {

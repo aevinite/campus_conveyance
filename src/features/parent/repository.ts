@@ -17,6 +17,10 @@ export interface ChildRow {
   active_status: string | null;
   active_route_id: string | null;
   active_route_name: string | null;
+  active_payment_status: string | null;
+  /** Set when a paid cancellation is awaiting the admin's refund → show "Refund
+   *  pending" instead of a plain "Confirmed". */
+  active_cancel_requested_at: string | null;
 }
 
 /** A child's single active booking — powers the parent booking page's resume/
@@ -32,6 +36,9 @@ export interface ChildActiveBooking {
   payment_status: string | null;
   route_id: string | null;
   route_name: string | null;
+  /** Set once a paid cancellation is filed → the manage page locks to "Refund
+   *  pending" instead of re-offering a live Cancel. */
+  cancel_requested_at: string | null;
 }
 
 export async function getChildActiveBooking(
@@ -79,6 +86,9 @@ export interface ChildBookingRow {
   billing_period: string | null;
   /** When the seat was paid/confirmed — the pass-window start. */
   paid_at: string | null;
+  payment_status: string | null;
+  /** Set once a paid cancellation is filed → show "Refund pending". */
+  cancel_requested_at: string | null;
 }
 
 /** The signed-in parent's linked children (via security-definer RPC). */

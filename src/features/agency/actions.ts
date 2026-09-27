@@ -1072,6 +1072,10 @@ export async function hideStudentAction(formData: FormData): Promise<void> {
   // there) were stale until a manual reload.
   revalidatePath('/agency/bookings');
   revalidatePath('/agency/view-bookings');
+  // Removing a PAID student flags a refund request (agency_remove_student_booking
+  // → refund hold), so the refunds page must refresh too or the new pending
+  // refund is invisible until a manual reload.
+  revalidatePath('/agency/refunds');
   revalidatePath('/agency');
   updateTag(agencyReportTag(agency.id)); // dashboard students/bookings tiles
 }

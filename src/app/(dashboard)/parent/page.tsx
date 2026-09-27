@@ -40,6 +40,19 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Cancelled',
 };
 
+// A paid booking the family asked to cancel reads CONFIRMED until the admin
+// processes the refund — surface that as "Refund pending" rather than a plain
+// "Confirmed" (matches the student side).
+function bookingPill(b: ChildBookingRow): { label: string; cls: string } {
+  if (b.status === 'CONFIRMED' && b.cancel_requested_at) {
+    return { label: 'Refund pending', cls: 'border-warning/30 bg-warning/10 text-warning' };
+  }
+  return {
+    label: STATUS_LABEL[b.status] ?? b.status,
+    cls: STATUS_PILL[b.status] ?? STATUS_PILL.PENDING,
+  };
+}
+
 
 export default async function ParentDashboard() {
   await requireRole('PARENT');
@@ -302,13 +315,14 @@ export default async function ParentDashboard() {
                 <div key={b.booking_id} className="rounded-2xl border border-border bg-card p-4 shadow-xs">
                   <p className="flex flex-wrap items-center gap-x-2 font-medium">
                     <span className="truncate">{b.route_name ?? 'Route'}</span>
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                        STATUS_PILL[b.status] ?? STATUS_PILL.PENDING
-                      }`}
-                    >
-                      {STATUS_LABEL[b.status] ?? b.status}
-                    </span>
+                    {(() => {
+                      const pill = bookingPill(b);
+                      return (
+                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${pill.cls}`}>
+                          {pill.label}
+                        </span>
+                      );
+                    })()}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {[
@@ -506,13 +520,14 @@ export default async function ParentDashboard() {
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-x-2 font-medium">
                     {b.route_name ?? 'Route'}
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                        STATUS_PILL[b.status] ?? STATUS_PILL.PENDING
-                      }`}
-                    >
-                      {STATUS_LABEL[b.status] ?? b.status}
-                    </span>
+                    {(() => {
+                      const pill = bookingPill(b);
+                      return (
+                        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${pill.cls}`}>
+                          {pill.label}
+                        </span>
+                      );
+                    })()}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {[

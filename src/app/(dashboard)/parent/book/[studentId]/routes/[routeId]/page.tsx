@@ -58,8 +58,16 @@ export default async function ParentBookRoute({
   const activeHere = active && active.route_id === routeId ? active : null;
   const activeElsewhere = active && active.route_id !== routeId ? active : null;
 
+  // Fall back through every price column (|| skips 0/null) so a resume never shows
+  // a blank amount if the booked plan's own column was later cleared/unpriced.
+  const rt = data.route;
   const resumePlanCents = activeHere
-    ? planPrice(data.route, activeHere.billing_period as BillingPeriod | null) ?? data.route.price_cents
+    ? planPrice(rt, activeHere.billing_period as BillingPeriod | null) ||
+      rt.price_cents ||
+      rt.price_monthly_cents ||
+      rt.price_semester_cents ||
+      rt.price_yearly_cents ||
+      null
     : null;
   const resumeFare = inr(resumePlanCents);
   const resumeAmountRupees = resumePlanCents ? String(Math.round(resumePlanCents / 100)) : null;
@@ -107,7 +115,12 @@ export default async function ParentBookRoute({
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
           <span>{childName}&apos;s seat on this ride is confirmed.</span>
         </div>
-        <CancelBookingButton bookingId={activeHere.booking_id} studentId={studentId} paid={activeHere.is_paid} />
+        <CancelBookingButton
+          bookingId={activeHere.booking_id}
+          studentId={studentId}
+          paid={activeHere.is_paid || activeHere.payment_status === 'SUBMITTED'}
+          refundPending={!!activeHere.cancel_requested_at}
+        />
       </div>
     );
   } else if (activeHere && activeHere.status === 'WAITLISTED') {
@@ -117,7 +130,12 @@ export default async function ParentBookRoute({
           <Clock3 className="mt-0.5 size-4 shrink-0" />
           <span>{childName} is on the waitlist for this ride. We&apos;ll notify you if a seat opens.</span>
         </div>
-        <CancelBookingButton bookingId={activeHere.booking_id} studentId={studentId} paid={activeHere.is_paid} />
+        <CancelBookingButton
+          bookingId={activeHere.booking_id}
+          studentId={studentId}
+          paid={activeHere.is_paid}
+          refundPending={!!activeHere.cancel_requested_at}
+        />
       </div>
     );
   } else if (activeElsewhere) {

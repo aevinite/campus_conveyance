@@ -463,16 +463,25 @@ export async function listRidersForInstitution(
   const client = db();
   const { dateStr, midnightIso } = istToday();
 
+  // Scope riders to the SAME visible routes the dashboard "Students riding" KPI
+  // counts (listInstitutionRoutes) — bookings on a suspended/hidden-agency route
+  // are excluded from both, so clicking the KPI can't open a roster with more
+  // rows than the headline. (The one-active-booking-per-student rule then makes
+  // distinct students == roster rows on these routes.)
+  const visibleRoutes = await listInstitutionRoutes(client, institutionId);
+  const visibleRouteIds = new Set(visibleRoutes.map((r) => r.id));
+  if (visibleRouteIds.size === 0) return [];
+
   const { data: bkRows, error: bkErr } = await client
     .from('bookings')
     .select('id, student_name, student_email, route_id, pickup_stop_id, status')
     .eq('institution_id', institutionId)
     .in('status', ['PENDING', 'CONFIRMED']);
   if (bkErr) throw bkErr;
-  const bookings = (bkRows ?? []) as {
+  const bookings = ((bkRows ?? []) as {
     id: string; student_name: string | null; student_email: string | null;
     route_id: string | null; pickup_stop_id: string | null; status: string;
-  }[];
+  }[]).filter((b) => b.route_id && visibleRouteIds.has(b.route_id));
   if (bookings.length === 0) return [];
 
   const routes = await mapByIds<{ id: string; name: string; vehicle_id: string | null; vehicle_type: string | null }>(
