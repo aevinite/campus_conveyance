@@ -17,6 +17,19 @@ function sendLocation(lat: number, lng: number) {
   }).catch(() => {});
 }
 
+// Resolve exactly one GPS fix (or reject). Used to confirm the driver actually
+// granted location permission BEFORE we flip them online — watchPosition returns
+// a watch id synchronously, so it can't tell us whether the prompt was accepted.
+function getFirstFix(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 20000,
+    });
+  });
+}
+
 // Don't hammer the server on every GPS tick — one write at most this often.
 const MIN_SEND_MS = 9000;
 // A stationary bus emits no watchPosition callbacks, so its stored location goes
@@ -140,13 +153,37 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
     onlineRef.current = next;
     setBusy(true);
     if (next) {
-      // Ask for the fix first — no point flipping online if we can't track.
-      const started = startWatch();
-      if (!started) {
+      // Confirm we can actually track BEFORE flipping online. watchPosition()
+      // returns a watch id synchronously — even if the driver later DENIES the
+      // permission prompt — so it can't gate going online. getCurrentPosition
+      // only resolves once the prompt is granted AND a real fix arrives; it
+      // rejects on denial/timeout, so a denied driver never shows as "online".
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        toast.error('Location isn’t available on this device/browser.');
         onlineRef.current = false; // never actually went online
         setBusy(false);
         return;
       }
+      try {
+        const pos = await getFirstFix();
+        // Seed the first fix so riders see the bus immediately (and the
+        // heartbeat has something to re-send before the watch fires again).
+        lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      } catch (err) {
+        const denied =
+          typeof GeolocationPositionError !== 'undefined' &&
+          err instanceof GeolocationPositionError &&
+          err.code === err.PERMISSION_DENIED;
+        toast.error(
+          denied
+            ? 'Location permission denied — enable it to go online.'
+            : 'Couldn’t get your location — try again.',
+        );
+        onlineRef.current = false; // never actually went online
+        setBusy(false);
+        return;
+      }
+      startWatch();
     } else {
       stopWatch();
       lastSent.current = 0;
@@ -167,6 +204,13 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
       return;
     }
     setOnline(next);
+    // Push the first fix right away so the bus appears on rider maps instantly,
+    // instead of waiting for the next throttled watch/heartbeat tick.
+    if (next && lastCoords.current) {
+      lastSent.current = Date.now();
+      setLastFix(lastSent.current);
+      sendLocation(lastCoords.current.lat, lastCoords.current.lng);
+    }
     toast.success(next ? 'You’re online — sharing live location.' : 'You’re offline.');
   }
 
