@@ -1122,6 +1122,8 @@ export interface PendingRefundRow {
   routeName: string;
   /** Amount originally paid — prefill for the refund amount. */
   amountCents: number;
+  /** UPI reference the rider paid with — refund to its source if no payout details. */
+  utr: string | null;
   payoutMethod: string | null; // 'UPI' | 'BANK'
   payoutDetails: string | null; // formatted UPI id or bank account line
   reason: string | null;
@@ -1137,8 +1139,11 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
   const client = db();
   let q = client
     .from('payments')
-    .select('booking_id, amount_cents, updated_at', { count: 'exact' })
+    .select('booking_id, amount_cents, updated_at, upi_utr', { count: 'exact' })
     .eq('refund_status', 'REQUESTED')
+    // Only money verified as received. An unverified UTR stays under "To verify"
+    // until the admin confirms it (process_refund also refuses unverified ones).
+    .eq('status', 'PAID')
     .order('updated_at', { ascending: true });
   q = range(q, opts);
   const { data, error, count } = await q;
@@ -1176,6 +1181,7 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
         studentName: b?.student_name ?? null,
         routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
         amountCents: (r.amount_cents as number) ?? 0,
+        utr: (r.upi_utr as string | null) ?? null,
         payoutMethod: method ?? null,
         payoutDetails: details,
         reason: b?.cancel_reason ?? null,

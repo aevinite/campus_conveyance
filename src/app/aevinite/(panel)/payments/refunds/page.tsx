@@ -45,8 +45,11 @@ export default async function AdminRefundsPage({
         </span>
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Refunds to process</h1>
         <p className="text-muted-foreground">
-          Riders who cancelled a paid booking ({total}). Send the refund by hand to the payout details
-          below, enter what you refunded, then mark it done — or decline. The rider is notified.
+          Verified payments whose booking was cancelled, removed or had already expired ({total}).
+          Send the refund by hand to the payout details below (or back to the UTR&apos;s source if none),
+          enter what you refunded, then mark it done — or decline. The rider is notified. A cancelled
+          booking whose UTR isn&apos;t verified yet appears here only after you verify it under
+          &ldquo;To verify&rdquo;; rejecting that UTR cancels it with no refund.
         </p>
       </div>
       <Tabs active="refunds" />
@@ -55,7 +58,10 @@ export default async function AdminRefundsPage({
         rows={rows.map((r) => [
           <span key="s" className="font-medium">{r.studentName ?? '—'}</span>,
           r.routeName,
-          <span key="a" className="tnum font-semibold">{inr(r.amountCents)}</span>,
+          <div key="a" className="min-w-0">
+            <p className="tnum font-semibold">{inr(r.amountCents)}</p>
+            {r.utr && <p className="font-mono text-xs text-muted-foreground">UTR {r.utr}</p>}
+          </div>,
           <div key="p" className="min-w-0 text-sm">
             <p className="font-medium">{r.payoutMethod ?? '—'}</p>
             <p className="break-all font-mono text-xs text-muted-foreground">{r.payoutDetails ?? '—'}</p>
