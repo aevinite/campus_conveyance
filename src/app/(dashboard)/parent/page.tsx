@@ -79,7 +79,7 @@ export default async function ParentDashboard() {
   // Dashboard summary: how many passes are active + the soonest renewal due.
   const activePasses = [...activeByChild.values()]
     .filter((b) => b.status === 'CONFIRMED')
-    .map((b) => ({ b, pass: computePass(b.paid_at ?? b.created_at, b.billing_period as BillingPeriod | null) }))
+    .map((b) => ({ b, pass: computePass(b.pass_start_at ?? b.paid_at ?? b.created_at, b.billing_period as BillingPeriod | null) }))
     .filter((x): x is { b: ChildBookingRow; pass: NonNullable<ReturnType<typeof computePass>> } => x.pass !== null);
   const soonest = activePasses.length
     ? activePasses.reduce((a, c) => (c.pass.daysLeft < a.pass.daysLeft ? c : a))
@@ -97,12 +97,12 @@ export default async function ParentDashboard() {
         billingPeriod={b.billing_period as BillingPeriod | null}
         status={b.status}
         isPaid={b.is_paid}
-        startIso={b.paid_at ?? b.created_at}
+        startIso={b.pass_start_at ?? b.paid_at ?? b.created_at}
         pickupName={b.pickup_name}
         busNumber={b.bus_number}
         whoLabel={firstName(b.student_name)}
         manageHref={`/parent/book/${studentId}`}
-        renewHref={b.route_id ? `/parent/book/${studentId}/routes/${b.route_id}` : `/parent/book/${studentId}`}
+        renewHref={`/parent/renew/${b.booking_id}`}
         compact
       />
     );
@@ -457,6 +457,14 @@ export default async function ParentDashboard() {
                     <div>
                       <p className="font-semibold">{c.full_name ?? 'Student'}</p>
                       <p className="text-sm text-muted-foreground">{c.institution_name ?? c.email}</p>
+                      {c.managed && (
+                        <Link
+                          href={`/parent/child/${c.student_id}`}
+                          className="text-xs font-semibold text-primary transition-colors hover:text-primary/70"
+                        >
+                          Edit details
+                        </Link>
+                      )}
                     </div>
                   </div>
                   <UnlinkChildButton studentId={c.student_id} managed={c.managed} />

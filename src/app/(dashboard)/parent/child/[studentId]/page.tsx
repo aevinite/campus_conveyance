@@ -4,6 +4,8 @@ import { GraduationCap, Mail, Phone, MapPin, Home, Ticket, Bus } from 'lucide-re
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listChildren } from '@/features/parent/repository';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { EditChildForm } from './edit-child-form';
 import { AppBackLink } from '@/components/ui/app-back-link';
 import RouteStopsMap, { type MapStop } from '../../../student/routes/[id]/route-stops-map';
 
@@ -32,6 +34,19 @@ export default async function ParentChildHub({
   if (!child) notFound();
 
   const childName = child.full_name ?? 'Your child';
+
+  // Roll no isn't in parent_children and parents can't read `students` under RLS.
+  // The child is already verified as this parent's (listChildren above), so read
+  // just that column with the service client for the edit form's prefill.
+  let rollNo = '';
+  if (child.managed) {
+    const { data: st } = await createAdminClient()
+      .from('students')
+      .select('roll_no')
+      .eq('id', studentId)
+      .maybeSingle();
+    rollNo = ((st as { roll_no: string | null } | null)?.roll_no ?? '') || '';
+  }
   const confirmed = child.active_status === 'CONFIRMED' && !!child.active_route_id;
 
   // Live map only for a confirmed ride — fetch that route's stops.
@@ -145,6 +160,22 @@ export default async function ParentChildHub({
             </div>
           ))}
         </dl>
+        {/* A managed child has no login, so the parent keeps their details current. */}
+        {child.managed && (
+          <div className="mt-4">
+            <EditChildForm
+              child={{
+                studentId,
+                fullName: child.full_name ?? '',
+                phone: child.phone ?? '',
+                grade: child.grade ?? '',
+                address: child.address ?? '',
+                rollNo,
+                email: child.email ?? '',
+              }}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

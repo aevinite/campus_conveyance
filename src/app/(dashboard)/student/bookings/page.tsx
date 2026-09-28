@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle, Ticket, ArrowRight, History } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
-import { listMyBookings, countMyBookings, type BookingRow } from '@/features/booking/repository';
+import { listMyBookings, countMyBookings, listLateUtrBookings, type BookingRow } from '@/features/booking/repository';
+import { LateUtrForm } from '@/components/late-utr-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
@@ -180,10 +181,12 @@ export default async function BookingsPage({
   // Lapsed holds are swept by the pg_cron 'expire-stale-holds' job (migration
   // 0052), not per request, so this page no longer issues a table UPDATE on load.
   // Paginated so the timeline doesn't fetch the student's entire history at once.
-  const [bookings, total, myReviews] = await Promise.all([
+  const [bookings, total, myReviews, lateHolds] = await Promise.all([
     listMyBookings(db, { limit: PAGE_SIZE, offset }),
     countMyBookings(db),
     getMyReviews(db),
+    // Holds that lapsed while the rider was paying — they can still send the UTR.
+    listLateUtrBookings(db).catch(() => []),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (total > 0 && page > totalPages) redirect(`/student/bookings?page=${totalPages}`);
@@ -213,6 +216,20 @@ export default async function BookingsPage({
           </Link>
         </div>
       </div>
+      {lateHolds.map((h) => (
+        <Card key={h.id}>
+          <CardContent className="space-y-3 py-4">
+            <p className="flex items-start gap-2 text-sm">
+              <Timer className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <span>
+                Your seat hold on <span className="font-medium">{h.routeName}</span> expired before the
+                payment was submitted.
+              </span>
+            </p>
+            <LateUtrForm bookingId={h.id} />
+          </CardContent>
+        </Card>
+      ))}
       {bookings.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
           <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary">

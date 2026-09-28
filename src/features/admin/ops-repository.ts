@@ -1114,6 +1114,57 @@ export async function listPendingUpiPayments(opts: PageOpts = {}): Promise<Paged
   };
 }
 
+// ---- Pass renewals awaiting verification ----------------------------------
+
+export interface PendingRenewalRow {
+  renewalId: string;
+  studentName: string | null;
+  routeName: string;
+  period: string;
+  amountCents: number;
+  utr: string;
+  reference: string;
+  submittedAt: string;
+}
+
+/** In-place pass renewals (pass_renewals, 0127) whose UPI payment awaits verification. */
+export async function listPendingRenewals(): Promise<PendingRenewalRow[]> {
+  const client = db();
+  const { data, error } = await client
+    .from('pass_renewals')
+    .select('id, booking_id, billing_period, amount_cents, upi_utr, reference, submitted_at')
+    .eq('status', 'CREATED')
+    .order('submitted_at', { ascending: true })
+    .limit(100);
+  if (error) throw error;
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const bookings = await mapByIds<{ id: string; student_name: string | null; route_id: string | null }>(
+    client,
+    'bookings',
+    'id, student_name, route_id',
+    rows.map((r) => r.booking_id as string),
+  );
+  const routes = await mapByIds<{ id: string; name: string }>(
+    client,
+    'routes',
+    'id, name',
+    [...bookings.values()].map((b) => b.route_id),
+  );
+  return rows.map((r) => {
+    const b = bookings.get(r.booking_id as string);
+    return {
+      renewalId: r.id as string,
+      studentName: b?.student_name ?? null,
+      routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
+      period: r.billing_period as string,
+      amountCents: (r.amount_cents as number) ?? 0,
+      utr: r.upi_utr as string,
+      reference: r.reference as string,
+      submittedAt: r.submitted_at as string,
+    };
+  });
+}
+
 // ---- Refunds awaiting processing ------------------------------------------
 
 export interface PendingRefundRow {

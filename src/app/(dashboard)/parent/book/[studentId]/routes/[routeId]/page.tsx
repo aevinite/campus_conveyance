@@ -4,7 +4,9 @@ import { Bus, CheckCircle2, Clock3, GraduationCap, Phone } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { AppBackLink } from '@/components/ui/app-back-link';
-import { getRouteWithStops, getAvailability } from '@/features/booking/repository';
+import { getRouteWithStops, getAvailability, listLateUtrBookings } from '@/features/booking/repository';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { LateUtrForm } from '@/components/late-utr-form';
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
 import { getUpiSettings } from '@/lib/upi-settings';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -81,31 +83,51 @@ export default async function ParentBookRoute({
   let panel: React.ReactNode;
   if (activeHere && activeHere.status === 'PENDING' && !activeHere.is_paid && active?.approved_at) {
     panel = (
-      <ReserveForm
-        routeId={routeId}
-        routeName={data.route.name}
-        stops={data.stops}
-        soldOut={soldOut}
-        destinationName={data.institutionName}
-        plans={planOptions}
-        upi={upi}
-        bookForStudentId={studentId}
-        bookingsHref="/parent"
-        homeHref="/parent"
-        resumeFare={resumeFare}
-        resumeAmountRupees={resumeAmountRupees}
-        resumePeriodLabel={resumePeriodLabel}
-        resumeBookingId={activeHere.booking_id}
-        resumeSubmitted={activeHere.payment_status === 'SUBMITTED'}
-        payBy={activeHere.expires_at ? formatTime(activeHere.expires_at) : null}
-        payByIso={activeHere.expires_at}
-      />
+      <div className="space-y-3">
+        <ReserveForm
+          routeId={routeId}
+          routeName={data.route.name}
+          stops={data.stops}
+          soldOut={soldOut}
+          destinationName={data.institutionName}
+          plans={planOptions}
+          upi={upi}
+          bookForStudentId={studentId}
+          bookingsHref="/parent"
+          homeHref="/parent"
+          resumeFare={resumeFare}
+          resumeAmountRupees={resumeAmountRupees}
+          resumePeriodLabel={resumePeriodLabel}
+          resumeBookingId={activeHere.booking_id}
+          resumeSubmitted={activeHere.payment_status === 'SUBMITTED'}
+          payBy={activeHere.expires_at ? formatTime(activeHere.expires_at) : null}
+          payByIso={activeHere.expires_at}
+        />
+        {/* Money sent + UTR submitted (verifying): the parent can still cancel —
+            like the student can — which files a refund request and holds the seat. */}
+        {activeHere.payment_status === 'SUBMITTED' && (
+          <CancelBookingButton
+            bookingId={activeHere.booking_id}
+            studentId={studentId}
+            paid
+            refundPending={!!activeHere.cancel_requested_at}
+          />
+        )}
+      </div>
     );
   } else if (activeHere && activeHere.status === 'PENDING' && !activeHere.is_paid) {
     panel = (
-      <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
-        <Clock3 className="mt-0.5 size-4 shrink-0 text-warning" />
-        <span>{childName}&apos;s request is being approved. Once approved, you&apos;ll have 10 minutes to pay.</span>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm">
+          <Clock3 className="mt-0.5 size-4 shrink-0 text-warning" />
+          <span>{childName}&apos;s request is being approved. Once approved, you&apos;ll have 10 minutes to pay.</span>
+        </div>
+        <CancelBookingButton
+          bookingId={activeHere.booking_id}
+          studentId={studentId}
+          paid={activeHere.payment_status === 'SUBMITTED'}
+          refundPending={!!activeHere.cancel_requested_at}
+        />
       </div>
     );
   } else if (activeHere && activeHere.status === 'CONFIRMED') {
@@ -164,20 +186,34 @@ export default async function ParentBookRoute({
       </div>
     );
   } else {
+    // A hold on this ride that lapsed while the parent was paying: they can still
+    // hand in the UTR (refunded once verified). Parents can't read bookings under
+    // RLS, so read via the service client — scoped to this verified child + route.
+    const lateHolds = await listLateUtrBookings(createAdminClient(), { studentId, routeId }).catch(() => []);
     panel = (
-      <ReserveForm
-        routeId={routeId}
-        routeName={data.route.name}
-        stops={data.stops}
-        soldOut={soldOut}
-        notBookable={notBookable}
-        destinationName={data.institutionName}
-        plans={planOptions}
-        upi={upi}
-        bookForStudentId={studentId}
-        bookingsHref="/parent"
-        homeHref="/parent"
-      />
+      <div className="space-y-3">
+        {lateHolds.map((h) => (
+          <div key={h.id} className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {childName}&apos;s seat hold on this ride expired before the payment was submitted.
+            </p>
+            <LateUtrForm bookingId={h.id} studentId={studentId} />
+          </div>
+        ))}
+        <ReserveForm
+          routeId={routeId}
+          routeName={data.route.name}
+          stops={data.stops}
+          soldOut={soldOut}
+          notBookable={notBookable}
+          destinationName={data.institutionName}
+          plans={planOptions}
+          upi={upi}
+          bookForStudentId={studentId}
+          bookingsHref="/parent"
+          homeHref="/parent"
+        />
+      </div>
     );
   }
 

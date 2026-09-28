@@ -86,6 +86,8 @@ export interface ChildBookingRow {
   billing_period: string | null;
   /** When the seat was paid/confirmed — the pass-window start. */
   paid_at: string | null;
+  /** Start of the current window after an in-place renewal (overrides paid_at). */
+  pass_start_at: string | null;
   payment_status: string | null;
   /** Set once a paid cancellation is filed → show "Refund pending". */
   cancel_requested_at: string | null;

@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { SelectMenu } from '@/components/ui/select-menu';
 import type { Stop } from '@/features/booking/repository';
 import { PaymentCountdown } from './payment-countdown';
+import { LateUtrForm } from '@/components/late-utr-form';
 
 // The auto-approval runs server-side inside reserve_seat (seat availability,
 // pickup validity and campus eligibility are all checked together, atomically).
@@ -704,6 +705,7 @@ export function ReserveForm({
             it&apos;s still available.
           </span>
         </div>
+        {bookingId && <LateUtrForm bookingId={bookingId} studentId={bookForStudentId} />}
         <Button className="w-full" onClick={requestAgain}>
           Request the seat again
         </Button>

@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { IndianRupee } from 'lucide-react';
-import { listPendingUpiPayments, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
-import { verifyUpiPaymentAction } from '@/features/admin/ops-actions';
+import { listPendingUpiPayments, listPendingRenewals, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
+import { verifyUpiPaymentAction, verifyPassRenewalAction } from '@/features/admin/ops-actions';
+import { periodLabel, type BillingPeriod } from '@/lib/billing';
 import { DataTable } from '@/components/data-table';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
@@ -18,7 +19,10 @@ export default async function AdminPaymentsPage({
 }) {
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
-  const { rows, total } = await listPendingUpiPayments({ limit: OPS_PAGE_SIZE, offset });
+  const [{ rows, total }, renewals] = await Promise.all([
+    listPendingUpiPayments({ limit: OPS_PAGE_SIZE, offset }),
+    listPendingRenewals(),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / OPS_PAGE_SIZE));
   if (total > 0 && page > totalPages) redirect(`/aevinite/payments?page=${totalPages}`);
 
@@ -85,6 +89,53 @@ export default async function AdminPaymentsPage({
         empty="No UPI payments waiting for verification."
       />
       <Pager page={page} totalPages={totalPages} basePath="/aevinite/payments" />
+
+      <div className="pt-4">
+        <h2 className="text-lg font-bold tracking-tight">Pass renewals to verify ({renewals.length})</h2>
+        <p className="text-sm text-muted-foreground">
+          Riders renewing an active pass in place. Approving extends the same booking from its current end
+          date — the seat is kept.
+        </p>
+      </div>
+      <DataTable
+        headers={['Rider', 'Route', 'Plan', 'Amount', 'UTR', 'Ref', 'Submitted', 'Action']}
+        rows={renewals.map((r) => [
+          <span key="s" className="font-medium">{r.studentName ?? '—'}</span>,
+          r.routeName,
+          periodLabel(r.period as BillingPeriod),
+          <span key="a" className="tnum font-semibold">{inr(r.amountCents)}</span>,
+          <span key="u" className="font-mono text-sm">{r.utr}</span>,
+          <span key="r" className="font-mono text-xs text-muted-foreground">{r.reference}</span>,
+          formatDateTime(r.submittedAt),
+          <form key="act" action={verifyPassRenewalAction} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input type="hidden" name="renewalId" value={r.renewalId} />
+            <input
+              name="note"
+              placeholder="Note (optional)"
+              className="h-9 w-40 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                name="approve"
+                value="true"
+                className="rounded-lg bg-success px-3 py-1.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Approve
+              </button>
+              <button
+                type="submit"
+                name="approve"
+                value="false"
+                className="rounded-lg border border-destructive/40 px-3 py-1.5 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10"
+              >
+                Reject
+              </button>
+            </div>
+          </form>,
+        ])}
+        empty="No pass renewals waiting for verification."
+      />
     </section>
   );
 }

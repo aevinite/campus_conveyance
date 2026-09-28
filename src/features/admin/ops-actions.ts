@@ -118,6 +118,40 @@ export async function verifyUpiPaymentAction(formData: FormData): Promise<void> 
   if (approve) updateTag('admin-report');
 }
 
+// Verify (or reject) an in-place pass renewal payment (0127). Approving extends
+// the SAME booking's pass from its current end; the rider + parents are notified.
+export async function verifyPassRenewalAction(formData: FormData): Promise<void> {
+  const db = await createClient();
+  const role = await getSessionRole(db);
+  if (role !== 'SUPER_ADMIN') return;
+
+  const renewalId = String(formData.get('renewalId') ?? '');
+  const approve = String(formData.get('approve') ?? '') === 'true';
+  const note = String(formData.get('note') ?? '').trim() || null;
+  if (!UUID_RE.test(renewalId)) return;
+
+  const { error } = await db.rpc('verify_pass_renewal', {
+    p_renewal_id: renewalId,
+    p_approve: approve,
+    p_note: note,
+  });
+  if (error) throw error;
+  try {
+    const { data } = await db.auth.getClaims();
+    const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
+    await db.from('audit_logs').insert({
+      actor_id: actorId,
+      action: approve ? 'PASS_RENEWAL_VERIFIED' : 'PASS_RENEWAL_REJECTED',
+      entity: 'pass_renewals',
+      entity_id: renewalId,
+    });
+  } catch {
+    /* logging is best-effort */
+  }
+  revalidatePath('/aevinite/payments');
+  if (approve) updateTag('admin-report');
+}
+
 // Process a refund for a cancelled paid booking: the admin sent the money (or
 // declined) and records it. Approve → payment REFUNDED + rider notified.
 export async function processRefundAction(formData: FormData): Promise<void> {

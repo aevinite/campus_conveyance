@@ -123,6 +123,8 @@ export interface ActiveBooking {
   created_at: string | null;
   /** When the seat was paid/confirmed — the precise pass-window start, if set. */
   paid_at: string | null;
+  /** Start of the current window after an in-place renewal (overrides paid_at). */
+  pass_start_at?: string | null;
 }
 
 /** The caller's single active booking on ANY route (one bus at a time). */
@@ -140,7 +142,7 @@ export async function getMyActiveBooking(
   // of a separate students lookup, then the active booking, in a single query.
   const { data, error } = await db
     .from('bookings')
-    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, created_at, paid_at, routes(id, name), students!inner(profile_id)')
+    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, created_at, paid_at, pass_start_at, routes(id, name), students!inner(profile_id)')
     .eq('students.profile_id', userId)
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
     // The one-active-booking unique index already guarantees ≤1 match; the
@@ -179,6 +181,7 @@ export async function getMyActiveBooking(
     payment_status: (data.payment_status as string) ?? null,
     created_at: (data.created_at as string) ?? null,
     paid_at: (data.paid_at as string) ?? null,
+    pass_start_at: (data.pass_start_at as string) ?? null,
     routeId: route?.id ?? null,
     routeName: route?.name ?? null,
   };
@@ -311,6 +314,52 @@ export async function getAvailability(
   const reserved = Number(row?.reserved ?? 0);
   const available = Number(row?.available ?? Math.max(total - reserved, 0));
   return { total, reserved, available };
+}
+
+/** A seat hold that lapsed on the payment timer in the last 24h — the rider can
+ *  still hand in a UTR if they paid just as the window closed (refund path). */
+export interface LateUtrBooking {
+  id: string;
+  routeName: string;
+  expiresAt: string | null;
+}
+
+/** 24h after the hold lapsed, a late UTR is no longer accepted. */
+export const LATE_UTR_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Lapsed (PAYMENT_TIMEOUT) holds still inside the late-UTR window with no UTR
+ * submitted yet. `db` must only see bookings the caller may act for (RLS for the
+ * student; a service client pre-filtered by `studentId` for a verified parent).
+ */
+export async function listLateUtrBookings(
+  db: SupabaseClient,
+  opts: { studentId?: string; routeId?: string } = {},
+): Promise<LateUtrBooking[]> {
+  let q = db
+    .from('bookings')
+    .select('id, expires_at, payment_status, routes(name)')
+    .eq('status', 'CANCELLED')
+    .eq('cancel_cause', 'PAYMENT_TIMEOUT')
+    .gt('expires_at', new Date(Date.now() - LATE_UTR_WINDOW_MS).toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(5);
+  if (opts.studentId) q = q.eq('student_id', opts.studentId);
+  if (opts.routeId) q = q.eq('route_id', opts.routeId);
+  const { data, error } = await q;
+  if (error) throw error;
+  type RouteRef = { name: string | null };
+  return (data ?? [])
+    .filter((b) => b.payment_status !== 'SUBMITTED' && b.payment_status !== 'PAID')
+    .map((b) => {
+      const r = b.routes as RouteRef | RouteRef[] | null;
+      const route = Array.isArray(r) ? r[0] : r;
+      return {
+        id: b.id as string,
+        routeName: route?.name ?? 'your route',
+        expiresAt: (b.expires_at as string | null) ?? null,
+      };
+    });
 }
 
 /** Count of the student's own non-cancelled bookings, for My Bookings paging. */

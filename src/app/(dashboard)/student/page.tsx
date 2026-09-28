@@ -80,8 +80,11 @@ export default async function StudentHome() {
     const vv = (routeRow as { vehicles: { bus_number: string | null } | { bus_number: string | null }[] | null } | null)?.vehicles;
     busNumber = (Array.isArray(vv) ? vv[0] : vv)?.bus_number ?? null;
   }
-  const passStart = activeBooking ? activeBooking.paid_at ?? activeBooking.created_at : null;
-  const passRenewHref = activeBooking?.routeId ? `/student/routes/${activeBooking.routeId}` : '/student/schools';
+  const passStart = activeBooking
+    ? activeBooking.pass_start_at ?? activeBooking.paid_at ?? activeBooking.created_at
+    : null;
+  // Renew in place (same booking + seat) — see /student/renew/[bookingId].
+  const passRenewHref = activeBooking ? `/student/renew/${activeBooking.id}` : '/student/schools';
 
   // Status breakdown for the mini bar chart (only non-empty buckets). Cancelled
   // bookings are hidden from the student panel entirely.
@@ -109,6 +112,7 @@ export default async function StudentHome() {
                 pickupName,
                 busNumber,
                 route_id: activeBooking.routeId,
+                booking_id: activeBooking.id,
               }
             : null
         }

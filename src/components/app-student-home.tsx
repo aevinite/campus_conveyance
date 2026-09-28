@@ -23,11 +23,12 @@ type ActiveTrip = {
   isPaid: boolean;
   paymentStatus: string | null;
   billingPeriod: BillingPeriod | null;
-  /** paid_at ?? created_at — the pass-window start. */
+  /** pass_start_at ?? paid_at ?? created_at — the pass-window start. */
   startIso: string | null;
   pickupName: string | null;
   busNumber: string | null;
   route_id: string | null;
+  booking_id: string;
 } | null;
 
 type Campus = {
@@ -107,7 +108,7 @@ export function AppStudentHome({
             pickupName={active.pickupName}
             busNumber={active.busNumber}
             manageHref="/student/bookings"
-            renewHref={active.route_id ? `/student/routes/${active.route_id}` : '/student/schools'}
+            renewHref={`/student/renew/${active.booking_id}`}
             compact
           />
           {/* Live bus map right in the home */}

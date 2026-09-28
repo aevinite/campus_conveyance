@@ -168,6 +168,7 @@ export async function editManagedChildAction(
     if (error) throw new AppError('PARENT', error.message);
     revalidatePath('/parent');
     revalidatePath(`/parent/book/${d.studentId}`);
+    revalidatePath(`/parent/child/${d.studentId}`);
     return { ok: true, childName: d.fullName, studentId: d.studentId };
   } catch (e) {
     return { error: toErrorResponse(e).message };
