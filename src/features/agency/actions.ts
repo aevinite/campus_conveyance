@@ -803,6 +803,9 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
       password: d.password,
       email_confirm: true, // agency-vouched — can log in immediately, no email step
       user_metadata: { role: 'DRIVER', full_name: d.name, phone: d.phone ?? '' },
+      // The signup trigger only takes DRIVER from app_metadata (service-role only),
+      // never from client-controllable user_metadata.
+      app_metadata: { role: 'DRIVER' },
     });
     if (cErr || !created.user) {
       return { error: cErr?.message ?? 'Could not create the driver account.' };

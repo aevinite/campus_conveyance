@@ -71,6 +71,13 @@ export async function redeemParentCodeAction(
     const row = (Array.isArray(data) ? data[0] : data) as
       | { full_name: string | null; already_linked: boolean | null }
       | undefined;
+    // A wrong/expired code returns no row (instead of raising) so the failed
+    // attempt stays counted toward the brute-force lockout.
+    if (!row) {
+      return {
+        error: 'Invalid or expired code — ask your child to generate a new one from their profile',
+      };
+    }
     revalidatePath('/parent');
     return {
       ok: true,

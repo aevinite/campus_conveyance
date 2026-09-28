@@ -13,6 +13,28 @@ export type FormState = { error?: string; message?: string };
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
+/**
+ * Hard gate for actions that use the service-role client (which bypasses RLS):
+ * a server action is a public POST endpoint, so the panel's layout guard alone
+ * doesn't protect it. Checks the caller's role on the profile row (not just the
+ * JWT claim, which can lag a demotion) and that the account isn't deactivated.
+ */
+async function assertSuperAdmin(): Promise<void> {
+  const db = await createClient();
+  const { data } = await db.auth.getClaims();
+  const uid = (data?.claims as { sub?: string } | null)?.sub;
+  if (!uid) throw new AppError('ADMIN', 'Not signed in.');
+  const { data: prof } = await createAdminClient()
+    .from('profiles')
+    .select('role, is_deleted')
+    .eq('id', uid)
+    .maybeSingle();
+  const p = prof as { role: string; is_deleted: boolean } | null;
+  if (!p || p.role !== 'SUPER_ADMIN' || p.is_deleted) {
+    throw new AppError('ADMIN', 'Only a super admin can do this.');
+  }
+}
+
 // Guard id-shaped inputs before they reach Postgres — a malformed value would be
 // a 22P02 (invalid uuid) crash to the (unstyled, no try/catch) error page.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -105,6 +127,7 @@ async function seedAgencyServicesFromSignup(
 export async function approveAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const db = await createClient();
   const { data: claimsData } = await db.auth.getClaims();
   const userId = (claimsData?.claims as { sub?: string } | null)?.sub ?? null;
@@ -184,6 +207,7 @@ export async function restoreAgencyAction(formData: FormData): Promise<void> {
 export async function permanentlyDeleteAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const admin = createAdminClient();
 
   // Grab the owner first so we can also remove their login after the row is gone.
@@ -389,6 +413,7 @@ export async function restoreStudentAction(formData: FormData): Promise<void> {
 export async function permanentlyDeleteStudentAction(formData: FormData): Promise<void> {
   const id = String(formData.get('studentId') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const admin = createAdminClient();
   // Only purge an already soft-deleted student (parity with the agency/driver
   // purges) — reached from Deleted Students, so an active student arriving here
@@ -524,6 +549,7 @@ export async function restoreCollegeAction(formData: FormData): Promise<void> {
 export async function permanentlyDeleteCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const admin = createAdminClient();
   // Only purge an already soft-deleted college (parity with the other purges) —
   // this cascades routes/stops/bookings/payments, so a stale click on a live
@@ -589,6 +615,7 @@ export async function approveCampusApplicationAction(formData: FormData): Promis
 export async function rejectCampusApplicationAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const admin = createAdminClient();
   // Soft-delete the campus (reversible from Deleted Colleges) …
   const { error } = await admin
@@ -630,6 +657,11 @@ export async function createInstitutionAdminAction(_: FormState, formData: FormD
   if (!name) return { error: 'Enter the admin’s name.' };
   if (!EMAIL_RE.test(email)) return { error: 'Enter a valid email address.' };
   if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
+  try {
+    await assertSuperAdmin();
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
 
   const admin = createAdminClient();
 
@@ -682,6 +714,7 @@ export async function unlinkInstitutionAdminAction(formData: FormData): Promise<
   const profileId = String(formData.get('profileId') ?? '');
   const collegeId = String(formData.get('collegeId') ?? '');
   if (!UUID_RE.test(profileId) || !UUID_RE.test(collegeId)) return;
+  await assertSuperAdmin();
   const admin = createAdminClient();
   // Scope the update to this college so a stale form can't detach an admin from a
   // campus they were since moved to.
