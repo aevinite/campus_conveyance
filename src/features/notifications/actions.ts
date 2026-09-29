@@ -2,7 +2,10 @@
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { PUSH_ENDPOINT_COOKIE } from '@/lib/push-cookie';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
 import { AppError, toErrorResponse } from '@/lib/errors/app-error';
@@ -37,8 +40,11 @@ export async function savePushSubscriptionAction(
   if (!user) return { error: 'Not signed in.' };
   try {
     const { endpoint, keys } = parsed.data;
-    // RLS (push_sub_* policies) ensures profile_id must equal auth.uid().
-    const { error } = await db.from('push_subscriptions').upsert(
+    // Service role: the endpoint belongs to THIS browser, so re-point it at the
+    // signed-in user even if a previous user of this browser left it behind (the
+    // user-session upsert was silently blocked by RLS in that case, and the old
+    // user kept getting this browser's pushes).
+    const { error } = await createAdminClient().from('push_subscriptions').upsert(
       {
         profile_id: user.id,
         endpoint,
@@ -50,6 +56,14 @@ export async function savePushSubscriptionAction(
       { onConflict: 'endpoint' },
     );
     if (error) throw new AppError('NOTIFICATION', error.message);
+    // Remember this browser's endpoint so logout can drop it server-side.
+    (await cookies()).set(PUSH_ENDPOINT_COOKIE, endpoint, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+    });
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
@@ -68,6 +82,7 @@ export async function removePushSubscriptionAction(
       .delete()
       .eq('endpoint', endpoint);
     if (error) throw new AppError('NOTIFICATION', error.message);
+    (await cookies()).delete(PUSH_ENDPOINT_COOKIE);
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }

@@ -8,33 +8,12 @@ import { collegeSchema, slugify } from './schemas';
 import { agencyProfileSchema } from '@/features/agency/schemas';
 import { agencyReportTag } from '@/features/agency/repository';
 import { campusesWithAdmin } from './repository';
-import { ensureEmailFreeForSignup } from '@/features/auth/services';
+import { assertSuperAdmin } from './guard';
+import { emailHasNoAccount } from '@/features/auth/services';
 
 export type FormState = { error?: string; message?: string };
 
 type Db = Awaited<ReturnType<typeof createClient>>;
-
-/**
- * Hard gate for actions that use the service-role client (which bypasses RLS):
- * a server action is a public POST endpoint, so the panel's layout guard alone
- * doesn't protect it. Checks the caller's role on the profile row (not just the
- * JWT claim, which can lag a demotion) and that the account isn't deactivated.
- */
-async function assertSuperAdmin(): Promise<void> {
-  const db = await createClient();
-  const { data } = await db.auth.getClaims();
-  const uid = (data?.claims as { sub?: string } | null)?.sub;
-  if (!uid) throw new AppError('ADMIN', 'Not signed in.');
-  const { data: prof } = await createAdminClient()
-    .from('profiles')
-    .select('role, is_deleted')
-    .eq('id', uid)
-    .maybeSingle();
-  const p = prof as { role: string; is_deleted: boolean } | null;
-  if (!p || p.role !== 'SUPER_ADMIN' || p.is_deleted) {
-    throw new AppError('ADMIN', 'Only a super admin can do this.');
-  }
-}
 
 // Guard id-shaped inputs before they reach Postgres — a malformed value would be
 // a 22P02 (invalid uuid) crash to the (unstyled, no try/catch) error page.
@@ -100,8 +79,22 @@ export async function rejectAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
   if (!UUID_RE.test(id)) return;
   const reason = String(formData.get('reason') ?? '').trim();
+  await assertSuperAdmin();
   const db = await createClient();
-  await setAgency(db, id, { status: 'REJECTED', rejected_reason: reason || null });
+  // Guarded: only a still-PENDING application can be rejected, so a stale tab
+  // can't knock an already-approved, live provider offline.
+  const { data: rejected, error } = await db
+    .from('agencies')
+    .update({ status: 'REJECTED', rejected_reason: reason || null })
+    .eq('id', id)
+    .eq('status', 'PENDING')
+    .select('id')
+    .maybeSingle();
+  if (error) throw new AppError('ADMIN', error.message);
+  if (!rejected) {
+    revalidatePath('/aevinite/requests');
+    return;
+  }
   await logAction(db, 'AGENCY_REJECTED', 'agency', id, reason ? { reason } : {});
   revalidatePath('/aevinite/requests');
   revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
@@ -390,6 +383,18 @@ export async function permanentlyDeleteStudentAction(formData: FormData): Promis
     .maybeSingle();
   if (readErr) throw new AppError('ADMIN', readErr.message);
   if (!prof || (prof as { is_deleted: boolean }).is_deleted !== true) return;
+  // The students row survives the auth-user delete (profile_id → NULL) so its
+  // bookings/payments stay on record — but it would then look like a parent's
+  // login-less "managed" child. Detach every parent link first so nobody can
+  // book for (or act on) the purged student.
+  const { data: studs, error: sErr } = await admin.from('students').select('id').eq('profile_id', id);
+  if (sErr) throw new AppError('ADMIN', sErr.message);
+  const studentIds = ((studs ?? []) as { id: string }[]).map((r) => r.id);
+  if (studentIds.length > 0) {
+    const { error: psErr } = await admin.from('parent_students').delete().in('student_id', studentIds);
+    if (psErr) throw new AppError('ADMIN', psErr.message);
+    await admin.from('parent_link_codes').delete().in('student_id', studentIds);
+  }
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) throw new AppError('ADMIN', error.message);
   await logAction(await createClient(), 'STUDENT_PURGED', 'profile', id);
@@ -490,14 +495,33 @@ export async function deleteCollegeAction(formData: FormData): Promise<void> {
 export async function restoreCollegeAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const db = await createClient();
+  const { data: inst, error: readErr } = await db
+    .from('institutions')
+    .select('is_verified')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) throw new AppError('ADMIN', readErr.message);
+  if (!inst) return;
+  const verified = (inst as { is_verified: boolean }).is_verified === true;
   const { error } = await db
     .from('institutions')
-    // Delete set is_active=false to hide it from students; restore must flip it
-    // back on, otherwise a "restored" college stays invisible to students.
-    .update({ is_deleted: false, deleted_at: null, is_active: true })
+    // Delete set is_active=false to hide it from students; restoring a verified
+    // college flips it back on. An UNVERIFIED one is a (rejected) self-registered
+    // application: it returns to "pending review" hidden, never straight to live.
+    .update({ is_deleted: false, deleted_at: null, is_active: verified })
     .eq('id', id);
   if (error) throw new AppError('ADMIN', error.message);
+  if (!verified) {
+    // Rejecting the application deactivated its campus admin(s); bring them back
+    // so it shows again under "Pending campus applications".
+    await createAdminClient()
+      .from('profiles')
+      .update({ is_deleted: false })
+      .eq('institution_id', id)
+      .eq('role', 'INSTITUTION_ADMIN');
+  }
   await logAction(db, 'COLLEGE_RESTORED', 'institution', id);
   revalidatePath('/aevinite/colleges');
   revalidatePath('/aevinite/deleted-colleges');
@@ -526,6 +550,23 @@ export async function permanentlyDeleteCollegeAction(formData: FormData): Promis
     .maybeSingle();
   if (readErr) throw new AppError('ADMIN', readErr.message);
   if (!inst || (inst as { is_deleted: boolean }).is_deleted !== true) return;
+  // Refuse while money is unsettled: a payment awaiting verification, a refund
+  // still owed, or a booking still running. Purging would erase those records.
+  const [{ count: active }, { count: toVerify }, { count: owed }] = await Promise.all([
+    admin.from('bookings').select('id', { count: 'exact', head: true })
+      .eq('institution_id', id).in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED']),
+    admin.from('payments').select('id', { count: 'exact', head: true })
+      .eq('institution_id', id).eq('status', 'CREATED'),
+    admin.from('payments').select('id', { count: 'exact', head: true })
+      .eq('institution_id', id).eq('refund_status', 'REQUESTED'),
+  ]);
+  if ((active ?? 0) + (toVerify ?? 0) + (owed ?? 0) > 0) {
+    throw new AppError(
+      'ADMIN',
+      `Can't permanently delete this college yet: ${active ?? 0} active booking(s), ` +
+        `${toVerify ?? 0} payment(s) to verify and ${owed ?? 0} refund(s) still owed. Settle those first.`,
+    );
+  }
   const { error } = await admin.from('institutions').delete().eq('id', id);
   if (error) throw new AppError('ADMIN', error.message);
   await logAction(await createClient(), 'COLLEGE_PURGED', 'institution', id);
@@ -651,7 +692,7 @@ export async function createInstitutionAdminAction(_: FormState, formData: FormD
   if (cErr) return { error: cErr.message };
   if (!college || (college as { is_deleted: boolean }).is_deleted) return { error: 'College not found.' };
 
-  const free = await ensureEmailFreeForSignup(admin, email);
+  const free = await emailHasNoAccount(admin, email);
   if (free.error) return { error: free.error };
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({

@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Role } from '@/lib/rbac/roles';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
  * True when the signed-in account has been soft-deleted ("deleted"/removed) by an
@@ -16,10 +17,10 @@ import type { Role } from '@/lib/rbac/roles';
  *   - agencies → agencies.is_deleted (deleting an agency leaves the owner's
  *     profile row untouched, so AGENCY users must be checked on the agency row)
  *
- * RLS lets a user read their own profile (profiles_self) and their own agency
- * (owner_profile_id = auth.uid()), so this reads the real value under the user's
- * own session. cache() dedupes the lookup within a request, so a layout and the
- * page it wraps don't each pay for it.
+ * Read with the SERVICE-ROLE client: since 0129 the database itself rejects every
+ * API call from a deactivated account (PostgREST pre-request check), so a read
+ * under the user's own session would just error — and fail open. cache() dedupes
+ * the lookup within a request, so a layout and the page it wraps don't each pay.
  */
 export const isAccountDeactivated = cache(
   async (
@@ -27,7 +28,9 @@ export const isAccountDeactivated = cache(
     userId: string,
     role: Role | undefined,
   ): Promise<boolean> => {
-    const { data: profile } = await db
+    void db;
+    const admin = createAdminClient();
+    const { data: profile } = await admin
       .from('profiles')
       .select('is_deleted')
       .eq('id', userId)
@@ -37,7 +40,7 @@ export const isAccountDeactivated = cache(
     }
 
     if (role === 'AGENCY') {
-      const { data: agency } = await db
+      const { data: agency } = await admin
         .from('agencies')
         .select('is_deleted')
         .eq('owner_profile_id', userId)

@@ -15,6 +15,12 @@ import { createClient } from '@/lib/supabase/client';
 /** Deep link Supabase sends the browser back to; caught by the native listener. */
 export const NATIVE_OAUTH_REDIRECT = 'campusconveyance://auth/callback';
 
+/** localStorage key marking a Google sign-in THIS app started (see the listener:
+ *  a callback link is only honoured while this is fresh, so a web page firing
+ *  campusconveyance://auth/callback?code=… can't sign the app into another
+ *  account). */
+export const NATIVE_OAUTH_PENDING_KEY = 'cc:native-oauth-started';
+
 /** True when running inside the Campus Conveyance native app. Uses the same
  *  User-Agent marker the server checks (see src/lib/app-context.ts), so it needs
  *  no Capacitor import and is safe to call during SSR (returns false there). */
@@ -36,6 +42,11 @@ export async function nativeGoogleSignIn(): Promise<void> {
   });
   if (error) throw error;
   if (!data?.url) throw new Error('Could not start Google sign-in.');
+  try {
+    localStorage.setItem(NATIVE_OAUTH_PENDING_KEY, String(Date.now()));
+  } catch {
+    /* storage unavailable — the callback will then be ignored */
+  }
   const { Browser } = await import('@capacitor/browser');
   await Browser.open({ url: data.url });
 }

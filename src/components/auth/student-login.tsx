@@ -10,11 +10,19 @@ function StudentLoginInner() {
   // Google / OAuth failures come back as ?error= (from googleLoginAction and the
   // /auth/callback route). Surface it — previously it was ignored, so a failed
   // Google sign-in looked like nothing happened.
-  const oauthError = useSearchParams().get('error');
+  const params = useSearchParams();
+  const oauthError = params.get('error');
+  // ?confirmed=1 — the app was opened from an email-confirmation link (the link
+  // carries no session, so the rider signs in once here).
+  const confirmed = params.get('confirmed') === '1';
   return (
     <LoginCard
-      title="Welcome back"
-      description="Sign in to your Campus Conveyance account."
+      title={confirmed ? 'Email confirmed' : 'Welcome back'}
+      description={
+        confirmed
+          ? 'Your email is confirmed — sign in to continue.'
+          : 'Sign in to your Campus Conveyance account.'
+      }
       action={action}
       submitting={pending}
       error={state.error ?? oauthError ?? undefined}

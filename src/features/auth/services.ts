@@ -84,6 +84,28 @@ export async function isEmailTakenByActiveAccount(
 }
 
 /**
+ * For an account created ON SOMEONE ELSE'S BEHALF (an agency adding a driver, an
+ * admin adding a campus admin): the email must not belong to ANY account — live,
+ * unconfirmed or soft-deleted. Unlike ensureEmailFreeForSignup this never
+ * deletes: only the email's owner may reclaim their own leftover account (by
+ * signing up themselves). Read-only. `admin` must be a service-role client.
+ */
+export async function emailHasNoAccount(
+  admin: SupabaseClient,
+  email: string,
+): Promise<{ error?: string }> {
+  const { data: profile, error } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email_lower', email.trim().toLowerCase())
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: 'Could not check that email. Please try again.' };
+  if (profile) return { error: 'This email already has an account — use a different email.' };
+  return {};
+}
+
+/**
  * Makes sure an email can be (re)used for a fresh signup.
  * - If a live, CONFIRMED account already uses it → returns an error (real user).
  * - If a leftover UNCONFIRMED account uses it (an abandoned signup that was never

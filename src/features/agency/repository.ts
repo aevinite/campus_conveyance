@@ -35,7 +35,9 @@ export async function getMyAgencyProfile(
 ): Promise<MyAgencyProfile | null> {
   const { userId } = await getSessionClaims(db);
   if (!userId) return null;
-  const { data, error } = await db
+  // Service-role read scoped to the caller's own agency: GST/PAN/KYC columns
+  // aren't granted to signed-in users (0129).
+  const { data, error } = await createAdminClient()
     .from('agencies')
     .select(
       'id, name, email, phone, contact_person, legal_name, registration_no, gst_number, pan_number, registered_address, description, permit_doc_url, fitness_doc_url, status, created_at',

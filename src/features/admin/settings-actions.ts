@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { getSessionRole } from '@/features/auth/session';
+import { isActiveSuperAdmin } from './guard';
 import { setMaintenance, type MaintenanceTarget } from '@/lib/maintenance';
 import { setUpiSettings } from '@/lib/upi-settings';
 
@@ -11,7 +11,8 @@ import { setUpiSettings } from '@/lib/upi-settings';
 // and shows the loader page. The two switches are independent.
 export async function toggleMaintenanceAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const target: MaintenanceTarget = formData.get('target') === 'app' ? 'app' : 'website';
@@ -43,7 +44,8 @@ export async function saveUpiSettingsAction(
   formData: FormData,
 ): Promise<UpiSettingsState> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return { error: 'Not allowed.' };
 
   const vpa = String(formData.get('vpa') ?? '').trim();

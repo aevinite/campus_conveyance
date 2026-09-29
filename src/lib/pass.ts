@@ -24,6 +24,23 @@ export interface PassInfo {
 }
 
 /**
+ * `start + N months` exactly as Postgres computes `timestamptz + interval 'N
+ * months'` in the DB's UTC session (booking_pass_end, which the end-lapsed-passes
+ * cron uses): the day-of-month is CLAMPED to the target month's last day (Jan 31
+ * + 1 month = Feb 28). JS setMonth instead overflows (→ Mar 3) and uses the local
+ * zone, so the card could show a pass ending up to 3 days after the server ends it.
+ */
+export function addMonthsLikePostgres(start: Date, months: number): Date {
+  const y = start.getUTCFullYear();
+  const m = start.getUTCMonth() + months;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const day = Math.min(start.getUTCDate(), lastDay);
+  return new Date(
+    Date.UTC(y, m, day, start.getUTCHours(), start.getUTCMinutes(), start.getUTCSeconds(), start.getUTCMilliseconds()),
+  );
+}
+
+/**
  * Compute the pass window for a confirmed booking. `startIso` is when the pass
  * began — the paid/confirmed time (fall back to the booking's created_at, which
  * is only minutes earlier). Returns null if we can't (no plan or bad date).
@@ -38,8 +55,7 @@ export function computePass(
   const months = BILLING_PERIODS.find((b) => b.period === period)?.months;
   if (!months) return null;
 
-  const end = new Date(start);
-  end.setMonth(end.getMonth() + months);
+  const end = addMonthsLikePostgres(start, months);
   const now = Date.now();
   const totalMs = end.getTime() - start.getTime();
   const totalDays = Math.max(1, Math.round(totalMs / MS_DAY));

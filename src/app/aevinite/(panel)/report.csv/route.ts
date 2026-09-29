@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
-import { getSessionRole } from '@/features/auth/session';
+import { isActiveSuperAdmin } from '@/features/admin/guard';
 import { getAdminReport } from '@/features/admin/repository';
 
 // Cookie-authed, per-request export — declare the runtime explicitly to match
@@ -11,9 +10,7 @@ export const runtime = 'nodejs';
 // Route handlers aren't wrapped by the (panel) layout guard, so we check the
 // role here ourselves.
 export async function GET(request: Request) {
-  const db = await createClient();
-  const role = await getSessionRole(db);
-  if (role !== 'SUPER_ADMIN') {
+  if (!(await isActiveSuperAdmin())) {
     // A plain 403 body was downloaded as a file literally containing the word
     // "Forbidden" (e.g. when the session had expired). Redirect to the admin
     // login instead so the user just re-authenticates.

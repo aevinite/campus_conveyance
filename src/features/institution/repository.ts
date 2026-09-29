@@ -14,6 +14,7 @@
 // and every page sits under a requireRole('INSTITUTION_ADMIN') gate.
 // ---------------------------------------------------------------------------
 import 'server-only';
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -41,7 +42,17 @@ function db(): SupabaseClient {
   return createAdminClient();
 }
 
-/** Fetch `key in (ids)` from `table` and index rows by `key`. */
+// `in.(…)` filters travel in the URL: past ~250 uuids the request line gets too
+// long and fails. Split id lists into chunks this size.
+const IN_CHUNK = 100;
+
+function chunk<T>(xs: T[], size = IN_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
+  return out;
+}
+
+/** Fetch `key in (ids)` from `table` (chunked) and index rows by `key`. */
 async function mapByIds<T = Record<string, unknown>>(
   client: SupabaseClient,
   table: string,
@@ -52,10 +63,14 @@ async function mapByIds<T = Record<string, unknown>>(
   const uniq = [...new Set(ids.filter((x): x is string => !!x))];
   const out = new Map<string, T>();
   if (uniq.length === 0) return out;
-  const { data, error } = await client.from(table).select(select).in(key, uniq);
-  if (error) throw error;
-  for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
-    out.set(row[key] as string, row as T);
+  const results = await Promise.all(
+    chunk(uniq).map((part) => client.from(table).select(select).in(key, part)),
+  );
+  for (const { data, error } of results) {
+    if (error) throw error;
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      out.set(row[key] as string, row as T);
+    }
   }
   return out;
 }
@@ -68,25 +83,24 @@ function range<T>(q: T, opts: PageOpts): T {
 }
 
 /**
- * The campus the signed-in institution admin represents. Claim-first (the custom
- * access-token hook injects app_metadata.institution_id from profiles), with a
- * service-role profiles fallback so the panel still works if the JWT hook isn't
- * enabled on an environment or the session predates the link. Returns null when
- * the account isn't linked to a campus yet (or the caller is a super-admin with
- * no campus) — callers render an empty state rather than crashing.
+ * The campus the signed-in institution admin represents — read from the LIVE
+ * profile (service role), never the JWT claim: the claim lingers up to an hour
+ * after an admin is unlinked or deactivated. Returns null when the account isn't
+ * a live campus admin linked to a campus (callers render an empty state).
  */
-export async function resolveInstitutionId(): Promise<string | null> {
+export const resolveInstitutionId = cache(async (): Promise<string | null> => {
   const server = await createClient();
-  const { userId, role, institutionId } = await getSessionClaims(server);
-  if (institutionId) return institutionId;
+  const { userId, role } = await getSessionClaims(server);
   if (!userId || (role !== 'INSTITUTION_ADMIN' && role !== 'SUPER_ADMIN')) return null;
   const { data } = await db()
     .from('profiles')
-    .select('institution_id')
+    .select('institution_id, role, is_deleted')
     .eq('id', userId)
     .maybeSingle();
-  return ((data?.institution_id as string) ?? null) || null;
-}
+  const p = data as { institution_id: string | null; role: string; is_deleted: boolean } | null;
+  if (!p || p.is_deleted || (p.role !== 'INSTITUTION_ADMIN' && p.role !== 'SUPER_ADMIN')) return null;
+  return p.institution_id || null;
+});
 
 export interface CampusApproval {
   name: string;
@@ -472,13 +486,21 @@ export async function listRidersForInstitution(
   const visibleRouteIds = new Set(visibleRoutes.map((r) => r.id));
   if (visibleRouteIds.size === 0) return [];
 
-  const { data: bkRows, error: bkErr } = await client
-    .from('bookings')
-    .select('id, student_name, student_email, route_id, pickup_stop_id, status')
-    .eq('institution_id', institutionId)
-    .in('status', ['PENDING', 'CONFIRMED']);
-  if (bkErr) throw bkErr;
-  const bookings = ((bkRows ?? []) as {
+  // Page through (PostgREST caps a response at 1000 rows).
+  const bkRows: Record<string, unknown>[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error: bkErr } = await client
+      .from('bookings')
+      .select('id, student_name, student_email, route_id, pickup_stop_id, status')
+      .eq('institution_id', institutionId)
+      .in('status', ['PENDING', 'CONFIRMED'])
+      .order('id')
+      .range(from, from + 999);
+    if (bkErr) throw bkErr;
+    bkRows.push(...((data ?? []) as Record<string, unknown>[]));
+    if ((data ?? []).length < 1000) break;
+  }
+  const bookings = (bkRows as unknown as {
     id: string; student_name: string | null; student_email: string | null;
     route_id: string | null; pickup_stop_id: string | null; status: string;
   }[]).filter((b) => b.route_id && visibleRouteIds.has(b.route_id));
@@ -523,16 +545,22 @@ export async function listRidersForInstitution(
   const bookingIds = bookings.map((b) => b.id);
   const boardingByBooking = new Map<string, BoardingStatus>();
   {
-    const { data: ev, error: eErr } = await client
-      .from('ride_events')
-      .select('booking_id, stage, recorded_at')
-      .in('booking_id', bookingIds)
-      .gte('recorded_at', midnightIso)
-      .order('recorded_at', { ascending: false });
-    if (eErr) throw eErr;
-    for (const e of (ev ?? []) as { booking_id: string; stage: string }[]) {
-      if (!boardingByBooking.has(e.booking_id)) {
-        boardingByBooking.set(e.booking_id, e.stage as BoardingStatus);
+    const parts = await Promise.all(
+      chunk(bookingIds).map((ids) =>
+        client
+          .from('ride_events')
+          .select('booking_id, stage, recorded_at')
+          .in('booking_id', ids)
+          .gte('recorded_at', midnightIso)
+          .order('recorded_at', { ascending: false }),
+      ),
+    );
+    for (const { data: ev, error: eErr } of parts) {
+      if (eErr) throw eErr;
+      for (const e of (ev ?? []) as { booking_id: string; stage: string }[]) {
+        if (!boardingByBooking.has(e.booking_id)) {
+          boardingByBooking.set(e.booking_id, e.stage as BoardingStatus);
+        }
       }
     }
   }
@@ -540,13 +568,15 @@ export async function listRidersForInstitution(
   // "Bus approaching" — a pickup_alerts row exists for this booking today.
   const approachingBookings = new Set<string>();
   {
-    const { data: al, error: aErr } = await client
-      .from('pickup_alerts')
-      .select('booking_id')
-      .eq('service_date', dateStr)
-      .in('booking_id', bookingIds);
-    if (aErr) throw aErr;
-    for (const a of (al ?? []) as { booking_id: string }[]) approachingBookings.add(a.booking_id);
+    const parts = await Promise.all(
+      chunk(bookingIds).map((ids) =>
+        client.from('pickup_alerts').select('booking_id').eq('service_date', dateStr).in('booking_id', ids),
+      ),
+    );
+    for (const { data: al, error: aErr } of parts) {
+      if (aErr) throw aErr;
+      for (const a of (al ?? []) as { booking_id: string }[]) approachingBookings.add(a.booking_id);
+    }
   }
 
   const rows: InstitutionRiderRow[] = [];

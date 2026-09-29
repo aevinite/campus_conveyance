@@ -48,21 +48,19 @@ export default function ConfirmPage() {
         const dest = dashboardFor(role);
         setWebDest(dest);
 
-        // Try the native app first (it's Android-only, for students/parents),
-        // carrying the session via the existing campusconveyance:// deep-link
-        // channel. If the app isn't installed the page stays visible → fall back
-        // to the web dashboard. On non-Android just go straight to web.
+        // Try the native app first (it's Android-only, for students/parents).
+        // The deep link carries NO session tokens: any other app can register
+        // the same custom scheme and would catch them. The app just opens its
+        // login screen ("email confirmed — sign in"). If the app isn't installed
+        // the page stays visible → fall back to the web dashboard (this browser
+        // is already signed in). On non-Android just go straight to web.
         const isAndroid = /Android/i.test(navigator.userAgent);
         if (!isAndroid) {
           window.location.replace(dest);
           return;
         }
 
-        const deep =
-          'campusconveyance://auth/confirm#access_token=' +
-          encodeURIComponent(session.access_token) +
-          '&refresh_token=' +
-          encodeURIComponent(session.refresh_token);
+        const deep = 'campusconveyance://auth/confirm';
 
         setStatus('handoff');
         const fallback = window.setTimeout(() => {

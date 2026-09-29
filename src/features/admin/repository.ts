@@ -51,7 +51,10 @@ async function agencyApplications(
   status: string,
   opts: { limit?: number; offset?: number } = {},
 ): Promise<AgencyRequest[]> {
-  let q = db
+  void db;
+  // Service-role read: agencies' GST/PAN/KYC columns aren't granted to signed-in
+  // users (0129). Admin-only (the /aevinite layout is SUPER_ADMIN-gated).
+  let q = createAdminClient()
     .from('agencies')
     .select(REQUEST_COLS)
     .eq('status', status)
@@ -301,7 +304,10 @@ export async function listAgenciesDetailed(
   db: SupabaseClient,
   opts: PageOpts = {},
 ): Promise<Paged<AgencyDetail>> {
-  let q = db
+  void db;
+  // Service-role read: agencies' GST/PAN/KYC columns aren't granted to signed-in
+  // users (0129). Admin-only (the /aevinite layout is SUPER_ADMIN-gated).
+  let q = createAdminClient()
     .from('agencies')
     .select(AGENCY_DETAIL_COLS, { count: 'exact' })
     .eq('status', 'APPROVED')
@@ -315,7 +321,10 @@ export async function listAgenciesDetailed(
 
 /** One provider's full detail (for the admin edit page). */
 export async function getAgencyDetail(db: SupabaseClient, id: string): Promise<AgencyDetail | null> {
-  const { data, error } = await db.from('agencies').select(AGENCY_DETAIL_COLS).eq('id', id).maybeSingle();
+  void db;
+  // Service-role read: agencies' GST/PAN/KYC columns aren't granted to signed-in
+  // users (0129). Admin-only (the /aevinite layout is SUPER_ADMIN-gated).
+  const { data, error } = await createAdminClient().from('agencies').select(AGENCY_DETAIL_COLS).eq('id', id).maybeSingle();
   if (error) throw error;
   return data ? mapAgencyDetail(data as Record<string, unknown>) : null;
 }
@@ -352,6 +361,55 @@ async function students(db: SupabaseClient, deleted: boolean, opts: PageOpts = {
   return { rows: (data ?? []) as StudentRow[], total: count ?? 0 };
 }
 export const listStudents = (db: SupabaseClient, opts?: PageOpts) => students(db, false, opts);
+
+export interface ManagedChildRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  campus: string | null;
+  parents: string | null;
+}
+
+/**
+ * Parent-managed children (students rows with no login, profile_id NULL) — they
+ * have no profiles row, so the profile-based student list above never shows
+ * them. Service-role read (admin panel only).
+ */
+export async function listManagedChildren(opts: PageOpts = {}): Promise<Paged<ManagedChildRow>> {
+  const admin = createAdminClient();
+  let q = admin
+    .from('students')
+    .select(
+      'id, full_name, email, phone, institutions(name), parent_students(parents(profiles(full_name, email)))',
+      { count: 'exact' },
+    )
+    .is('profile_id', null)
+    .order('full_name');
+  if (opts.limit != null) q = q.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  const rows = ((data ?? []) as Record<string, unknown>[]).map((r) => {
+    const links = (r.parent_students ?? []) as { parents: unknown }[];
+    const parentNames = links
+      .map((l) => {
+        const pa = one(l.parents as { profiles: unknown } | { profiles: unknown }[] | null);
+        const pr = one(pa?.profiles as { full_name: string | null; email: string | null } | null);
+        return pr?.full_name ?? pr?.email ?? null;
+      })
+      .filter(Boolean);
+    return {
+      id: r.id as string,
+      full_name: (r.full_name as string) ?? null,
+      email: (r.email as string) ?? null,
+      phone: (r.phone as string) ?? null,
+      campus: one(r.institutions as { name: string } | { name: string }[] | null)?.name ?? null,
+      parents: parentNames.length ? parentNames.join(', ') : null,
+    };
+  });
+  return { rows, total: count ?? 0 };
+}
 export const listDeletedStudents = (db: SupabaseClient, opts?: PageOpts) => students(db, true, opts);
 
 async function colleges(db: SupabaseClient, deleted: boolean, opts: PageOpts = {}): Promise<Paged<CollegeRow>> {

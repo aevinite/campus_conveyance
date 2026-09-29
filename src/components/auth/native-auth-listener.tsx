@@ -1,15 +1,18 @@
 'use client';
 import { useEffect } from 'react';
-import { isNativeApp } from '@/lib/native-google-auth';
+import { isNativeApp, NATIVE_OAUTH_PENDING_KEY } from '@/lib/native-google-auth';
 
 /**
  * Finishes an auth flow that returns to the app via the `campusconveyance://auth`
  * deep link:
  *  - Google sign-in — Supabase redirects to `…/auth/callback?code=…`; we exchange
  *    the PKCE code for a session (the verifier is in this WebView's storage).
- *  - Email confirmation — the web /confirm page hands off to
- *    `…/auth/confirm#access_token=…&refresh_token=…`; we set the session from
- *    those tokens so a signup started in the app finishes in the app.
+ *    Only honoured while a sign-in THIS app started is pending, so a web page
+ *    firing the link can't log the app into someone else's account (and a
+ *    stolen code is useless without this WebView's PKCE verifier).
+ *  - Email confirmation — the web /confirm page opens `…/auth/confirm` with NO
+ *    tokens (another app could register the scheme and catch them); we just
+ *    open the login screen with an "email confirmed" note.
  *
  * Handles both a warm open (appUrlOpen) and a cold start (getLaunchUrl). No-op in
  * a normal browser — the @capacitor/* modules load only inside the native app.
@@ -65,7 +68,6 @@ export function NativeAuthListener() {
           const query = new URLSearchParams(
             qIdx >= 0 ? url.slice(qIdx + 1, hIdx >= 0 && hIdx > qIdx ? hIdx : undefined) : '',
           );
-          const hash = new URLSearchParams(hIdx >= 0 ? url.slice(hIdx + 1) : '');
 
           const err = query.get('error_description') ?? query.get('error');
           if (err) {
@@ -75,21 +77,25 @@ export function NativeAuthListener() {
 
           const supabase = createClient();
           const code = query.get('code');
-          const accessToken = hash.get('access_token');
-          const refreshToken = hash.get('refresh_token');
 
-          if (code) {
-            const { error } = await supabase.auth.exchangeCodeForSession(code);
-            if (error) throw error;
-          } else if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (error) throw error;
-          } else {
-            return; // nothing actionable
+          if (url.startsWith('campusconveyance://auth/confirm')) {
+            window.location.assign('/login?confirmed=1');
+            return;
           }
+          if (!code) return; // nothing actionable
+
+          // Only finish a Google sign-in this app started in the last 15 minutes.
+          let startedAt = 0;
+          try {
+            startedAt = Number(localStorage.getItem(NATIVE_OAUTH_PENDING_KEY) ?? 0);
+            localStorage.removeItem(NATIVE_OAUTH_PENDING_KEY);
+          } catch {
+            /* storage unavailable → treated as not started */
+          }
+          if (!startedAt || Date.now() - startedAt > 15 * 60 * 1000) return;
+
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
           // A brand-new Google signup's first token can predate the role claim
           // (the access-token hook derives it from the freshly-created profile).
           // Refresh once so the cookie the proxy reads carries the role — mirrors

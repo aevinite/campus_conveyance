@@ -29,6 +29,8 @@ const LIVE_POLL_MS = 5000;
 const MOVE_MIN_M = 8;
 // Re-fetch the area label only after the bus has moved this far.
 const AREA_MIN_M = 150;
+// A computed speed above this (~130 km/h) is a GPS jump, not real motion.
+const MAX_PLAUSIBLE_MPS = 36;
 
 function numberedPin(L: typeof import('leaflet'), n: number): LeafletNS.DivIcon {
   return L.divIcon({
@@ -48,6 +50,8 @@ interface LiveResponse {
   live: boolean;
   lat?: number;
   lng?: number;
+  /** When the driver's fix was recorded (ISO). */
+  updatedAt?: string | null;
   busNumber?: string | null;
 }
 
@@ -258,7 +262,13 @@ export default function RouteStopsMap({
         if (data.live && data.lat != null && data.lng != null && L && m) {
           missedPolls = 0; // fresh fix — reset the tolerance counter
           const pos: LatLng = [data.lat, data.lng];
-          const now = Date.now();
+          // Time of the driver's FIX, not of this poll. We poll faster than the
+          // driver pings, so the same fix often comes back twice: using poll time
+          // showed "Stopped" for the repeat and then doubled the speed on the next
+          // real fix. A repeated fix is simply ignored (state kept as it was).
+          const fixMs = data.updatedAt ? Date.parse(data.updatedAt) : NaN;
+          const now = Number.isFinite(fixMs) ? fixMs : Date.now();
+          if (busMarkerRef.current && Number.isFinite(fixMs) && fixMs <= prevBusTime.current) return;
           if (!busMarkerRef.current) {
             busMarkerRef.current = L.marker(pos, { icon: busDivIcon(L, null), zIndexOffset: 1000 })
               .addTo(m)
@@ -282,7 +292,10 @@ export default function RouteStopsMap({
               const hdg = bearingDeg(prev, pos);
               headingRef.current = hdg;
               const inst = dt > 0 ? dist / dt : 0; // m/s
-              speedRef.current = speedRef.current == null ? inst : speedRef.current * 0.5 + inst * 0.5;
+              // Ignore an implausible jump for the speed estimate (keep the last one).
+              if (inst <= MAX_PLAUSIBLE_MPS) {
+                speedRef.current = speedRef.current == null ? inst : speedRef.current * 0.6 + inst * 0.4;
+              }
               animCancel.current?.();
               animCancel.current = animateMarkerTo(
                 busMarkerRef.current,

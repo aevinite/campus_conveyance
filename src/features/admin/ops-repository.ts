@@ -18,6 +18,7 @@
 // both pickup_stop_id and drop_stop_id → route_stops; a vehicle and a
 // route_assignment both → drivers), which makes embed hints fragile.
 // ---------------------------------------------------------------------------
+import { todayIST } from '@/lib/today-ist';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -446,6 +447,7 @@ export async function getRouteDetail(id: string): Promise<RouteDetail | null> {
       .from('route_stop_progress')
       .select('stop_id, status, recorded_at')
       .eq('route_id', id)
+      .eq('service_date', todayIST()) // TODAY only — rows are kept per IST day
       .order('recorded_at', { ascending: false })
       .limit(50);
     if (perr) throw perr;
@@ -1009,7 +1011,7 @@ export interface CompletedPaymentRow {
   utr: string | null;
   reference: string | null;
   method: string | null;
-  /** PAID = verified, FAILED = rejected. */
+  /** PAID = verified, REFUNDED = verified then refunded, FAILED = rejected. */
   status: string;
   submittedAt: string | null;
   verifiedAt: string | null;
@@ -1028,7 +1030,8 @@ export async function listCompletedUpiPayments(opts: PageOpts = {}): Promise<Pag
     .select('booking_id, amount_cents, upi_utr, reference, method, status, submitted_at, verified_at, verify_note', { count: 'exact' })
     // Every completed/processed payment — verified UPI ones (with a UTR) AND any
     // legacy/mock completions (no UTR). Newest verification first; the rest after.
-    .in('status', ['PAID', 'FAILED'])
+    // REFUNDED = verified money later refunded — still part of the history.
+    .in('status', ['PAID', 'FAILED', 'REFUNDED'])
     .order('verified_at', { ascending: false, nullsFirst: false });
   q = range(q, opts);
   const { data, error, count } = await q;
@@ -1171,7 +1174,7 @@ export interface PendingRefundRow {
   bookingId: string;
   studentName: string | null;
   routeName: string;
-  /** Amount originally paid — prefill for the refund amount. */
+  /** Amount still refundable (fare + verified renewals) — prefill for the refund. */
   amountCents: number;
   /** UPI reference the rider paid with — refund to its source if no payout details. */
   utr: string | null;
@@ -1190,11 +1193,12 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
   const client = db();
   let q = client
     .from('payments')
-    .select('booking_id, amount_cents, updated_at, upi_utr', { count: 'exact' })
+    .select('booking_id, amount_cents, status, updated_at, upi_utr', { count: 'exact' })
     .eq('refund_status', 'REQUESTED')
     // Only money verified as received. An unverified UTR stays under "To verify"
     // until the admin confirms it (process_refund also refuses unverified ones).
-    .eq('status', 'PAID')
+    // REFUNDED + REQUESTED = a renewal paid after the fare was already refunded.
+    .in('status', ['PAID', 'REFUNDED'])
     .order('updated_at', { ascending: true });
   q = range(q, opts);
   const { data, error, count } = await q;
@@ -1218,6 +1222,20 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
     'id, name',
     [...bookings.values()].map((b) => b.route_id),
   );
+  // Verified pass renewals are refunded together with the fare (process_refund).
+  const renewalCents = new Map<string, number>();
+  const bookingIds = rows.map((r) => r.booking_id as string);
+  if (bookingIds.length > 0) {
+    const { data: rn, error: rnErr } = await client
+      .from('pass_renewals')
+      .select('booking_id, amount_cents')
+      .eq('status', 'PAID')
+      .in('booking_id', bookingIds);
+    if (rnErr) throw rnErr;
+    for (const x of (rn ?? []) as { booking_id: string; amount_cents: number }[]) {
+      renewalCents.set(x.booking_id, (renewalCents.get(x.booking_id) ?? 0) + (x.amount_cents ?? 0));
+    }
+  }
   return {
     rows: rows.map((r) => {
       const b = bookings.get(r.booking_id as string);
@@ -1231,7 +1249,10 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
         bookingId: r.booking_id as string,
         studentName: b?.student_name ?? null,
         routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
-        amountCents: (r.amount_cents as number) ?? 0,
+        // Everything still refundable: the fare (unless already refunded) + renewals.
+        amountCents:
+          (r.status === 'PAID' ? ((r.amount_cents as number) ?? 0) : 0) +
+          (renewalCents.get(r.booking_id as string) ?? 0),
         utr: (r.upi_utr as string | null) ?? null,
         payoutMethod: method ?? null,
         payoutDetails: details,

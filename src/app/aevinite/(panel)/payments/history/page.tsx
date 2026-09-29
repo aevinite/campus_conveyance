@@ -65,10 +65,12 @@ export default async function AdminPaymentHistoryPage({
             className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
               p.status === 'PAID'
                 ? 'border-success/30 bg-success/10 text-success'
-                : 'border-destructive/30 bg-destructive/10 text-destructive'
+                : p.status === 'REFUNDED'
+                  ? 'border-border bg-muted text-muted-foreground'
+                  : 'border-destructive/30 bg-destructive/10 text-destructive'
             }`}
           >
-            {p.status === 'PAID' ? 'Verified' : 'Rejected'}
+            {p.status === 'PAID' ? 'Verified' : p.status === 'REFUNDED' ? 'Verified · refunded' : 'Rejected'}
           </span>,
           p.submittedAt ? formatDateTime(p.submittedAt) : '—',
           p.verifiedAt ? formatDateTime(p.verifiedAt) : '—',

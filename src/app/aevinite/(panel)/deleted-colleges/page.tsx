@@ -47,7 +47,7 @@ export default async function AdminDeletedCollegesPage({
               fields={{ id: c.id }}
               triggerLabel="Delete permanently"
               title="Permanently delete this college?"
-              description={`“${c.name}” and everything tied to it — routes, stops, agency service listings, and student bookings for this college — will be permanently erased. This cannot be undone.`}
+              description={`“${c.name}” and its routes, stops, agency service listings and all bookings on those routes will be permanently erased. Students, drivers, buses and payment records are kept (they just lose this college). Blocked while any booking is active, a payment awaits verification or a refund is owed. This cannot be undone.`}
               confirmLabel="Delete permanently"
               pendingText="Deleting…"
             />

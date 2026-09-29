@@ -3,7 +3,7 @@ import { revalidatePath, updateTag } from 'next/cache';
 import { after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getSessionRole } from '@/features/auth/session';
+import { isActiveSuperAdmin } from './guard';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
 
@@ -16,7 +16,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // read-only — bookings/seats/rides stay owned by agencies and drivers.
 export async function setContactStatusAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const id = String(formData.get('id') ?? '');
@@ -48,7 +49,8 @@ export async function setContactStatusAction(formData: FormData): Promise<void> 
 // (the reviews_recount trigger recomputes on the is_hidden UPDATE).
 export async function setReviewHiddenAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const id = String(formData.get('id') ?? '');
@@ -80,7 +82,8 @@ export async function setReviewHiddenAction(formData: FormData): Promise<void> {
 // session so verify_upi_payment sees auth.uid() = the admin.
 export async function verifyUpiPaymentAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const bookingId = String(formData.get('bookingId') ?? '');
@@ -122,7 +125,8 @@ export async function verifyUpiPaymentAction(formData: FormData): Promise<void> 
 // the SAME booking's pass from its current end; the rider + parents are notified.
 export async function verifyPassRenewalAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const renewalId = String(formData.get('renewalId') ?? '');
@@ -156,7 +160,8 @@ export async function verifyPassRenewalAction(formData: FormData): Promise<void>
 // declined) and records it. Approve → payment REFUNDED + rider notified.
 export async function processRefundAction(formData: FormData): Promise<void> {
   const db = await createClient();
-  const role = await getSessionRole(db);
+  // DB check, not the JWT claim (which can lag a deactivation/demotion).
+  const role = (await isActiveSuperAdmin()) ? 'SUPER_ADMIN' : null;
   if (role !== 'SUPER_ADMIN') return;
 
   const bookingId = String(formData.get('bookingId') ?? '');

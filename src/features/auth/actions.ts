@@ -1,9 +1,10 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { createClient as createSbClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { registerSchema, loginSchema, forgotSchema, resetSchema, changePasswordSchema, profileSchema } from './schemas';
 import { ensureEmailFreeForSignup, signInAndRoute } from './services';
 import { getSessionClaims } from './session';
@@ -11,6 +12,7 @@ import { isAccountDeactivated } from './account-status';
 import { loginFor } from '@/lib/rbac/roles';
 import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '@/lib/mailer';
+import { PUSH_ENDPOINT_COOKIE } from '@/lib/push-cookie';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export type AuthState = {
@@ -136,6 +138,13 @@ export async function logoutAction() {
   const { role } = await getSessionClaims(db);
   if (role === 'DRIVER') {
     await db.rpc('driver_set_online', { p_online: false });
+  }
+  // Stop this browser's push notifications going to the account that just left.
+  const jar = await cookies();
+  const pushEndpoint = jar.get(PUSH_ENDPOINT_COOKIE)?.value;
+  if (pushEndpoint) {
+    await createAdminClient().from('push_subscriptions').delete().eq('endpoint', pushEndpoint);
+    jar.delete(PUSH_ENDPOINT_COOKIE);
   }
   await db.auth.signOut();
   redirect('/login');

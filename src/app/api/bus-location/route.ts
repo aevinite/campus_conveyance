@@ -42,11 +42,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ live: false }, { status: 500, headers });
   }
   const row = (data ?? [])[0] as
-    | { live: boolean; lat: number | null; lng: number | null; bus_number: string | null }
+    | { live: boolean; lat: number | null; lng: number | null; updated_at: string | null; bus_number: string | null }
     | undefined;
   return NextResponse.json(
     row?.live && row.lat != null && row.lng != null
-      ? { live: true, lat: row.lat, lng: row.lng, busNumber: row.bus_number }
+      ? // updatedAt = when the DRIVER's fix was taken, so the map derives speed
+        // from real fix-to-fix time (not its own poll interval).
+        { live: true, lat: row.lat, lng: row.lng, updatedAt: row.updated_at, busNumber: row.bus_number }
       : { live: false },
     { headers },
   );

@@ -31,6 +31,7 @@ import {
 } from './services';
 import {
   ensureEmailFreeForSignup,
+  emailHasNoAccount,
   isEmailTakenByActiveAccount,
   signInAndRoute,
 } from '@/features/auth/services';
@@ -793,7 +794,9 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
     const agency = await requireApprovedAgency(db);
     const admin = createAdminClient();
 
-    const free = await ensureEmailFreeForSignup(admin, d.email);
+    // Never frees (deletes) an existing account holding this email — it's
+    // someone else's address, not the agency's to reclaim.
+    const free = await emailHasNoAccount(admin, d.email);
     if (free.error) return { error: free.error };
 
     const { data: created, error: cErr } = await admin.auth.admin.createUser({
@@ -869,7 +872,7 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
     const admin = createAdminClient();
     // Email change (auth + profile), only if actually different.
     if (d.email.toLowerCase() !== (row.email ?? '').toLowerCase()) {
-      const free = await ensureEmailFreeForSignup(admin, d.email);
+      const free = await emailHasNoAccount(admin, d.email);
       if (free.error) return { error: free.error };
       const { error: eMail } = await admin.auth.admin.updateUserById(uid, {
         email: d.email,
