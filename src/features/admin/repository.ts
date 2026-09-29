@@ -140,10 +140,13 @@ export interface ServiceRequest {
   institutionName: string;
   status: string; // admin's final decision
   campusStatus: string; // the campus's decision
+  institutionId: string;
+  /** Campus has no campus admin, so the platform admin decides both stages. */
+  noCampusAdmin?: boolean;
 }
 
 const SR_SELECT =
-  'id, name, description, vehicle_type, status, campus_status, created_at, agencies(name), institutions(name)';
+  'id, name, description, vehicle_type, status, campus_status, created_at, institution_id, agencies(name), institutions(name)';
 
 function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
   const ag = r.agencies as { name: string } | { name: string }[] | null;
@@ -155,6 +158,7 @@ function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
     vehicle_type: r.vehicle_type as string,
     status: r.status as string,
     campusStatus: r.campus_status as string,
+    institutionId: r.institution_id as string,
     created_at: r.created_at as string,
     agencyName: (Array.isArray(ag) ? ag[0]?.name : ag?.name) ?? '—',
     institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
@@ -162,19 +166,43 @@ function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
 }
 
 /**
- * Requests the admin can act on NOW: the campus has accepted (campus_status
- * APPROVED) and the admin hasn't decided yet (status PENDING). Oldest first
- * (FIFO). Not paginated — this actionable set is naturally small.
+ * Campuses (of the given ids) that have at least one live campus admin. A
+ * request at a campus WITHOUT one can never get a campus decision, so the
+ * platform admin decides it directly. Service-role read (profiles).
+ */
+export async function campusesWithAdmin(institutionIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(institutionIds)];
+  if (ids.length === 0) return new Set();
+  const { data, error } = await createAdminClient()
+    .from('profiles')
+    .select('institution_id')
+    .eq('role', 'INSTITUTION_ADMIN')
+    .eq('is_deleted', false)
+    .in('institution_id', ids);
+  if (error) throw error;
+  return new Set(((data ?? []) as { institution_id: string }[]).map((r) => r.institution_id));
+}
+
+/**
+ * Requests the admin can act on NOW (status PENDING): the campus has accepted
+ * (campus_status APPROVED), or the campus has no campus admin to ever decide it
+ * (flagged noCampusAdmin). Oldest first (FIFO). Not paginated — this actionable
+ * set is naturally small.
  */
 export async function listActionableServiceRequests(db: SupabaseClient): Promise<ServiceRequest[]> {
   const { data, error } = await db
     .from('agency_service_requests')
     .select(SR_SELECT)
-    .eq('campus_status', 'APPROVED')
+    .in('campus_status', ['APPROVED', 'PENDING'])
     .eq('status', 'PENDING')
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(mapServiceRequest);
+  const rows = (data ?? []).map(mapServiceRequest);
+  const awaitingCampus = rows.filter((r) => r.campusStatus === 'PENDING');
+  const staffed = await campusesWithAdmin(awaitingCampus.map((r) => r.institutionId));
+  return rows
+    .filter((r) => r.campusStatus === 'APPROVED' || !staffed.has(r.institutionId))
+    .map((r) => (r.campusStatus === 'PENDING' ? { ...r, noCampusAdmin: true } : r));
 }
 
 /**

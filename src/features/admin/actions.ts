@@ -7,6 +7,7 @@ import { toErrorResponse, AppError } from '@/lib/errors/app-error';
 import { collegeSchema, slugify } from './schemas';
 import { agencyProfileSchema } from '@/features/agency/schemas';
 import { agencyReportTag } from '@/features/agency/repository';
+import { campusesWithAdmin } from './repository';
 import { ensureEmailFreeForSignup } from '@/features/auth/services';
 
 export type FormState = { error?: string; message?: string };
@@ -72,58 +73,6 @@ async function setAgency(db: Db, agencyId: string, patch: Record<string, unknown
   if (error) throw new AppError('ADMIN', error.message);
 }
 
-/**
- * Seed an approved agency's service areas from the colleges + vehicle types it
- * chose at signup (stored in the owner's auth user_metadata as institution_ids /
- * vehicle_types). This previously relied on the 0009 signup trigger, which has
- * drifted on live — so freshly-approved agencies served no college and couldn't
- * add routes through the normal flow. Doing it HERE, at approval, guarantees the
- * provider immediately shows under the campuses it picked. Idempotent: a unique
- * (agency_id, institution_id, vehicle_type) index backs the upsert, so re-approval
- * or an already-seeded agency is a no-op. Uses the service-role client to read the
- * owner's metadata and write across RLS.
- */
-async function seedAgencyServicesFromSignup(
-  admin: ReturnType<typeof createAdminClient>,
-  agencyId: string,
-  agencyName: string,
-  ownerId: string | null,
-): Promise<void> {
-  if (!ownerId) return;
-  const { data: userRes, error: uErr } = await admin.auth.admin.getUserById(ownerId);
-  if (uErr || !userRes?.user) return;
-  const meta = (userRes.user.user_metadata ?? {}) as Record<string, unknown>;
-  const rawIds = Array.isArray(meta.institution_ids) ? meta.institution_ids : [];
-  const rawTypes = Array.isArray(meta.vehicle_types) ? meta.vehicle_types : [];
-  const instIds = [...new Set(rawIds.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))];
-  const vtypes = [...new Set(rawTypes.filter((v): v is 'BUS' | 'VAN' => v === 'BUS' || v === 'VAN'))];
-  if (instIds.length === 0 || vtypes.length === 0) return;
-  // Only seed institutions that still exist and aren't deleted, so a stale
-  // metadata id can't fail the whole upsert on an FK violation.
-  const { data: valid } = await admin
-    .from('institutions')
-    .select('id')
-    .in('id', instIds)
-    .eq('is_deleted', false);
-  const validIds = new Set(((valid ?? []) as { id: string }[]).map((r) => r.id));
-  const rows: { agency_id: string; institution_id: string; vehicle_type: 'BUS' | 'VAN'; name: string }[] = [];
-  for (const iid of instIds) {
-    if (!validIds.has(iid)) continue;
-    for (const vt of vtypes) {
-      rows.push({
-        agency_id: agencyId,
-        institution_id: iid,
-        vehicle_type: vt,
-        name: `${agencyName} — ${vt === 'VAN' ? 'Van' : 'Bus'}`,
-      });
-    }
-  }
-  if (rows.length === 0) return;
-  await admin
-    .from('agency_services')
-    .upsert(rows, { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true });
-}
-
 export async function approveAgencyAction(formData: FormData): Promise<void> {
   const id = String(formData.get('agencyId') ?? '');
   if (!UUID_RE.test(id)) return;
@@ -138,25 +87,10 @@ export async function approveAgencyAction(formData: FormData): Promise<void> {
     rejected_reason: null,
   });
   await logAction(db, 'AGENCY_APPROVED', 'agency', id, {}, userId);
-  // Seed the provider's service areas from its signup selections so it immediately
-  // serves the campuses it picked. Best-effort: approval is already committed, and
-  // the provider can also file a "request service area", so a metadata/seed hiccup
-  // must never fail the approval itself.
-  try {
-    const admin = createAdminClient();
-    const { data: agency } = await admin
-      .from('agencies')
-      .select('owner_profile_id, name')
-      .eq('id', id)
-      .maybeSingle();
-    const a = agency as { owner_profile_id: string | null; name: string } | null;
-    if (a) {
-      await seedAgencyServicesFromSignup(admin, id, a.name, a.owner_profile_id);
-      updateTag(agencyReportTag(id)); // the agency's own dashboard "services" tile
-    }
-  } catch {
-    /* best-effort — approval already succeeded */
-  }
+  // Signup campuses are NOT seeded here: they were filed as PENDING service
+  // requests at signup (0128) and go through the campus → admin review. (The old
+  // re-seed read user_metadata, which the account owner can edit.)
+  updateTag(agencyReportTag(id));
   revalidatePath('/aevinite/requests');
   revalidatePath('/aevinite/providers');
   revalidatePath('/aevinite'); updateTag('admin-report'); // count cards + report charts
@@ -292,11 +226,33 @@ async function reviewerId(db: Awaited<ReturnType<typeof createClient>>): Promise
   return (data?.claims as { sub?: string } | null)?.sub ?? null;
 }
 
+/**
+ * True when this request still awaits a campus decision AND its campus has no
+ * live campus admin — the only case where the platform admin may decide the
+ * campus stage too (otherwise the request would be stuck forever).
+ */
+async function campusHasNoAdmin(
+  db: Awaited<ReturnType<typeof createClient>>,
+  requestId: string,
+): Promise<boolean> {
+  const { data } = await db
+    .from('agency_service_requests')
+    .select('institution_id, campus_status')
+    .eq('id', requestId)
+    .maybeSingle();
+  const r = data as { institution_id: string; campus_status: string } | null;
+  if (!r || r.campus_status !== 'PENDING') return false;
+  const staffed = await campusesWithAdmin([r.institution_id]);
+  return !staffed.has(r.institution_id);
+}
+
 /** Approve a service-area request: create the live service, then mark it approved. */
 export async function approveServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const db = await createClient();
+  const overrideCampus = await campusHasNoAdmin(db, id);
 
   // Claim the request ATOMICALLY: flip PENDING→APPROVED in one guarded UPDATE.
   // Whoever wins gets the row back; a second (double-click / concurrent) call
@@ -304,12 +260,18 @@ export async function approveServiceRequestAction(formData: FormData): Promise<v
   // duplicate listing that students would then see twice.
   const { data: claimed, error: claimErr } = await db
     .from('agency_service_requests')
-    .update({ status: 'APPROVED', reviewed_at: new Date().toISOString(), reviewed_by: await reviewerId(db) })
+    .update({
+      status: 'APPROVED',
+      // A campus with no campus admin can never decide — the admin decides both stages.
+      ...(overrideCampus ? { campus_status: 'APPROVED' } : {}),
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: await reviewerId(db),
+    })
     .eq('id', id)
     .eq('status', 'PENDING')
     // Final approval is only available AFTER the campus has accepted (two-stage
-    // flow, migration 0124). A request the campus hasn't accepted matches nothing.
-    .eq('campus_status', 'APPROVED')
+    // flow, migration 0124) — or for an unstaffed campus, while it still awaits one.
+    .eq('campus_status', overrideCampus ? 'PENDING' : 'APPROVED')
     .select('id, agency_id, institution_id, vehicle_type, name, description')
     .maybeSingle();
   // A failed write also yields claimed=null — surface it instead of treating it
@@ -347,22 +309,25 @@ export async function rejectServiceRequestAction(formData: FormData): Promise<vo
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
   const reason = String(formData.get('reason') ?? '').trim();
+  await assertSuperAdmin();
   const db = await createClient();
+  const overrideCampus = await campusHasNoAdmin(db, id);
   const { data: updated, error } = await db
     .from('agency_service_requests')
     .update({
       status: 'REJECTED',
+      ...(overrideCampus ? { campus_status: 'APPROVED' } : {}), // renders "Rejected by admin"
       rejected_reason: reason || null,
       reviewed_at: new Date().toISOString(),
       reviewed_by: await reviewerId(db),
     })
     .eq('id', id)
-    // Only a still-PENDING request the campus has accepted can be rejected here —
-    // mirrors approve's atomic claim (two-stage flow, migration 0124), so a
-    // reject-after-approve race can't flip an APPROVED request back to REJECTED
-    // while leaving the live agency_services row in place.
+    // Only a still-PENDING request the campus has accepted (or an unstaffed
+    // campus's still-awaiting one) can be rejected here — mirrors approve's
+    // atomic claim, so a reject-after-approve race can't flip an APPROVED
+    // request back to REJECTED while leaving the live agency_services row.
     .eq('status', 'PENDING')
-    .eq('campus_status', 'APPROVED')
+    .eq('campus_status', overrideCampus ? 'PENDING' : 'APPROVED')
     .select('id')
     .maybeSingle();
   if (error) throw new AppError('ADMIN', error.message);
@@ -594,6 +559,7 @@ export async function toggleCollegeAction(formData: FormData): Promise<void> {
 export async function approveCampusApplicationAction(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '');
   if (!UUID_RE.test(id)) return;
+  await assertSuperAdmin();
   const db = await createClient();
   // Guarded write: only flip an application that's still pending (hidden +
   // unverified + not deleted), so a stale double-click can't "re-approve" and a
@@ -617,14 +583,25 @@ export async function rejectCampusApplicationAction(formData: FormData): Promise
   if (!UUID_RE.test(id)) return;
   await assertSuperAdmin();
   const admin = createAdminClient();
-  // Soft-delete the campus (reversible from Deleted Colleges) …
-  const { error } = await admin
+  // Soft-delete the campus (reversible from Deleted Colleges) — guarded to a
+  // still-PENDING application (hidden + UNVERIFIED), so a stale tab can't hit a
+  // campus that was already approved, or an admin-disabled (verified) college.
+  const { data: rejected, error } = await admin
     .from('institutions')
     .update({ is_deleted: true, deleted_at: new Date().toISOString(), is_active: false })
     .eq('id', id)
     .eq('is_active', false)
-    .eq('is_deleted', false);
+    .eq('is_verified', false)
+    .eq('is_deleted', false)
+    .select('id')
+    .maybeSingle();
   if (error) throw new AppError('ADMIN', error.message);
+  if (!rejected) {
+    // Nothing matched (already approved / rejected / not an application) — leave
+    // its campus admins alone.
+    revalidatePath('/aevinite/colleges');
+    return;
+  }
   // … and soft-delete its campus admin(s) so the rejected login loses all access
   // (isAccountDeactivated gates on profiles.is_deleted for INSTITUTION_ADMIN).
   await admin

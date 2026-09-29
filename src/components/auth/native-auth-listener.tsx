@@ -28,12 +28,34 @@ export function NativeAuthListener() {
       // the appUrlOpen listener. Guard so a one-time PKCE code is never exchanged
       // twice (the second exchange fails on a consumed code and would bounce the
       // user to /login?error).
-      const handled = new Set<string>();
+      //
+      // getLaunchUrl keeps returning the launch link for the whole app session,
+      // and every handled link ends in a full-page navigation that remounts this
+      // component — so the "handled" set must survive navigations (sessionStorage),
+      // or a cold-start link is re-processed on every load → endless reload loop.
+      const KEY = 'cc:handled-auth-links';
+      const readHandled = (): string[] => {
+        try {
+          const v = JSON.parse(sessionStorage.getItem(KEY) ?? '[]');
+          return Array.isArray(v) ? v : [];
+        } catch {
+          return [];
+        }
+      };
+      const handled = new Set<string>(readHandled());
+      const markHandled = (url: string) => {
+        handled.add(url);
+        try {
+          sessionStorage.setItem(KEY, JSON.stringify([...handled].slice(-10)));
+        } catch {
+          /* storage unavailable — the in-memory set still guards this page */
+        }
+      };
 
       const handleUrl = async (url: string) => {
         if (!url || !url.startsWith('campusconveyance://auth')) return;
         if (handled.has(url)) return;
-        handled.add(url);
+        markHandled(url);
         await Browser.close().catch(() => {});
         try {
           // Parse the custom-scheme URL by hand — new URL()'s hash handling is

@@ -174,3 +174,37 @@ export async function editManagedChildAction(
     return { error: toErrorResponse(e).message };
   }
 }
+
+export type ChildCampusState = { ok?: boolean; error?: string };
+const childCampusSchema = z.object({
+  studentId: z.string().uuid(),
+  institutionId: z.string().uuid('Please choose a campus.'),
+});
+
+/**
+ * Set the campus of a linked child that has none yet (a code-linked student who
+ * never booked), so the parent can browse that campus's agencies and book.
+ */
+export async function setChildCampusAction(
+  _: ChildCampusState,
+  formData: FormData,
+): Promise<ChildCampusState> {
+  const parsed = childCampusSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Please choose a campus.' };
+  }
+  const db = await createClient();
+  try {
+    const { error } = await db.rpc('set_child_campus', {
+      p_student_id: parsed.data.studentId,
+      p_institution_id: parsed.data.institutionId,
+    });
+    if (error) throw new AppError('PARENT', error.message);
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
+  revalidatePath('/parent');
+  revalidatePath(`/parent/book/${parsed.data.studentId}`);
+  revalidatePath(`/parent/child/${parsed.data.studentId}`);
+  return { ok: true };
+}

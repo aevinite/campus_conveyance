@@ -45,8 +45,9 @@ export default async function AdminServiceRequestsPage({
         </span>
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Service Area Requests</h1>
         <p className="text-muted-foreground">
-          A request reaches you only after the school/college accepts it. Approving here creates the
-          live service that students can book.
+          A request reaches you only after the school/college accepts it — or straight away when that
+          campus has no campus admin to decide it. Approving here creates the live service that
+          students can book.
         </p>
       </div>
 
@@ -80,6 +81,11 @@ export default async function AdminServiceRequestsPage({
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Description</p>
                     <p className="text-sm">{r.description || '—'}</p>
                   </div>
+                  {r.noCampusAdmin && (
+                    <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      This campus has no campus admin, so you decide on its behalf as well.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
                     <form action={approveServiceRequestAction}>
                       <input type="hidden" name="requestId" value={r.id} />

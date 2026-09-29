@@ -35,7 +35,8 @@ const inr = (cents: number | null) =>
 // to recognise it's on file without exposing the full sensitive number.
 function maskId(id: string): string {
   const digits = id.replace(/\s+/g, '');
-  if (digits.length <= 4) return digits;
+  // Riders only ever receive the last 4 digits (0128); always show them masked.
+  if (!digits) return digits;
   return `•••• ${digits.slice(-4)}`;
 }
 

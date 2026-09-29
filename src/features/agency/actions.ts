@@ -54,14 +54,12 @@ function retryMessage(seconds: number): string {
 }
 
 /**
- * Seed the new agency's service areas from the colleges + vehicle types it picked
- * on the signup form, right after the account is created. The 0009/0090 signup
- * trigger that was meant to do this has drifted / isn't applied on live, so an
- * approved provider served no college and couldn't add routes. Doing it here in
- * app code makes onboarding work regardless of DB trigger state (approveAgency
- * also re-seeds as a safety net). Idempotent — the unique (agency_id,
- * institution_id, vehicle_type) index backs the upsert, so it's safe if the
- * trigger DID fire. Best-effort: the account already exists, so a seed hiccup
+ * File the colleges + vehicle types the new agency picked on the signup form as
+ * PENDING service-area requests, right after the account is created. They go
+ * through the normal campus → admin review like any other request; nothing
+ * goes live at signup. Mirrors the handle_new_user trigger (0128) in case it
+ * drifted. Idempotent — uq_asr_pending makes a duplicate PENDING request a
+ * 23505, which is ignored. Best-effort: the account already exists, so a hiccup
  * must never fail the signup.
  */
 async function seedSignupServices(
@@ -75,7 +73,7 @@ async function seedSignupServices(
   const vtypes = [...new Set(vehicleTypes)];
   if (instIds.length === 0 || vtypes.length === 0) return;
   // The handle_new_user trigger created the PENDING agency row from metadata in
-  // the same transaction as the auth user — resolve it so we can attach services.
+  // the same transaction as the auth user — resolve it so we can attach requests.
   const { data: ag } = await admin
     .from('agencies')
     .select('id, name')
@@ -83,8 +81,8 @@ async function seedSignupServices(
     .maybeSingle();
   const agency = ag as { id: string; name: string | null } | null;
   if (!agency) return;
-  // Only seed institutions that still exist and aren't deleted, so a stale id
-  // can't fail the whole upsert on an FK violation.
+  // Only request institutions that still exist and aren't deleted, so a stale id
+  // can't fail on an FK violation.
   const { data: valid } = await admin
     .from('institutions')
     .select('id')
@@ -92,22 +90,22 @@ async function seedSignupServices(
     .eq('is_deleted', false);
   const validIds = new Set(((valid ?? []) as { id: string }[]).map((r) => r.id));
   const name = agency.name ?? fallbackName;
-  const rows: { agency_id: string; institution_id: string; vehicle_type: 'BUS' | 'VAN'; name: string }[] = [];
   for (const iid of instIds) {
     if (!validIds.has(iid)) continue;
     for (const vt of vtypes) {
-      rows.push({
+      // One insert per row so an already-pending duplicate (23505) doesn't drop
+      // the rest of the batch.
+      await admin.from('agency_service_requests').insert({
         agency_id: agency.id,
         institution_id: iid,
         vehicle_type: vt,
         name: `${name} — ${vt === 'VAN' ? 'Van' : 'Bus'}`,
+        description: 'Requested at sign-up',
+        status: 'PENDING',
+        campus_status: 'PENDING',
       });
     }
   }
-  if (rows.length === 0) return;
-  await admin
-    .from('agency_services')
-    .upsert(rows, { onConflict: 'agency_id,institution_id,vehicle_type', ignoreDuplicates: true });
 }
 
 export type FormState = { error?: string; message?: string };

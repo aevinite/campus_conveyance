@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Bus, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getMyAgency, listMyBusesFull, countMyBusesFull, listUnassignedDrivers } from '@/features/agency/repository';
 import { buttonVariants } from '@/components/ui/button';
 import { Pager, pageParams } from '@/components/pager';
@@ -19,7 +20,9 @@ export default async function AgencyBusesPage({
   const db = await createClient();
   const agency = await getMyAgency(db);
   const [buses, total, unassigned] = await Promise.all([
-    agency ? listMyBusesFull(db, agency.id, { limit: PAGE_SIZE, offset }) : Promise.resolve([]),
+    // Service-role read, scoped to the caller's own agency: driver/conductor ID,
+    // DOB and address columns are not granted to signed-in users (0128).
+    agency ? listMyBusesFull(createAdminClient(), agency.id, { limit: PAGE_SIZE, offset }) : Promise.resolve([]),
     agency ? countMyBusesFull(db, agency.id) : Promise.resolve(0),
     agency ? listUnassignedDrivers(db, agency.id) : Promise.resolve([]),
   ]);

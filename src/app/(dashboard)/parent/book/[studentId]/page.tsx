@@ -4,9 +4,10 @@ import { GraduationCap, Ticket, Clock3 } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { listChildren, getChildActiveBooking } from '@/features/parent/repository';
-import { listInstitutionAgencies, type VehicleType } from '@/features/catalog/repository';
+import { listInstitutionAgencies, listInstitutions, type VehicleType } from '@/features/catalog/repository';
 import { AppBackLink } from '@/components/ui/app-back-link';
 import { AgencyList, VehicleTabs } from '../../../student/schools/[id]/agency-list';
+import { ChildCampusForm } from './child-campus-form';
 
 export default async function ParentBookPickAgency({
   params,
@@ -25,11 +26,13 @@ export default async function ParentBookPickAgency({
   const child = children.find((c) => c.student_id === studentId);
   if (!child) notFound(); // not linked to this parent
 
-  const [active, agencies] = await Promise.all([
+  const [active, agencies, campuses] = await Promise.all([
     getChildActiveBooking(db, studentId),
     child.institution_id
       ? listInstitutionAgencies(db, child.institution_id, vehicleType)
       : Promise.resolve([]),
+    // No campus yet (code-linked child who never booked) → offer a picker.
+    child.institution_id ? Promise.resolve([]) : listInstitutions(db),
   ]);
 
   const childName = child.full_name ?? 'your child';
@@ -80,9 +83,11 @@ export default async function ParentBookPickAgency({
       )}
 
       {!child.institution_id ? (
-        <p className="rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          This child has no campus set yet, so there are no agencies to show.
-        </p>
+        <ChildCampusForm
+          studentId={studentId}
+          childName={childName}
+          campuses={campuses.map((c) => ({ value: c.id, label: c.name }))}
+        />
       ) : (
         <>
           <div className="space-y-1">
