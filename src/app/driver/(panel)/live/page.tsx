@@ -20,7 +20,12 @@ export default async function DriverLivePage() {
       .order('sequence');
     stops = (data ?? [])
       .filter((s) => s.lat != null && s.lng != null)
-      .map((s) => ({ name: s.name as string, lat: s.lat as number, lng: s.lng as number }));
+      .map((s) => ({
+        name: s.name as string,
+        lat: s.lat as number,
+        lng: s.lng as number,
+        routeId: s.route_id as string,
+      }));
   }
 
   if (app) {
