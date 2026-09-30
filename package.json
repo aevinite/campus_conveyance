@@ -59,5 +59,8 @@
     "shadcn": "^4.11.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@capacitor/cli": "$@capacitor/cli"
   }
 }

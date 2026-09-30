@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { School, Clock, Mail } from 'lucide-react';
+import { School, Clock, Mail, Phone } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { listColleges, listPendingCampusApplications, ADMIN_PAGE_SIZE } from '@/features/admin/repository';
 import {
@@ -78,6 +78,12 @@ export default async function ManageCollegePage({
                       <span className="inline-flex items-center gap-1">
                         <Mail className="size-3" />
                         {p.adminName ? `${p.adminName} · ` : ''}{p.adminEmail}
+                      </span>
+                    )}
+                    {p.adminPhone && (
+                      <span className="inline-flex items-center gap-1">
+                        <Phone className="size-3" />
+                        {p.adminPhone}
                       </span>
                     )}
                   </p>

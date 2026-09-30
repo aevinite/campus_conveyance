@@ -794,10 +794,14 @@ export interface CampusAgencyReviews {
 }
 
 /**
- * Aggregate rating + recent VISIBLE reviews for each agency serving this campus.
- * Read-only oversight of rider sentiment. Reviewer identity is omitted (the
- * campus admin isn't the review owner) — only rating + comment, like the public
- * route-detail block.
+ * Rating + recent VISIBLE reviews for each agency serving this campus — scoped to
+ * reviews from THIS campus's rides only (audit-4 LOW #16: previously it listed an
+ * agency's reviews from every campus it serves, and its platform-wide average).
+ * A review belongs to the campus of the booking it was left on (falling back to
+ * the reviewer's student record if that booking was since removed). Read-only
+ * oversight of rider sentiment. Reviewer identity is omitted (the campus admin
+ * isn't the review owner) — only rating + comment, like the public route-detail
+ * block. Uses the service-role client, so the scoping here is the only filter.
  */
 export async function listCampusAgencyReviews(institutionId: string): Promise<CampusAgencyReviews[]> {
   const client = db();
@@ -805,32 +809,48 @@ export async function listCampusAgencyReviews(institutionId: string): Promise<Ca
   if (agencies.length === 0) return [];
   const agencyIds = agencies.map((a) => a.id);
 
-  const [{ data: agencyRatings }, { data: reviewRows }] = await Promise.all([
-    client.from('agencies').select('id, rating_avg, rating_count').in('id', agencyIds),
-    client
-      .from('reviews')
-      .select('id, agency_id, rating, comment, created_at')
-      .in('agency_id', agencyIds)
-      .eq('is_hidden', false)
-      .order('created_at', { ascending: false }),
-  ]);
+  const { data: reviewRows } = await client
+    .from('reviews')
+    .select(
+      'id, agency_id, rating, comment, created_at, booking:bookings(institution_id), student:students(institution_id)',
+    )
+    .in('agency_id', agencyIds)
+    .eq('is_hidden', false)
+    .order('created_at', { ascending: false });
 
-  const ratingById = new Map<string, { avg: number; count: number }>();
-  for (const a of (agencyRatings ?? []) as { id: string; rating_avg: number | string | null; rating_count: number | null }[]) {
-    ratingById.set(a.id, { avg: Number(a.rating_avg) || 0, count: a.rating_count ?? 0 });
-  }
+  type Row = {
+    id: string;
+    agency_id: string;
+    rating: number;
+    comment: string | null;
+    created_at: string | null;
+    booking: { institution_id: string | null } | { institution_id: string | null }[] | null;
+    student: { institution_id: string | null } | { institution_id: string | null }[] | null;
+  };
+  const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+
+  const statsByAgency = new Map<string, { sum: number; count: number }>();
   const reviewsByAgency = new Map<string, CampusAgencyReview[]>();
-  for (const r of (reviewRows ?? []) as { id: string; agency_id: string; rating: number; comment: string | null; created_at: string | null }[]) {
+  for (const r of (reviewRows ?? []) as unknown as Row[]) {
+    const campus = one(r.booking)?.institution_id ?? one(r.student)?.institution_id ?? null;
+    if (campus !== institutionId) continue;
+    const st = statsByAgency.get(r.agency_id) ?? { sum: 0, count: 0 };
+    st.sum += r.rating;
+    st.count += 1;
+    statsByAgency.set(r.agency_id, st);
     if (!reviewsByAgency.has(r.agency_id)) reviewsByAgency.set(r.agency_id, []);
     const list = reviewsByAgency.get(r.agency_id)!;
     if (list.length < 5) list.push({ id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at });
   }
 
-  return agencies.map((a) => ({
-    agencyId: a.id,
-    agencyName: a.name,
-    ratingAvg: ratingById.get(a.id)?.avg ?? 0,
-    ratingCount: ratingById.get(a.id)?.count ?? 0,
-    reviews: reviewsByAgency.get(a.id) ?? [],
-  }));
+  return agencies.map((a) => {
+    const st = statsByAgency.get(a.id);
+    return {
+      agencyId: a.id,
+      agencyName: a.name,
+      ratingAvg: st && st.count > 0 ? Math.round((st.sum / st.count) * 10) / 10 : 0,
+      ratingCount: st?.count ?? 0,
+      reviews: reviewsByAgency.get(a.id) ?? [],
+    };
+  });
 }

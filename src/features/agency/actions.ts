@@ -37,6 +37,7 @@ import {
 } from '@/features/auth/services';
 import { loginSchema } from '@/features/auth/schemas';
 import { rateLimit, getClientIp, registerOtpAttempt, clearOtpFailures } from '@/lib/rate-limit';
+import { getSiteUrl } from '@/lib/site-url';
 
 // Guard id-shaped form inputs before they reach Postgres so a malformed value is
 // a clean no-op instead of a 22P02 (invalid uuid) crash to the error page.
@@ -221,7 +222,7 @@ export async function agencyRegisterAction(
   if ((await rateLimit('agency-register:email', d.email, 3, 60 * 60)) > 0) {
     return { error: registerBusy };
   }
-  const site = process.env.NEXT_PUBLIC_SITE_URL!;
+  const site = getSiteUrl();
   // All KYC goes into user metadata; the handle_new_user trigger creates the
   // PENDING agency row from it. We create the account + confirmation link with
   // the admin API (no email sent) and mail it ourselves from Gmail, bypassing
@@ -401,10 +402,18 @@ export async function requestServiceAction(_: FormState, formData: FormData): Pr
 }
 
 /** A URL only counts if it points at our own vehicle-photos storage bucket. */
+// Exact public-URL prefix of OUR vehicle-photos bucket. uploadVehiclePhoto
+// stores `<uuid>.<ext>` at the bucket root, so anything else — another host, a
+// look-alike path, a query string, a sub-folder — is rejected (a mere
+// `includes()` accepted any link that contained the storage path).
+const VEHICLE_PHOTO_PREFIX = `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '')}/storage/v1/object/public/vehicle-photos/`;
+const VEHICLE_PHOTO_FILE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/i;
+
 function ownStoragePhoto(value: FormDataEntryValue | null): string | null {
   const url = typeof value === 'string' ? value.trim() : '';
-  if (!url) return null;
-  return url.includes('/storage/v1/object/public/vehicle-photos/') ? url : null;
+  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
+  if (!url.startsWith(VEHICLE_PHOTO_PREFIX)) return null;
+  return VEHICLE_PHOTO_FILE_RE.test(url.slice(VEHICLE_PHOTO_PREFIX.length)) ? url : null;
 }
 
 const MIN_BUS_PHOTOS = 5;
@@ -563,8 +572,25 @@ export async function updateBusAction(_: FormState, formData: FormData): Promise
       conductor_dob: d.conductorDob || null,
       conductor_blood_group: d.conductorBloodGroup || null,
       conductor_verified: d.conductorVerified === 'on',
-      driver_id: await resolveAgencyDriverId(db, agency.id, d.driverId, busId),
     };
+    // Driver login: only touch driver_id when the form actually sent the field.
+    // The picker is hidden when there are no eligible drivers, and a chosen
+    // driver that can't be assigned (taken / removed meanwhile) used to resolve
+    // to null — both silently unassigned the bus's current driver.
+    if (formData.has('driverId')) {
+      if (!d.driverId) {
+        patch.driver_id = null; // explicit "Not assigned"
+      } else {
+        const resolved = await resolveAgencyDriverId(db, agency.id, d.driverId, busId);
+        if (!resolved) {
+          return {
+            error:
+              'That driver can’t be assigned to this bus (already on another bus or no longer with your agency). Pick another driver or “Not assigned”.',
+          };
+        }
+        patch.driver_id = resolved;
+      }
+    }
     // Bus photos: the edit form sends the full set. Only require at least one so
     // legacy buses with fewer than 5 photos remain editable.
     const photos = parseBusPhotos(formData.get('busPhotos'));
@@ -911,6 +937,9 @@ export async function updateDriverAction(_: FormState, formData: FormData): Prom
     return { error: toErrorResponse(e).message };
   }
   revalidatePath('/agency/drivers');
+  // Deactivating a driver also drops any substitute duty they had today
+  // (trg_drivers_clear_substitute), so the bus cards change too.
+  revalidatePath('/agency/buses');
   return { message: 'Driver updated.' };
 }
 
@@ -988,6 +1017,7 @@ export async function hardDeleteDriverAction(formData: FormData): Promise<void> 
   if (profileId) await admin.auth.admin.deleteUser(profileId);
   revalidatePath('/agency/deleted-drivers');
   revalidatePath('/agency/drivers');
+  revalidatePath('/agency/buses'); // today's substitute row is cleared too
 }
 
 /**
@@ -1126,4 +1156,9 @@ export async function purgeHiddenStudentAction(formData: FormData): Promise<void
     .is('purged_at', null);
   if (error) throw new AppError('AGENCY', error.message);
   revalidatePath('/agency/deleted-students');
+  // A purged student stays OFF Manage Students for every booking made before the
+  // purge (e.g. a paid seat still held pending refund) — only a genuine re-book
+  // after the purge brings them back (agency_onboard_bookings, 0130).
+  revalidatePath('/agency/students');
+  updateTag(agencyReportTag(agency.id));
 }

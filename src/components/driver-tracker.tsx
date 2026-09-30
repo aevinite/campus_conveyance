@@ -34,9 +34,17 @@ function getFirstFix(): Promise<GeolocationPosition> {
 const MIN_SEND_MS = 9000;
 // A stationary bus emits no watchPosition callbacks, so its stored location goes
 // stale and bus_live_location's 2-minute freshness window flips the rider's
-// marker to offline mid-trip. Re-send the last known fix every 30s (well under 2
-// min) so a couple of dropped pings can't push a parked bus past the window.
+// marker to offline mid-trip. The heartbeat CHECKS every HEARTBEAT_TICK_MS and
+// sends a fresh fix once HEARTBEAT_MS has passed since the last write. (Checking
+// only every 30s and skipping when the last send was 29s ago let the gap drift to
+// ~60s + GPS time, too close to the window.) Worst case now ≈ 40s + fix time,
+// leaving ~3x margin under 2 min for dropped pings / background throttling.
 const HEARTBEAT_MS = 30000;
+const HEARTBEAT_TICK_MS = 10000;
+// If a fresh fix can't be had right now (indoors / GPS warm-up), a real fix this
+// recent may still be re-sent so a parked bus doesn't blink offline — but never
+// older, so a genuinely lost GPS still lets the bus drop off the map.
+const REUSE_FIX_MAX_MS = 60000;
 
 /**
  * Persistent online/offline toggle for drivers. Rendered in the driver panel
@@ -52,6 +60,8 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
   const lastSent = useRef(0);
   // Most recent GPS fix — re-sent by the heartbeat so a parked bus stays live.
   const lastCoords = useRef<{ lat: number; lng: number } | null>(null);
+  // When lastCoords was actually measured by the GPS (not when it was sent).
+  const lastCoordsAt = useRef(0);
   // Mirror of `online`, kept in sync synchronously in toggle(). All location
   // writes gate on this so a GPS/heartbeat callback that fires just after "Go
   // offline" can't silently re-online the driver.
@@ -77,6 +87,7 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
       (pos) => {
         // Remember the fix even when throttled, so the heartbeat can re-send it.
         lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        lastCoordsAt.current = pos.timestamp || Date.now();
         if (!onlineRef.current) return; // a late callback after Go offline must not write
         const now = Date.now();
         if (now - lastSent.current < MIN_SEND_MS) return;
@@ -106,29 +117,13 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Signal offline when the tab is really torn down (close / hard-nav), so the
-  // rider map stops immediately instead of waiting out the 2-min freshness
-  // window. Guard on !persisted so a mobile app-switch (bfcache) — where the
-  // heartbeat resumes on return — doesn't flip the bus offline mid-trip.
-  useEffect(() => {
-    if (!online) return;
-    const onPageHide = (e: PageTransitionEvent) => {
-      if (e.persisted) return;
-      navigator.sendBeacon?.('/api/driver-offline');
-    };
-    window.addEventListener('pagehide', onPageHide);
-    return () => window.removeEventListener('pagehide', onPageHide);
-  }, [online]);
-
-  // On unmount while still online (leaving the driver panel via a soft nav that
-  // isn't logout), signal offline so the family map stops instead of waiting out
-  // the freshness window. (Logout is handled server-side in logoutAction, since
-  // the session is gone by the time this beacon would fire.)
-  useEffect(() => {
-    return () => {
-      if (onlineRef.current) navigator.sendBeacon?.('/api/driver-offline');
-    };
-  }, []);
+  // NOTE: no pagehide / unmount "go offline" beacon on purpose. A pagehide can't
+  // tell a reload (or the WebView being recreated) from a real close, so the old
+  // beacon took the bus offline on every mid-trip reload — and the reloaded page
+  // then rendered "Offline". Going offline is now only ever explicit ("Go
+  // offline" / logout, handled server-side in logoutAction). An abandoned tab just
+  // stops pinging: riders' maps drop the bus after the 2-min freshness window and
+  // the clear_stale_driver_online cron clears the flag after 10 min.
 
   // Heartbeat: while online, keep a stationary bus's location fresh (watchPosition
   // only fires on movement). Crucially, each tick fetches a NEW fix rather than
@@ -139,24 +134,38 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
   // freshness window mark the bus offline.
   useEffect(() => {
     if (!online) return;
+    let fixInFlight = false;
     const id = setInterval(() => {
       if (!onlineRef.current || typeof navigator === 'undefined' || !navigator.geolocation) return;
       if (Date.now() - lastSent.current < HEARTBEAT_MS) return; // movement kept it fresh
+      if (fixInFlight) return; // previous heartbeat fix still pending
+      fixInFlight = true;
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          fixInFlight = false;
           if (!onlineRef.current) return; // went offline while the fix was in flight
           lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          lastCoordsAt.current = pos.timestamp || Date.now();
           lastSent.current = Date.now();
           setLastFix(Date.now());
           sendLocation(pos.coords.latitude, pos.coords.longitude);
         },
         () => {
-          // GPS unavailable right now — do NOT re-send stale coords. Skipping the
-          // beat lets the bus fall out of the freshness window and go offline.
+          fixInFlight = false;
+          // GPS unavailable right now. Re-send the last fix ONLY if it was really
+          // measured within REUSE_FIX_MAX_MS (e.g. a parked bus indoors); never
+          // older coords, so a genuinely lost GPS still drops the bus offline.
+          const c = lastCoords.current;
+          if (!onlineRef.current || !c || Date.now() - lastCoordsAt.current > REUSE_FIX_MAX_MS) return;
+          lastSent.current = Date.now();
+          setLastFix(Date.now());
+          sendLocation(c.lat, c.lng);
         },
-        { enableHighAccuracy: true, maximumAge: 20000, timeout: 15000 },
+        // Accept an OS-cached fix up to 30s old — a stationary phone often has no
+        // "new" fix to give, and that's still an honest position.
+        { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 },
       );
-    }, HEARTBEAT_MS);
+    }, HEARTBEAT_TICK_MS);
     return () => clearInterval(id);
   }, [online]);
 
@@ -188,6 +197,7 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
         // Seed the first fix so riders see the bus immediately (and the
         // heartbeat has something to re-send before the watch fires again).
         lastCoords.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        lastCoordsAt.current = pos.timestamp || Date.now();
       } catch (err) {
         const denied =
           typeof GeolocationPositionError !== 'undefined' &&
@@ -207,6 +217,7 @@ export function DriverTracker({ initialOnline }: { initialOnline: boolean }) {
       stopWatch();
       lastSent.current = 0;
       lastCoords.current = null;
+      lastCoordsAt.current = 0;
       setLastFix(null);
     }
     const res = await setDriverOnlineAction(next);

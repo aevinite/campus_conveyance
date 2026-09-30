@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isActiveSuperAdmin } from './guard';
 import { drainEmailOutbox } from '@/lib/email-outbox';
 import { drainPushOutbox } from '@/lib/push';
+import { agencyReportTag } from '@/features/agency/repository';
 
 // Guard id-shaped input before it reaches Postgres — a malformed value is a
 // 22P02 (invalid uuid) crash to the error page rather than a clean no-op.
@@ -140,6 +141,10 @@ export async function verifyPassRenewalAction(formData: FormData): Promise<void>
     p_note: note,
   });
   if (error) throw error;
+  // Flush the rider/parent email + push now instead of waiting for the 2-min
+  // drain cron (same as the booking verify + refund flows).
+  after(() => drainEmailOutbox());
+  after(() => drainPushOutbox());
   try {
     const { data } = await db.auth.getClaims();
     const actorId = (data?.claims as { sub?: string } | null)?.sub ?? null;
@@ -196,4 +201,23 @@ export async function processRefundAction(formData: FormData): Promise<void> {
     /* logging is best-effort */
   }
   revalidatePath('/aevinite/payments/refunds');
+  // A processed refund cancels the booking (frees the seat) and a decline revives
+  // it, so the admin dashboard/report and the owning agency's dashboard, booking
+  // lists and refunds page are all stale until refreshed.
+  revalidatePath('/aevinite');
+  revalidatePath('/aevinite/payments/history');
+  updateTag('admin-report');
+  try {
+    const { data: bk } = await createAdminClient()
+      .from('bookings')
+      .select('routes(agency_id)')
+      .eq('id', bookingId)
+      .maybeSingle();
+    const route = (bk as { routes: { agency_id: string | null } | { agency_id: string | null }[] | null } | null)?.routes;
+    const agencyId = Array.isArray(route) ? route[0]?.agency_id : route?.agency_id;
+    if (agencyId) updateTag(agencyReportTag(agencyId));
+  } catch {
+    /* cache bust is best-effort; the report also expires after 60s */
+  }
+  revalidatePath('/agency', 'layout');
 }

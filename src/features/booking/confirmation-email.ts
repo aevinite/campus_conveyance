@@ -43,12 +43,16 @@ export async function sendRichConfirmationEmail(
   bookingId: string,
   toEmail: string,
   method?: string | null,
+  /** The outbox row's recipient profile — anyone but the rider's own login is a
+   *  linked parent and gets third-person copy + a /parent link. */
+  recipientId?: string | null,
 ): Promise<boolean> {
   const db = createAdminClient();
     const { data: b } = await db
       .from('bookings')
       .select(
         `id, status, student_name, student_email, paid_at, pickup_stop_id, billing_period,
+         students(profile_id),
          routes(name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, departure_time,
            institutions(name),
            vehicles(bus_number, bus_model, registration_no, is_ac,
@@ -101,7 +105,11 @@ export async function sendRichConfirmationEmail(
       pickupName = (stop?.name as string) ?? null;
     }
 
+    const student = one(b.students as unknown as { profile_id: string | null } | { profile_id: string | null }[] | null);
+    const forParent = !!recipientId && recipientId !== (student?.profile_id ?? null);
+
     await sendBookingConfirmationEmail(toEmail, {
+      audience: forParent ? 'parent' : 'student',
       studentName: (b.student_name as string) ?? null,
       institutionName: institution?.name ?? null,
       routeName: route?.name ?? null,

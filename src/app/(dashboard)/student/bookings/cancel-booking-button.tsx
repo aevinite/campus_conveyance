@@ -44,6 +44,8 @@ export function CancelBookingButton({
   const lastShown = useRef<CancelState>({});
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Typed values echoed back on an error (React 19 resets the form after submit).
+  const typed = state.error ? state.values : undefined;
 
   useEffect(() => {
     if (state === lastShown.current) return;
@@ -148,6 +150,7 @@ export function CancelBookingButton({
                   <Textarea
                     id={`${titleId}-reason`}
                     name="reason"
+                    defaultValue={typed?.reason}
                     required
                     minLength={3}
                     rows={3}
@@ -181,21 +184,21 @@ export function CancelBookingButton({
                     {method === 'UPI' ? (
                       <div className="space-y-1.5">
                         <Label htmlFor={`${titleId}-upi`}>UPI ID</Label>
-                        <Input id={`${titleId}-upi`} name="upiId" required placeholder="name@bank" />
+                        <Input id={`${titleId}-upi`} name="upiId" defaultValue={typed?.upiId} required placeholder="name@bank" />
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <div className="space-y-1.5">
                           <Label htmlFor={`${titleId}-acname`}>Account holder name</Label>
-                          <Input id={`${titleId}-acname`} name="accountName" required placeholder="Full name on the account" />
+                          <Input id={`${titleId}-acname`} name="accountName" defaultValue={typed?.accountName} required placeholder="Full name on the account" />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor={`${titleId}-acno`}>Account number</Label>
-                          <Input id={`${titleId}-acno`} name="accountNumber" required inputMode="numeric" placeholder="Account number" />
+                          <Input id={`${titleId}-acno`} name="accountNumber" defaultValue={typed?.accountNumber} required inputMode="numeric" placeholder="Account number" />
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor={`${titleId}-ifsc`}>IFSC code</Label>
-                          <Input id={`${titleId}-ifsc`} name="ifsc" required placeholder="e.g. HDFC0001234" className="uppercase" />
+                          <Input id={`${titleId}-ifsc`} name="ifsc" defaultValue={typed?.ifsc} required placeholder="e.g. HDFC0001234" className="uppercase" />
                         </div>
                       </div>
                     )}

@@ -7,7 +7,38 @@ import { AppError, toErrorResponse } from '@/lib/errors/app-error';
 export type LinkChildState = { ok?: boolean; childName?: string; alreadyLinked?: boolean; error?: string };
 export type UnlinkChildState = { ok?: boolean; error?: string };
 export type ParentCodeState = { code?: string; expiresAt?: string; error?: string };
-export type ManagedChildState = { ok?: boolean; childName?: string; studentId?: string; error?: string };
+export type ManagedChildValues = {
+  fullName?: string;
+  institutionId?: string;
+  phone?: string;
+  address?: string;
+  grade?: string;
+  rollNo?: string;
+  email?: string;
+};
+export type ManagedChildState = {
+  ok?: boolean;
+  childName?: string;
+  studentId?: string;
+  error?: string;
+  /** Echo of what was typed, returned on error: React 19 resets an uncontrolled
+   *  `<form action>` after submit, so the form re-fills from these defaultValues. */
+  values?: ManagedChildValues;
+};
+
+/** The add/edit-child fields as typed, for echoing back on an error. */
+function childValues(formData: FormData): ManagedChildValues {
+  const v = (k: string) => String(formData.get(k) ?? '');
+  return {
+    fullName: v('fullName'),
+    institutionId: v('institutionId'),
+    phone: v('phone'),
+    address: v('address'),
+    grade: v('grade'),
+    rollNo: v('rollNo'),
+    email: v('email'),
+  };
+}
 
 const unlinkSchema = z.object({ studentId: z.string().uuid() });
 const redeemSchema = z.object({
@@ -119,7 +150,10 @@ export async function addManagedChildAction(
 ): Promise<ManagedChildState> {
   const parsed = addChildSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Please complete the form.' };
+    return {
+      error: parsed.error.issues[0]?.message ?? 'Please complete the form.',
+      values: childValues(formData),
+    };
   }
   const d = parsed.data;
   const db = await createClient();
@@ -140,7 +174,7 @@ export async function addManagedChildAction(
     revalidatePath('/parent');
     return { ok: true, childName: d.fullName, studentId: row?.id };
   } catch (e) {
-    return { error: toErrorResponse(e).message };
+    return { error: toErrorResponse(e).message, values: childValues(formData) };
   }
 }
 

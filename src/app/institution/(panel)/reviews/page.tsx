@@ -33,7 +33,7 @@ export default async function InstitutionReviewsPage() {
         </span>
         <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">Agency reviews</h1>
         <p className="text-muted-foreground">
-          How riders rate the agencies serving your campus. Read-only oversight of rider sentiment.
+          How your campus’s riders rate the agencies serving it. Read-only oversight of rider sentiment.
         </p>
       </div>
 

@@ -1,4 +1,4 @@
-import { Building2, Clock } from 'lucide-react';
+import { Ban, Building2, Clock } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
@@ -84,6 +84,34 @@ export default async function InstitutionPanelLayout({
   // so the admin knows their application is in review rather than seeing empty
   // pages. (Admin-provisioned campuses are active immediately and skip this.)
   const approval = await getCampusApproval(institutionId);
+  // A VERIFIED campus that's hidden (or deleted) was switched off by the platform
+  // admin — not "in review". Say so distinctly (audit-4 LOW #15).
+  if (approval && (approval.isDeleted || (!approval.isActive && approval.isVerified))) {
+    return (
+      <div className="bg-aurora relative flex min-h-screen flex-col items-center justify-center p-4 text-center sm:p-6">
+        <div className="w-full max-w-md space-y-5 rounded-3xl border border-border bg-card p-6 shadow-lg sm:p-8">
+          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+            <Ban className="size-7" />
+          </span>
+          <div className="space-y-2">
+            <h1 className="text-xl font-heading font-bold tracking-tight sm:text-2xl">
+              Campus disabled
+            </h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">{approval.name}</span> has been disabled
+              by the platform admin, so its oversight console is unavailable. Contact the platform
+              admin if you think this is a mistake.
+            </p>
+          </div>
+          <form action={logoutAction}>
+            <SubmitButton variant="outline" size="sm" className="w-full sm:w-auto" pendingText="Logging out…">
+              Log out
+            </SubmitButton>
+          </form>
+        </div>
+      </div>
+    );
+  }
   if (approval && !approval.isActive) {
     return (
       <div className="bg-aurora relative flex min-h-screen flex-col items-center justify-center p-4 text-center sm:p-6">

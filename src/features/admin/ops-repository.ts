@@ -1210,10 +1210,12 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
     route_id: string | null;
     refund_details: Record<string, unknown> | null;
     cancel_reason: string | null;
+    cancel_requested_at: string | null;
+    updated_at: string | null;
   }>(
     client,
     'bookings',
-    'id, student_name, route_id, refund_details, cancel_reason',
+    'id, student_name, route_id, refund_details, cancel_reason, cancel_requested_at, updated_at',
     rows.map((r) => r.booking_id as string),
   );
   const routes = await mapByIds<{ id: string; name: string }>(
@@ -1257,7 +1259,10 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
         payoutMethod: method ?? null,
         payoutDetails: details,
         reason: b?.cancel_reason ?? null,
-        requestedAt: (r.updated_at as string) ?? null,
+        // The real cancellation time (payments.updated_at moves on every payment
+        // write, e.g. verification). cancel_requested_at is stamped when a paid
+        // booking is cancelled/removed; fall back to the booking's last change.
+        requestedAt: b?.cancel_requested_at ?? b?.updated_at ?? (r.updated_at as string) ?? null,
       };
     }),
     total: count ?? 0,

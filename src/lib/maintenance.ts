@@ -14,6 +14,8 @@
 // The proxy checks this on every request, so we keep a short in-process cache to
 // avoid a DB round-trip per request. Each instance converges on the latest value
 // within CACHE_TTL_MS of a toggle; a write refreshes the local cache immediately.
+// Writes never go through this cache: set_maintenance_flag (SQL) flips just the
+// one switch atomically, so the two toggles can't overwrite each other.
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const KEY = 'maintenance';
@@ -67,17 +69,21 @@ export async function setMaintenance(
   target: MaintenanceTarget,
   enabled: boolean,
 ): Promise<MaintenanceState> {
-  const current = await getMaintenance();
-  const state: MaintenanceState = {
-    website: target === 'website' ? enabled : current.website,
-    app: target === 'app' ? enabled : current.app,
-    updatedAt: new Date().toISOString(),
-  };
+  // Atomic single-field update in SQL (set_maintenance_flag): only the target
+  // switch changes, under the row lock. A read-modify-write of the (up to 10s
+  // stale, per-instance) cached value could silently revert the OTHER switch.
   const admin = createAdminClient();
-  const { error } = await admin
-    .from('app_settings')
-    .upsert({ key: KEY, value: state, updated_at: state.updatedAt }, { onConflict: 'key' });
+  const { data, error } = await admin.rpc('set_maintenance_flag', {
+    p_target: target,
+    p_enabled: enabled,
+  });
   if (error) throw error;
+  const value = (data ?? {}) as { website?: boolean; app?: boolean; updatedAt?: string };
+  const state: MaintenanceState = {
+    website: value.website === true,
+    app: value.app === true,
+    updatedAt: value.updatedAt,
+  };
   cache = { state, at: Date.now() };
   return state;
 }

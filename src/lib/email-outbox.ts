@@ -33,6 +33,7 @@ export async function drainEmailOutbox(batchSize = 20): Promise<void> {
 
     for (const row of rows as Array<{
       id: string;
+      recipient_id: string | null;
       to_email: string;
       title: string;
       body: string;
@@ -46,7 +47,7 @@ export async function drainEmailOutbox(batchSize = 20): Promise<void> {
         // the recipient still gets *something*.
         let sent = false;
         if (row.kind === 'CONFIRMED' && row.booking_id) {
-          sent = await sendRichConfirmationEmail(row.booking_id, row.to_email);
+          sent = await sendRichConfirmationEmail(row.booking_id, row.to_email, null, row.recipient_id);
         }
         if (!sent) {
           await sendBookingLifecycleEmail(row.to_email, row.title, row.body);

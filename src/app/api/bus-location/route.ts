@@ -44,12 +44,53 @@ export async function GET(req: Request) {
   const row = (data ?? [])[0] as
     | { live: boolean; lat: number | null; lng: number | null; updated_at: string | null; bus_number: string | null }
     | undefined;
+  if (!(row?.live && row.lat != null && row.lng != null)) {
+    return NextResponse.json({ live: false }, { headers });
+  }
+
+  // Rider pickup progress (ETA badge target + "already passed" state). Only on
+  // request (the map asks every ~30s, not every 5s poll) and only while live.
+  // Best-effort: a failure just omits it and the map keeps its last value.
+  let pickup: PickupProgress | null | undefined;
+  if (new URL(req.url).searchParams.get('progress') === '1') {
+    const { data: prog, error: progErr } = await db.rpc('rider_pickup_progress', { p_route_id: routeId });
+    if (!progErr) pickup = pickPickup((prog ?? []) as ProgressRow[]);
+  }
+
   return NextResponse.json(
-    row?.live && row.lat != null && row.lng != null
-      ? // updatedAt = when the DRIVER's fix was taken, so the map derives speed
-        // from real fix-to-fix time (not its own poll interval).
-        { live: true, lat: row.lat, lng: row.lng, updatedAt: row.updated_at, busNumber: row.bus_number }
-      : { live: false },
+    // updatedAt = when the DRIVER's fix was taken, so the map derives speed
+    // from real fix-to-fix time (not its own poll interval).
+    {
+      live: true,
+      lat: row.lat,
+      lng: row.lng,
+      updatedAt: row.updated_at,
+      busNumber: row.bus_number,
+      ...(pickup !== undefined ? { pickup } : {}),
+    },
     { headers },
   );
+}
+
+type ProgressRow = {
+  stop_name: string | null;
+  lat: number | null;
+  lng: number | null;
+  state: string;
+};
+
+type PickupProgress = {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  /** WAITING | ON_BOARD | DONE | PASSED | NO_STOP (see rider_pickup_progress). */
+  state: string;
+};
+
+// A parent may have several children on one route: track the earliest stop the
+// bus hasn't reached yet; otherwise report the first row's state (passed/on board).
+function pickPickup(rows: ProgressRow[]): PickupProgress | null {
+  const r = rows.find((x) => x.state === 'WAITING') ?? rows[0];
+  if (!r) return null;
+  return { name: r.stop_name ?? 'your stop', lat: r.lat, lng: r.lng, state: r.state };
 }

@@ -32,6 +32,62 @@ const PUBLIC = [
   '/institution/login', '/institution/register', '/institution/forgot',
 ];
 
+// Areas that REQUIRE a session. A logged-out visitor on one of these (minus the
+// PUBLIC login/register pages above) is redirected to the matching login. Any
+// other unknown path is passed through so it reaches the branded not-found page
+// with a real 404, instead of bouncing to /login.
+const PROTECTED = ['/student', '/parent', '/aevinite', '/agency', '/driver', '/institution', '/api'];
+
+// Seconds a client/crawler should wait before retrying during maintenance.
+const MAINTENANCE_RETRY_AFTER = '600';
+
+// Maintenance answers 503 + Retry-After (so crawlers/monitors don't index or
+// cache the pause as the real page) while still showing the maintenance page.
+// A proxy rewrite can't change the status code, so for ordinary HTML page loads
+// we fetch the rendered /maintenance page and re-serve its body with 503.
+// Client-router (RSC) and server-action requests keep the plain rewrite so the
+// in-app router still renders the maintenance screen; other requests (APIs,
+// assets) get a bare 503.
+async function maintenanceResponse(request: NextRequest): Promise<NextResponse> {
+  const target = new URL('/maintenance', request.url);
+  const baseHeaders = { 'Retry-After': MAINTENANCE_RETRY_AFTER, 'Cache-Control': 'no-store' };
+  const h = request.headers;
+  const isRouterRequest = h.has('rsc') || h.has('next-action') || h.has('next-router-state-tree');
+  if (isRouterRequest) {
+    return NextResponse.rewrite(target, { headers: baseHeaders });
+  }
+  const wantsHtml = request.method === 'GET' && (h.get('accept') ?? '').includes('text/html');
+  if (!wantsHtml) {
+    return new NextResponse('Service temporarily unavailable (maintenance).', {
+      status: 503,
+      headers: { ...baseHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+  try {
+    // /maintenance is on the maintenance allow-list, so this can't loop.
+    const page = await fetch(target, {
+      headers: { 'user-agent': h.get('user-agent') ?? '', accept: 'text/html' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (page.ok) {
+      const headers = new Headers();
+      page.headers.forEach((value, key) => {
+        // fetch already decoded the body; drop hop/encoding headers + cookies.
+        if (!['content-encoding', 'content-length', 'transfer-encoding', 'set-cookie', 'connection'].includes(key)) {
+          headers.set(key, value);
+        }
+      });
+      for (const [k, v] of Object.entries(baseHeaders)) headers.set(k, v);
+      return new NextResponse(page.body, { status: 503, headers });
+    }
+  } catch {
+    // fall through to the rewrite below
+  }
+  // Fallback: still show the page (status stays 200 here, but Retry-After is set).
+  return NextResponse.rewrite(target, { headers: baseHeaders });
+}
+
 export async function proxy(request: NextRequest) {
   const { response, user, role } = await updateSession(request);
   const path = request.nextUrl.pathname;
@@ -75,11 +131,12 @@ export async function proxy(request: NextRequest) {
       // The cron drain must keep working while maintenance mode is on.
       path.startsWith('/api/cron');
     if (!allowed) {
-      return NextResponse.rewrite(new URL('/maintenance', request.url));
+      return maintenanceResponse(request);
     }
   }
 
-  if (!user && !isPublic) {
+  const isProtected = PROTECTED.some((p) => path === p || path.startsWith(p + '/'));
+  if (!user && !isPublic && isProtected) {
     // Send admins/agencies to their own login page instead of the general one,
     // so typing /aevinite (or /agency) lands on the right sign-in screen.
     const loginPath = path.startsWith('/aevinite')
@@ -108,6 +165,7 @@ export const config = {
     // are served directly. Without this, a logged-out visitor's request for the
     // manifest or sw.js is redirected to /login (returning HTML), which breaks
     // install / PWABuilder detection and public-page push registration.
-    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
+    // robots.txt / sitemap.xml are public metadata routes — skip the proxy.
+    '/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
   ],
 };

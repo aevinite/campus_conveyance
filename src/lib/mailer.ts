@@ -1,5 +1,6 @@
 import 'server-only';
 import nodemailer from 'nodemailer';
+import { getSiteUrl } from '@/lib/site-url';
 
 // Gmail SMTP sender (Nodemailer). Credentials live in .env.local:
 //   GMAIL_SENDER         = the Gmail address the mail is sent FROM
@@ -148,6 +149,8 @@ export async function sendContactInquiryEmail(inquiry: {
 }
 
 export interface BookingEmailDetails {
+  /** 'parent' → third-person copy ("Aarav's seat is confirmed") + a /parent link. */
+  audience?: 'student' | 'parent';
   studentName: string | null;
   institutionName: string | null;
   routeName: string | null;
@@ -171,7 +174,7 @@ export interface BookingEmailDetails {
 /** Booking-confirmed mail sent to the student's signup email after payment. */
 export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDetails) {
   const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  const site = getSiteUrl();
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const bus = [
@@ -208,11 +211,23 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n');
 
+  // Linked parents get the same mail about their child, in the third person.
+  const forParent = d.audience === 'parent';
+  const child = d.studentName?.trim() || 'Your child';
+  const heading = forParent
+    ? `${child}'s seat is confirmed!`
+    : `Your seat is confirmed${d.studentName ? `, ${d.studentName.split(' ')[0]}` : ''}!`;
+  const lead = forParent
+    ? `Payment received — ${child}'s bus seat is booked. Here are the ride details:`
+    : 'Payment received — your bus seat is booked. Here are your ride details:';
+  const viewHref = forParent ? `${site}/parent` : `${site}/student/bookings`;
+  const viewLabel = forParent ? 'View booking' : 'View my booking';
+
   const html = `
     <div style="font-family:Segoe UI,system-ui,sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
-      <h2 style="margin:0 0 8px">✅ Your seat is confirmed${d.studentName ? `, ${esc(d.studentName.split(' ')[0])}` : ''}!</h2>
+      <h2 style="margin:0 0 8px">✅ ${esc(heading)}</h2>
       <p style="color:#555;line-height:1.5">
-        Payment received — your bus seat is booked. Here are your ride details:
+        ${esc(lead)}
       </p>
       <table style="border-collapse:collapse;font-size:14px;margin:14px 0;background:#f6f5ff;border-radius:12px;padding:8px" cellpadding="0">
         <tr><td style="padding:14px 16px 4px">
@@ -221,9 +236,9 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
         <tr><td style="height:10px"></td></tr>
       </table>
       <p style="margin:22px 0">
-        <a href="${site}/student/bookings"
+        <a href="${viewHref}"
            style="background:#6d5efc;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;display:inline-block">
-          View my booking
+          ${viewLabel}
         </a>
       </p>
       <p style="color:#aaa;font-size:12px;margin-top:22px">
@@ -238,9 +253,9 @@ export async function sendBookingConfirmationEmail(to: string, d: BookingEmailDe
     replyTo: process.env.GMAIL_SENDER,
     subject: `Booking confirmed — ${d.routeName ?? 'your bus seat'}${d.institutionName ? ` to ${d.institutionName}` : ''}`,
     text:
-      `Your seat is confirmed!\n\n` +
-      `Payment received — your bus seat is booked.\n\n${tableText}\n\n` +
-      `View my booking: ${site}/student/bookings\n\nHave a safe ride!`,
+      `${heading}\n\n` +
+      `${lead}\n\n${tableText}\n\n` +
+      `${viewLabel}: ${viewHref}\n\nHave a safe ride!`,
     html,
   });
 }
@@ -257,7 +272,7 @@ export async function sendBookingLifecycleEmail(
   body: string,
 ) {
   const from = `Campus Conveyance <${process.env.GMAIL_SENDER}>`;
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  const site = getSiteUrl();
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const html = `

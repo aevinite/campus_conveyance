@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { Star } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
@@ -6,18 +7,36 @@ import { listAgencyReviews, getAgencyRatings } from '@/features/reviews/reposito
 import { StarRating } from '@/components/ui/star-rating';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCompactDateTime } from '@/lib/format-date';
+import { Pager, pageParams } from '@/components/pager';
 
-export default async function AgencyReviewsPage() {
+const PAGE_SIZE = 20;
+
+export default async function AgencyReviewsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requireRole('AGENCY', '/agency/login');
+  const { page: pageParam } = await searchParams;
+  const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();
   const agency = await getMyAgency(db);
   if (!agency) return null;
 
-  const [reviews, ratings] = await Promise.all([
-    listAgencyReviews(db, agency.id, { limit: 100 }),
+  // Paged (the RPC caps a page at 100) — one extra row tells us a next page
+  // exists even if the denormalized rating_count lags a new review.
+  const [fetched, ratings] = await Promise.all([
+    listAgencyReviews(db, agency.id, { limit: PAGE_SIZE + 1, offset }),
     getAgencyRatings(db, [agency.id]),
   ]);
   const rating = ratings.get(agency.id) ?? { avg: 0, count: 0 };
+  const reviews = fetched.slice(0, PAGE_SIZE);
+  const totalPages = Math.max(
+    1,
+    Math.ceil(rating.count / PAGE_SIZE),
+    fetched.length > PAGE_SIZE ? page + 1 : page,
+  );
+  if (page > 1 && reviews.length === 0) redirect('/agency/reviews');
 
   return (
     <section className="max-w-3xl space-y-6">
@@ -78,6 +97,7 @@ export default async function AgencyReviewsPage() {
               </CardContent>
             </Card>
           ))}
+          <Pager page={page} totalPages={totalPages} basePath="/agency/reviews" />
         </div>
       )}
     </section>

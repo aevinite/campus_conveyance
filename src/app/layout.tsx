@@ -7,6 +7,7 @@ import { NativeAuthListener } from "@/components/auth/native-auth-listener";
 import { NativeBackButton } from "@/components/native-back-button";
 import { AppClass } from "@/components/app-class";
 import { AppSplash } from "@/components/app-splash";
+import { getSiteUrl } from "@/lib/site-url";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -30,11 +31,33 @@ const spaceGrotesk = Space_Grotesk({
 // ~1ms instead of ~170ms. Applies to all routes nested under this root layout.
 export const preferredRegion = 'hnd1';
 
+const SITE_DESCRIPTION =
+  "Book a seat on your regular bus to school or college, see where it is on the way, and keep parents in the loop. Daily campus transport for students, parents, operators and campuses.";
+
 export const metadata: Metadata = {
-  title: "Campus Conveyance — Daily campus transport, managed",
-  description:
-    "Reserve your seat, track your bus live, and travel safely to campus every day. Daily transport management for schools and colleges — by Aevinite.",
+  metadataBase: new URL(getSiteUrl()),
+  title: {
+    default: "Campus Conveyance — Your daily ride to campus",
+    template: "%s · Campus Conveyance",
+  },
+  description: SITE_DESCRIPTION,
   applicationName: "Campus Conveyance",
+  keywords: ["campus bus", "college bus pass", "school transport", "daily commute", "bus tracking"],
+  openGraph: {
+    type: "website",
+    siteName: "Campus Conveyance",
+    title: "Campus Conveyance — Your daily ride to campus",
+    description: SITE_DESCRIPTION,
+    url: "/",
+    locale: "en_IN",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Campus Conveyance" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Campus Conveyance — Your daily ride to campus",
+    description: SITE_DESCRIPTION,
+    images: ["/icon-512.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

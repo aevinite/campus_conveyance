@@ -1,7 +1,7 @@
 import { ClipboardList, IndianRupee, TrendingUp, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
-import { getMyAgency, getAgencyReport } from '@/features/agency/repository';
+import { getMyAgency, getAgencyReport, type AgencyReport } from '@/features/agency/repository';
 import { formatDateTime } from '@/lib/format-date';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart } from '@/components/charts/bar-chart';
@@ -13,7 +13,7 @@ import { StatStrip } from '@/components/panel/stat-strip';
 export default async function AgencyDashboard() {
   const db = await createClient();
   const [agency, app] = await Promise.all([getMyAgency(db), isAppRequest()]);
-  const report = agency
+  const report: AgencyReport = agency
     ? await getAgencyReport(agency.id)
     : {
         counts: { services: 0, buses: 0, routes: 0, pending: 0 },
@@ -89,7 +89,7 @@ export default async function AgencyDashboard() {
               // App: stacked rows instead of a horizontally-scrolling table.
               <ul className="divide-y divide-border rounded-xl border border-border">
                 {revenue.byRoute.map((r) => (
-                  <li key={r.name} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <li key={r.routeId ?? r.name} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{r.name}</p>
                       <p className="tnum text-xs text-muted-foreground">{r.bookings} confirmed</p>
@@ -114,7 +114,7 @@ export default async function AgencyDashboard() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {revenue.byRoute.map((r) => (
-                      <tr key={r.name} className="transition-colors hover:bg-secondary/30">
+                      <tr key={r.routeId ?? r.name} className="transition-colors hover:bg-secondary/30">
                         <td className="px-4 py-2.5">{r.name}</td>
                         <td className="tnum px-4 py-2.5 text-right">{r.bookings}</td>
                         <td className="tnum px-4 py-2.5 text-right">{inr(r.revenueCents)}</td>
@@ -190,6 +190,9 @@ export default async function AgencyDashboard() {
               { label: 'Pending', value: bookings.pending, color: 'var(--viz-pending)' },
               { label: 'Rejected', value: bookings.rejected, color: 'var(--destructive)' },
               { label: 'Cancelled', value: bookings.cancelled, color: 'var(--muted-foreground)' },
+              ...(bookings.cancelling
+                ? [{ label: 'Refund pending', value: bookings.cancelling, color: 'var(--warning)' }]
+                : []),
             ]}
             centerValue={String(bookings.total)}
             centerLabel="bookings"
@@ -198,8 +201,27 @@ export default async function AgencyDashboard() {
             <Stat label="Confirmed" value={String(bookings.confirmed)} />
             <Stat label="Pending" value={String(bookings.pending)} />
             <Stat label="Rejected" value={String(bookings.rejected)} />
-            <Stat label="Cancelled by student" value={String(bookings.cancelled)} />
+            <Stat label="Cancelled" value={String(bookings.cancelled)} />
           </div>
+          {/* Cancellations by cause — expiries and your own removals are NOT the rider's doing. */}
+          {(bookings.cancelledBy || (bookings.cancelling ?? 0) > 0) && (
+            <ul className="space-y-1 text-xs text-muted-foreground lg:min-w-48">
+              {bookings.cancelledBy && (
+                <>
+                  <li>Cancelled by rider / parent: <span className="tnum font-medium text-foreground">{bookings.cancelledBy.rider}</span></li>
+                  <li>Payment window expired: <span className="tnum font-medium text-foreground">{bookings.cancelledBy.expired}</span></li>
+                  <li>Removed by you: <span className="tnum font-medium text-foreground">{bookings.cancelledBy.agency}</span></li>
+                  <li>Pass ended: <span className="tnum font-medium text-foreground">{bookings.cancelledBy.passEnded}</span></li>
+                  {bookings.cancelledBy.other > 0 && (
+                    <li>Other: <span className="tnum font-medium text-foreground">{bookings.cancelledBy.other}</span></li>
+                  )}
+                </>
+              )}
+              {(bookings.cancelling ?? 0) > 0 && (
+                <li>Refund pending (seat held): <span className="tnum font-medium text-foreground">{bookings.cancelling}</span></li>
+              )}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

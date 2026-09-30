@@ -20,6 +20,7 @@ import { loginSchema } from '@/features/auth/schemas';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { slugify } from '@/features/admin/schemas';
 import { institutionRegisterSchema } from './schemas';
+import { getSiteUrl } from '@/lib/site-url';
 
 export type FormState = { error?: string; message?: string };
 
@@ -67,7 +68,7 @@ export async function institutionRegisterAction(
     return { error: busy };
   }
 
-  const site = process.env.NEXT_PUBLIC_SITE_URL!;
+  const site = getSiteUrl();
   // Create the account + confirmation link via the admin API (no Supabase email),
   // then mail the link ourselves from Gmail — same as the agency flow, bypassing
   // Supabase's rate-limited built-in mailer.
@@ -130,7 +131,10 @@ export async function institutionRegisterAction(
   const campusId = (inst as { id: string }).id;
   const { error: linkErr } = await svc
     .from('profiles')
-    .update({ full_name: d.contactPerson, institution_id: campusId })
+    // Persist the contact phone collected on the form (audit-4 LOW #17: it was
+    // only stashed in auth user_metadata, which the signup trigger ignores for
+    // INSTITUTION_ADMIN, so it never reached the profile).
+    .update({ full_name: d.contactPerson, phone: d.phone, institution_id: campusId })
     .eq('id', uid);
   if (linkErr) {
     await svc.from('institutions').delete().eq('id', campusId);

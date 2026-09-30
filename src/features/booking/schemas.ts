@@ -38,16 +38,19 @@ export const submitUpiSchema = z.object({
     .regex(/^\d{12}$/, 'Enter the 12-digit UPI reference (UTR) from your UPI app.'),
 });
 
+// Trimmed so whitespace-only input fails here instead of saving and then being
+// bounced back by the booking gate (which checks the trimmed values).
 export const studentDetailsSchema = z.object({
-  fullName: z.string().min(2, 'Please enter your full name.'),
+  fullName: z.string().trim().min(2, 'Please enter your full name.'),
   phone: z
     .string()
+    .trim()
     .min(7, 'Please enter a valid phone number.')
     .max(20, 'Phone number is too long.'),
-  address: z.string().min(5, 'Please enter your address.'),
-  grade: z.string().optional(),
-  guardianName: z.string().optional(),
-  guardianPhone: z.string().max(20, 'Phone number is too long.').optional().or(z.literal('')),
+  address: z.string().trim().min(5, 'Please enter your address.'),
+  grade: z.string().trim().optional(),
+  guardianName: z.string().trim().optional(),
+  guardianPhone: z.string().trim().max(20, 'Phone number is too long.').optional().or(z.literal('')),
 });
 
 export type ReserveInput = z.infer<typeof reserveSchema>;

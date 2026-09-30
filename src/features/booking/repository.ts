@@ -326,6 +326,8 @@ export interface LateUtrBooking {
 
 /** 24h after the hold lapsed, a late UTR is no longer accepted. */
 export const LATE_UTR_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Same cap submit_upi_payment enforces (on-time and late submissions share it). */
+export const MAX_UTR_ATTEMPTS = 3;
 
 /**
  * Lapsed (PAYMENT_TIMEOUT) holds still inside the late-UTR window with no UTR
@@ -338,7 +340,7 @@ export async function listLateUtrBookings(
 ): Promise<LateUtrBooking[]> {
   let q = db
     .from('bookings')
-    .select('id, expires_at, payment_status, routes(name)')
+    .select('id, expires_at, payment_status, utr_attempts, routes(name)')
     .eq('status', 'CANCELLED')
     .eq('cancel_cause', 'PAYMENT_TIMEOUT')
     .gt('expires_at', new Date(Date.now() - LATE_UTR_WINDOW_MS).toISOString())
@@ -350,7 +352,13 @@ export async function listLateUtrBookings(
   if (error) throw error;
   type RouteRef = { name: string | null };
   return (data ?? [])
-    .filter((b) => b.payment_status !== 'SUBMITTED' && b.payment_status !== 'PAID')
+    .filter(
+      (b) =>
+        b.payment_status !== 'SUBMITTED' &&
+        b.payment_status !== 'PAID' &&
+        // Out of UTR attempts → the RPC would refuse it, so don't offer the form.
+        Number(b.utr_attempts ?? 0) < MAX_UTR_ATTEMPTS,
+    )
     .map((b) => {
       const r = b.routes as RouteRef | RouteRef[] | null;
       const route = Array.isArray(r) ? r[0] : r;

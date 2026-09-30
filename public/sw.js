@@ -11,9 +11,26 @@
  *   - other same-origin static files (icons, images, fonts) → stale-while-
  *     revalidate (instant from cache, refreshed in the background).
  *   - HTML documents and API/auth requests are NEVER cached — always network,
- *     so pages, sessions and data are always live. */
+ *     so pages, sessions and data are always live.
+ *   - caches are versioned (CACHE_VERSION); old ones are deleted on activate,
+ *     and each cache is capped (LRU-ish trim) so it can't grow without bound. */
 
-const CACHE = 'cc-static-v2';
+// Versioned cache names. Bump CACHE_VERSION when caching rules change; the
+// activate handler deletes every cache that isn't in the current set, so old
+// versions never linger on the device.
+const CACHE_VERSION = 'v3';
+const IMMUTABLE_CACHE = `cc-immutable-${CACHE_VERSION}`; // /_next/static (hashed)
+const RUNTIME_CACHE = `cc-runtime-${CACHE_VERSION}`; // icons, images, fonts
+const CURRENT_CACHES = [IMMUTABLE_CACHE, RUNTIME_CACHE];
+
+// Entry caps. Hashed chunks change on every deploy, so without a cap the
+// immutable cache grows by a full build's worth of chunks per release. Cache
+// keys are kept in insertion order, and a hit is re-inserted (see touch()), so
+// deleting from the front trims the least-recently-used entries.
+const MAX_ENTRIES = {
+  [IMMUTABLE_CACHE]: 250,
+  [RUNTIME_CACHE]: 80,
+};
 
 self.addEventListener('install', () => {
   // Activate immediately so a freshly-registered worker can receive pushes and
@@ -26,13 +43,54 @@ self.addEventListener('activate', (event) => {
     (async () => {
       // Drop caches from older SW versions so we never serve outdated assets.
       const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith('cc-') && !CURRENT_CACHES.includes(k))
+          .map((k) => caches.delete(k)),
+      );
+      await Promise.all(CURRENT_CACHES.map((name) => trimCache(name)));
       await self.clients.claim();
     })(),
   );
 });
 
-const STATIC_FILE = /\.(?:js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico)$/;
+// Delete the oldest entries until the cache is within its cap.
+async function trimCache(name) {
+  const max = MAX_ENTRIES[name];
+  if (!max) return;
+  try {
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    const excess = keys.length - max;
+    for (let i = 0; i < excess; i++) await cache.delete(keys[i]);
+  } catch {
+    /* best-effort */
+  }
+}
+
+// Store a response and trim. Trimming is cheap (a keys() listing), and doing
+// it on write keeps the cache bounded between SW updates.
+async function putAndTrim(name, cache, req, res) {
+  try {
+    await cache.put(req, res);
+    await trimCache(name);
+  } catch {
+    /* quota errors etc. — caching is best-effort */
+  }
+}
+
+// Move a hit to the back of the insertion order so trimming evicts the
+// least-recently-USED entries, not just the oldest-inserted ones.
+async function touch(cache, req, hit) {
+  try {
+    await cache.delete(req);
+    await cache.put(req, hit);
+  } catch {
+    /* best-effort */
+  }
+}
+
+const STATIC_FILE = /.(?:js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|ico)$/;
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -56,11 +114,16 @@ self.addEventListener('fetch', (event) => {
   if (isImmutable) {
     // Cache-first: hashed filenames change on every deploy, so this is safe.
     event.respondWith(
-      caches.open(CACHE).then(async (cache) => {
+      caches.open(IMMUTABLE_CACHE).then(async (cache) => {
         const hit = await cache.match(req);
-        if (hit) return hit;
+        if (hit) {
+          touch(cache, req, hit.clone()); // fire-and-forget
+          return hit;
+        }
         const res = await fetch(req);
-        if (res && res.status === 200) cache.put(req, res.clone());
+        if (res && res.status === 200) {
+          putAndTrim(IMMUTABLE_CACHE, cache, req, res.clone());
+        }
         return res;
       }),
     );
@@ -69,11 +132,15 @@ self.addEventListener('fetch', (event) => {
 
   // Stale-while-revalidate for non-hashed static files.
   event.respondWith(
-    caches.open(CACHE).then(async (cache) => {
+    caches.open(RUNTIME_CACHE).then(async (cache) => {
       const hit = await cache.match(req);
       const network = fetch(req)
         .then((res) => {
-          if (res && res.status === 200) cache.put(req, res.clone());
+          if (res && res.status === 200) {
+            // Re-put moves it to the back, so this doubles as the LRU touch.
+            // Not event.waitUntil: this can run after respondWith has settled.
+            putAndTrim(RUNTIME_CACHE, cache, req, res.clone());
+          }
           return res;
         })
         .catch(() => hit);
@@ -95,8 +162,10 @@ self.addEventListener('push', (event) => {
     icon: '/icon.svg',
     badge: '/icon.svg',
     data: { url: data.url || '/' },
-    // Coalesce rapid updates for the same booking flow into one visible alert.
-    tag: 'campus-conveyance',
+    // The server sends a per-booking tag, so updates to ONE booking coalesce
+    // while two children's bookings show as separate notifications. Fall back
+    // to a unique tag (never a shared one) for older payloads.
+    tag: data.tag || 'cc-' + Date.now(),
     renotify: true,
   };
   event.waitUntil(self.registration.showNotification(title, options));

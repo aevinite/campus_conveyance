@@ -42,7 +42,7 @@ const FAIL_HOLD_MS = 1700; // how long the red failed row shows before we bail o
 // The three approval checks, IN THE ORDER they light up.
 const CHECKS = ['Seat availability', 'Your pickup stop', 'Campus eligibility'] as const;
 
-type Phase = 'reserve' | 'approving' | 'payment' | 'submitted' | 'expired';
+type Phase = 'reserve' | 'approving' | 'payment' | 'submitted' | 'expired' | 'closed';
 
 // The live outcome that drives the approving checklist animation. `ok` → all
 // three pass then payment; `fail` → rows up to failStep pass, failStep goes red,
@@ -202,6 +202,8 @@ export function ReserveForm({
   const [utr, setUtr] = useState('');
   const [planIdx, setPlanIdx] = useState(0);
   const [payDismissed, setPayDismissed] = useState(false);
+  // Why a 'submitted' booking stopped verifying (hold ended / declined) — see poll.
+  const [closedMsg, setClosedMsg] = useState('');
   // True when running inside the Capacitor Android app. The UA marker is only
   // readable on the client, so resolve it after mount.
   const [isApp, setIsApp] = useState(false);
@@ -279,25 +281,41 @@ export function ReserveForm({
 
   // While a payment is "verifying", poll for the admin's decision. On CONFIRMED,
   // show the success popup and (below) redirect home. On REJECTED, the admin
-  // couldn't verify the UTR — verify_upi_payment reopens a fresh 20-min pay
-  // window, so drop back to the pay panel (re-armed countdown) instead of
-  // looping on "verifying…" forever.
+  // couldn't verify the UTR — verify_upi_payment reopens a fresh 10-min pay
+  // window, so drop back to the pay panel (re-armed countdown). If the booking
+  // closed instead (hold lapsed, attempts used up, agency declined, or it's gone)
+  // stop polling and say so rather than spinning on "verifying…" forever.
   useEffect(() => {
     if (phase !== 'submitted' || !bookingId || confirmed) return;
     let stopped = false;
     const iv = setInterval(async () => {
       const r = await bookingStatusAction(bookingId);
-      if (stopped) return;
+      if (stopped || r.error) return; // transient failure → try again next tick
       if (r.status === 'CONFIRMED') {
         setConfirmed(true);
         clearInterval(iv);
-      } else if (r.paymentStatus === 'REJECTED') {
+      } else if (r.status === 'PENDING' && r.paymentStatus === 'REJECTED') {
         clearInterval(iv);
         setUtr('');
         setPayByAt(r.expiresAt ?? null);
         setPayDismissed(false);
         setPhase('payment');
         toast.error('We couldn’t verify your payment. Please pay again and re-enter the reference.');
+      } else if (
+        r.status !== 'PENDING' ||
+        (r.expiresAt && new Date(r.expiresAt).getTime() <= Date.now())
+      ) {
+        clearInterval(iv);
+        setClosedMsg(
+          r.status === 'REJECTED'
+            ? 'The agency declined this booking. If your payment is verified, it will be refunded.'
+            : r.paymentStatus === 'REJECTED'
+              ? 'We couldn’t verify your payment, so the seat hold was released. If money left your account, contact support with your UPI reference.'
+              : r.paymentStatus === 'PAID'
+                ? 'This booking is no longer active. Your payment was received and is being refunded.'
+                : 'This seat hold has ended. If your payment is verified, it will be refunded — track it in My bookings.',
+        );
+        setPhase('closed');
       }
     }, 5000);
     return () => {
@@ -690,6 +708,27 @@ export function ReserveForm({
         >
           Track it in My bookings <ArrowRight className="size-4" />
         </Link>
+      </div>
+    );
+  }
+
+  if (phase === 'closed') {
+    return (
+      <div className="space-y-3">
+        <PanelSteps active={3} />
+        <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          <Clock3 className="mt-0.5 size-4 shrink-0" />
+          <span>{closedMsg}</span>
+        </div>
+        <Link
+          href={bookingsHref}
+          className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:text-primary/70"
+        >
+          View My bookings <ArrowRight className="size-4" />
+        </Link>
+        <Button className="w-full" onClick={requestAgain}>
+          Request the seat again
+        </Button>
       </div>
     );
   }

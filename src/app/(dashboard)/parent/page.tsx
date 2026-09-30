@@ -31,6 +31,7 @@ const STATUS_PILL: Record<string, string> = {
   WAITLISTED: 'border-warning/30 bg-warning/10 text-warning',
   PENDING: 'border-primary/30 bg-primary/10 text-primary',
   CANCELLED: 'border-border bg-muted text-muted-foreground',
+  REJECTED: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -38,14 +39,32 @@ const STATUS_LABEL: Record<string, string> = {
   WAITLISTED: 'Waitlisted',
   PENDING: 'Pending',
   CANCELLED: 'Cancelled',
+  REJECTED: 'Rejected',
 };
 
-// A paid booking the family asked to cancel reads CONFIRMED until the admin
-// processes the refund — surface that as "Refund pending" rather than a plain
-// "Confirmed" (matches the student side).
+const REFUND_PENDING = { label: 'Refund pending', cls: 'border-warning/30 bg-warning/10 text-warning' };
+
+// Friendly labels matching the student side: a paid booking the family asked to
+// cancel (still CONFIRMED, or PENDING while its UPI payment is verified) reads
+// "Refund pending" until the admin processes it; a closed booking whose payment
+// is being refunded shows that too; a hold shows where its payment stands.
 function bookingPill(b: ChildBookingRow): { label: string; cls: string } {
-  if (b.status === 'CONFIRMED' && b.cancel_requested_at) {
-    return { label: 'Refund pending', cls: 'border-warning/30 bg-warning/10 text-warning' };
+  if ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.cancel_requested_at) {
+    return REFUND_PENDING;
+  }
+  if (b.status === 'CANCELLED' || b.status === 'REJECTED') {
+    if (b.refund_status === 'REQUESTED') return REFUND_PENDING;
+    if (b.refund_status === 'PROCESSED') {
+      return { label: 'Refunded', cls: 'border-border bg-muted text-muted-foreground' };
+    }
+  }
+  if (b.status === 'PENDING') {
+    if (b.is_paid) return { label: 'Paid — awaiting confirmation', cls: STATUS_PILL.PENDING };
+    if (b.payment_status === 'SUBMITTED') return { label: 'Verifying payment', cls: STATUS_PILL.PENDING };
+    if (b.payment_status === 'REJECTED') {
+      return { label: 'Payment failed — pay again', cls: STATUS_PILL.REJECTED };
+    }
+    return { label: 'Awaiting payment', cls: STATUS_PILL.PENDING };
   }
   return {
     label: STATUS_LABEL[b.status] ?? b.status,
@@ -97,6 +116,7 @@ export default async function ParentDashboard() {
         billingPeriod={b.billing_period as BillingPeriod | null}
         status={b.status}
         isPaid={b.is_paid}
+        paymentStatus={b.payment_status}
         startIso={b.pass_start_at ?? b.paid_at ?? b.created_at}
         pickupName={b.pickup_name}
         busNumber={b.bus_number}

@@ -24,6 +24,9 @@ export function AddChildForm({ campuses }: { campuses: CampusOption[] }) {
   const [open, setOpen] = useState(false);
   const seen = useRef<ManagedChildState>({});
   const formRef = useRef<HTMLFormElement>(null);
+  // After an error React 19 resets the form; these echoed values re-fill it.
+  // (A success clears them, so the reset leaves a blank form for the next child.)
+  const v = state.error ? state.values : undefined;
 
   useEffect(() => {
     if (state === seen.current) return;
@@ -67,12 +70,13 @@ export function AddChildForm({ campuses }: { campuses: CampusOption[] }) {
         <form ref={formRef} action={action} className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="fullName">Child&apos;s full name</Label>
-            <Input id="fullName" name="fullName" required maxLength={120} placeholder="e.g. Aarav Sharma" />
+            <Input id="fullName" name="fullName" defaultValue={v?.fullName} required maxLength={120} placeholder="e.g. Aarav Sharma" />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Campus (school / college)</Label>
             <SelectMenu
               name="institutionId"
+              defaultValue={v?.institutionId ?? ''}
               searchable
               placeholder="Select the child's campus"
               searchPlaceholder="Search campuses…"
@@ -81,23 +85,23 @@ export function AddChildForm({ campuses }: { campuses: CampusOption[] }) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="phone">Contact phone</Label>
-            <Input id="phone" name="phone" required inputMode="tel" maxLength={20} placeholder="Guardian / child phone" />
+            <Input id="phone" name="phone" defaultValue={v?.phone} required inputMode="tel" maxLength={20} placeholder="Guardian / child phone" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="grade">Class / grade <span className="text-muted-foreground">(optional)</span></Label>
-            <Input id="grade" name="grade" maxLength={40} placeholder="e.g. 6th" />
+            <Input id="grade" name="grade" defaultValue={v?.grade} maxLength={40} placeholder="e.g. 6th" />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="address">Pickup address</Label>
-            <Input id="address" name="address" required maxLength={300} placeholder="Home address for pickup" />
+            <Input id="address" name="address" defaultValue={v?.address} required maxLength={300} placeholder="Home address for pickup" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="rollNo">Roll no <span className="text-muted-foreground">(optional)</span></Label>
-            <Input id="rollNo" name="rollNo" maxLength={40} />
+            <Input id="rollNo" name="rollNo" defaultValue={v?.rollNo} maxLength={40} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="email">Email <span className="text-muted-foreground">(optional)</span></Label>
-            <Input id="email" name="email" type="email" maxLength={160} placeholder="For ride updates" />
+            <Input id="email" name="email" type="email" defaultValue={v?.email} maxLength={160} placeholder="For ride updates" />
           </div>
           <div className="sm:col-span-2">
             <SubmitButton pendingText="Adding…" disabled={pending}>

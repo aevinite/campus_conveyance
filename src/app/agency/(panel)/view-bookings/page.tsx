@@ -7,7 +7,10 @@ import { BookingCard } from '../booking-card';
 import { Pager } from '@/components/pager';
 import { cn } from '@/lib/utils';
 
-const FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'WAITLISTED', 'CANCELLED', 'REJECTED'] as const;
+// CANCELLING = a paid booking that was rejected/removed/cancelled and is only
+// held until the admin processes the refund (agency_bookings reports it so).
+const FILTERS = ['ALL', 'CONFIRMED', 'PENDING', 'CANCELLING', 'WAITLISTED', 'CANCELLED', 'REJECTED'] as const;
+const FILTER_LABEL: Partial<Record<(typeof FILTERS)[number], string>> = { CANCELLING: 'Refund pending' };
 
 const PAGE_SIZE = 20;
 
@@ -17,14 +20,41 @@ const STYLE: Record<string, string> = {
   CANCELLED: 'border-border bg-muted text-muted-foreground',
   REJECTED: 'border-destructive/40 bg-destructive/10 text-destructive',
   WAITLISTED: 'border-primary/40 bg-primary/10 text-primary',
+  CANCELLING: 'border-warning/40 bg-warning/10 text-warning',
 };
 const LABEL: Record<string, string> = {
   PENDING: 'Pending',
   CONFIRMED: 'Confirmed',
-  CANCELLED: 'Cancelled by student',
+  CANCELLED: 'Cancelled',
   REJECTED: 'Rejected',
   WAITLISTED: 'Waitlisted',
+  CANCELLING: 'Refund pending',
 };
+
+/** Status label from the recorded cause (bookings.cancel_cause), not a guess —
+ *  expiries and the agency's own removals aren't "cancelled by student". */
+function statusLabel(status: string, cause: string | null | undefined): string {
+  if (status === 'CANCELLING') {
+    return cause === 'AGENCY' ? 'Removed — refund pending' : 'Cancelled — refund pending';
+  }
+  if (status === 'CANCELLED' || status === 'REJECTED') {
+    switch (cause) {
+      case 'STUDENT':
+        return 'Cancelled by student';
+      case 'PARENT':
+        return 'Cancelled by parent';
+      case 'AGENCY':
+        return status === 'REJECTED' ? 'Rejected by you' : 'Removed by you';
+      case 'PAYMENT_TIMEOUT':
+        return 'Expired — not paid in time';
+      case 'PAYMENT_REJECTED':
+        return 'Expired — payment not verified';
+      case 'PASS_ENDED':
+        return 'Pass ended';
+    }
+  }
+  return LABEL[status] ?? status;
+}
 
 export default async function AgencyViewBookingsPage({
   searchParams,
@@ -59,7 +89,7 @@ export default async function AgencyViewBookingsPage({
         <h1 className="mt-1 text-2xl font-heading font-bold tracking-tight sm:text-3xl">View booking</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Every booking with the student&apos;s full details and the bus/route they chose
-          ({total} {status === 'ALL' ? 'total' : status.toLowerCase()}).
+          ({total} {status === 'ALL' ? 'total' : (LABEL[status] ?? status).toLowerCase()}).
         </p>
       </div>
 
@@ -74,7 +104,7 @@ export default async function AgencyViewBookingsPage({
               status === f ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-border text-muted-foreground hover:bg-muted',
             )}
           >
-            {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+            {f === 'ALL' ? 'All' : (FILTER_LABEL[f] ?? f.charAt(0) + f.slice(1).toLowerCase())}
           </Link>
         ))}
       </div>
@@ -101,7 +131,7 @@ export default async function AgencyViewBookingsPage({
                     STYLE[b.status] ?? 'border-border text-muted-foreground'
                   }`}
                 >
-                  {LABEL[b.status] ?? b.status}
+                  {statusLabel(b.status, b.cancel_cause)}
                 </span>
               }
             />

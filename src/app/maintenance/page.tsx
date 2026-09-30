@@ -1,6 +1,6 @@
 import { Bus } from 'lucide-react';
 
-export const metadata = { title: 'Under maintenance · Campus Conveyance' };
+export const metadata = { title: 'Under maintenance', robots: { index: false, follow: false } };
 
 export default function MaintenancePage() {
   return (

@@ -3,6 +3,8 @@ import { Compass } from 'lucide-react';
 import { Logo } from '@/components/brand';
 import { buttonVariants } from '@/components/ui/button';
 
+export const metadata = { title: "Page not found", robots: { index: false, follow: false } };
+
 // Branded 404 — replaces Next.js's bare default for any unmatched route.
 export default function NotFound() {
   return (

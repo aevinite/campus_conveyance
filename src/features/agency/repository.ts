@@ -126,6 +126,12 @@ export interface BookingRow {
   pickup_name: string | null;
   drop_name: string | null;
   price_cents: number | null;
+  /** Why it ended: STUDENT | PARENT | AGENCY | PAYMENT_TIMEOUT | PAYMENT_REJECTED |
+   *  PASS_ENDED (agency_bookings only; absent on the onboard list). */
+  cancel_cause?: string | null;
+  /** Set while a paid booking is held pending the admin's refund — reported by
+   *  agency_bookings as status 'CANCELLING'. */
+  cancel_requested_at?: string | null;
 }
 /** The agency owned by the signed-in user (null if none). */
 // Memoized per request: the agency layout and the page both need the agency, so
@@ -743,9 +749,29 @@ export interface CollegeFleetRow {
   vans: number;
 }
 export interface RevenueByRoute {
+  /** Grouped by route id — two routes may share a display name. */
+  routeId?: string;
   name: string;
   bookings: number;
   revenueCents: number;
+}
+/** Cancellations split by cause (bookings.cancel_cause). */
+export interface CancelledBy {
+  rider: number; // STUDENT / PARENT
+  expired: number; // payment window lapsed / UTR not verified
+  agency: number; // removed by the agency
+  passEnded: number;
+  other: number;
+}
+export interface AgencyBookingCounts {
+  pending: number;
+  confirmed: number;
+  /** Paid bookings rejected/removed/cancelled, seat held until the refund is processed. */
+  cancelling?: number;
+  rejected: number;
+  cancelled: number;
+  cancelledBy?: CancelledBy;
+  total: number;
 }
 export interface AgencyReport {
   counts: AgencyCounts;
@@ -753,7 +779,7 @@ export interface AgencyReport {
   // Buses & vans the agency runs at each school/college (from its routes there).
   fleetByCollege: CollegeFleetRow[];
   routesByInstitution: { name: string; routes: number }[];
-  bookings: { pending: number; confirmed: number; rejected: number; cancelled: number; total: number };
+  bookings: AgencyBookingCounts;
   studentsCount: number;
   // Revenue = paid + confirmed bookings × their route price (in paise/cents),
   // bucketed by when the payment actually happened (paid_at).
@@ -775,7 +801,7 @@ type AgencyReportAgg = {
   fleet?: { buses: number; vans: number };
   fleetByCollege?: CollegeFleetRow[];
   routesByInstitution?: { name: string; routes: number }[];
-  bookings?: { pending: number; confirmed: number; rejected: number; cancelled: number; total: number };
+  bookings?: AgencyBookingCounts;
   revenue?: { todayCents: number; monthCents: number; totalCents: number; byRoute: RevenueByRoute[] };
   studentsCount?: number;
   servicesCount?: number;
@@ -809,7 +835,7 @@ async function cachedAgencyReportAgg(agencyId: string): Promise<AgencyReportAgg>
 export async function getAgencyReport(agencyId: string): Promise<AgencyReport> {
   const agg = await cachedAgencyReportAgg(agencyId);
   const fleet = agg.fleet ?? { buses: 0, vans: 0 };
-  const bookings = agg.bookings ?? { pending: 0, confirmed: 0, rejected: 0, cancelled: 0, total: 0 };
+  const bookings: AgencyBookingCounts = agg.bookings ?? { pending: 0, confirmed: 0, rejected: 0, cancelled: 0, total: 0 };
   return {
     counts: {
       services: agg.servicesCount ?? 0,

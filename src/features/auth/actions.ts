@@ -14,6 +14,7 @@ import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '@/lib/mailer';
 import { PUSH_ENDPOINT_COOKIE } from '@/lib/push-cookie';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { getSiteUrl } from '@/lib/site-url';
 
 export type AuthState = {
   error?: string;
@@ -77,7 +78,7 @@ export async function registerAction(
   if (!parsed.success) return fail('Please check the form fields.');
   const limited = await emailRateLimited('email:signup', parsed.data.email);
   if (limited) return fail(limited);
-  const site = process.env.NEXT_PUBLIC_SITE_URL!;
+  const site = getSiteUrl();
   // Create the account + confirmation link via the admin API (does NOT send an
   // email), then send it ourselves from Gmail — this sidesteps Supabase's
   // rate-limited built-in mailer that was blocking signups.
@@ -157,7 +158,7 @@ export async function forgotAction(
   const parsed = forgotSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: 'Enter a valid email address.' };
   const email = parsed.data.email.trim().toLowerCase();
-  const site = process.env.NEXT_PUBLIC_SITE_URL!;
+  const site = getSiteUrl();
 
   // Identical reply for EVERY account-state outcome (not registered, deactivated,
   // or a real send) — never reveal which, or this endpoint becomes an account
@@ -235,7 +236,7 @@ export async function googleLoginAction() {
   const h = await headers();
   const proto = h.get('x-forwarded-proto') ?? 'https';
   const host = h.get('x-forwarded-host') ?? h.get('host');
-  const origin = host ? `${proto}://${host}` : process.env.NEXT_PUBLIC_SITE_URL!;
+  const origin = host ? `${proto}://${host}` : getSiteUrl();
   const { data, error } = await db.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: `${origin}/auth/callback` },

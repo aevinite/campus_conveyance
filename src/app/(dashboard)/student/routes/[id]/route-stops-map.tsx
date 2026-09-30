@@ -33,6 +33,13 @@ const MOVE_MIN_M = 8;
 const AREA_MIN_M = 150;
 // A computed speed above this (~130 km/h) is a GPS jump, not real motion.
 const MAX_PLAUSIBLE_MPS = 36;
+// Refresh the rider's pickup progress (skips / boarded / passed) every Nth poll
+// (~30s) rather than on every 5s location poll.
+const PROGRESS_EVERY = 6;
+// Client fallback for "bus passed the stop" when the driver doesn't update route
+// progress: it came within ARRIVED_M of the stop and is now PASSED_M+ away.
+const ARRIVED_M = 150;
+const PASSED_M = 500;
 
 function numberedPin(L: typeof import('leaflet'), n: number): LeafletNS.DivIcon {
   return L.divIcon({
@@ -55,6 +62,17 @@ interface LiveResponse {
   /** When the driver's fix was recorded (ISO). */
   updatedAt?: string | null;
   busNumber?: string | null;
+  /** Rider's effective pickup + today's progress (only on `progress=1` polls;
+   *  null = caller isn't a rider on this route). */
+  pickup?: PickupProgress | null;
+}
+
+interface PickupProgress {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+  /** WAITING | ON_BOARD | DONE | PASSED | NO_STOP */
+  state: string;
 }
 
 interface LiveState {
@@ -67,6 +85,8 @@ interface LiveState {
   etaMin: number | null;
   /** Straight-line metres from the bus to the rider's pickup stop (null if no stop). */
   distM: number | null;
+  /** Pickup progress: WAITING | ON_BOARD | DONE | PASSED | NO_STOP (null = unknown). */
+  pickupState: string | null;
 }
 
 export default function RouteStopsMap({
@@ -103,6 +123,10 @@ export default function RouteStopsMap({
   const areaRef = useRef<string | null>(null);
   const lastAreaPos = useRef<LatLng | null>(null);
   const animCancel = useRef<(() => void) | null>(null);
+  // Server-side pickup progress (undefined = not fetched yet) + the client-side
+  // "came close, now moving away" fallback for the same target stop.
+  const progressRef = useRef<PickupProgress | null | undefined>(undefined);
+  const closestRef = useRef<{ key: string; minD: number; passed: boolean } | null>(null);
   const [live, setLive] = useState<LiveState | null>(null);
 
   // Rebuild the Leaflet map only when the stops' CONTENT changes, not when the
@@ -229,18 +253,41 @@ export default function RouteStopsMap({
       speedRef.current = null;
       headingRef.current = null;
       centeredOnBus.current = false;
+      progressRef.current = undefined;
+      closestRef.current = null;
     }
 
     // Distance + ETA from the current bus fix to the viewing rider's pickup stop.
     // ETA needs a real speed (m/s); while stopped we only know the distance.
-    function pickupEta(pos: LatLng): { etaMin: number | null; distM: number | null } {
-      const p = pickupRef.current;
-      if (!p) return { etaMin: null, distM: null };
+    // The target is the server's EFFECTIVE pickup (honours today's skips) when
+    // known, else the page-supplied stop. Once the bus has been to that stop
+    // (boarded / passed / trip done), the ETA is dropped in favour of a status.
+    function pickupEta(pos: LatLng): Pick<LiveState, 'etaMin' | 'distM' | 'pickupState'> {
+      const prog = progressRef.current;
+      const p =
+        prog && prog.lat != null && prog.lng != null
+          ? { lat: prog.lat, lng: prog.lng }
+          : prog === undefined
+            ? pickupRef.current
+            : null;
+      const serverState = prog?.state ?? null;
+      if (!p) return { etaMin: null, distM: null, pickupState: serverState };
       const d = haversineMeters(pos, [p.lat, p.lng]);
+      // Client fallback: closest approach so far to THIS target stop.
+      const key = `${p.lat},${p.lng}`;
+      const c =
+        closestRef.current?.key === key
+          ? closestRef.current
+          : (closestRef.current = { key, minD: d, passed: false });
+      c.minD = Math.min(c.minD, d);
+      if (c.minD <= ARRIVED_M && d >= PASSED_M) c.passed = true;
+      const pickupState =
+        serverState && serverState !== 'WAITING' ? serverState : c.passed ? 'PASSED' : serverState;
       const spd = speedRef.current; // metres/second (smoothed)
       const etaMin = spd && spd > 0.7 ? Math.max(1, Math.ceil(d / spd / 60)) : null;
-      return { etaMin, distM: d };
+      return { etaMin, distM: d, pickupState };
     }
+    let pollCount = 0;
 
     async function tick() {
       // Skip until the async Leaflet import + map init finished — otherwise the
@@ -249,7 +296,10 @@ export default function RouteStopsMap({
       if (inFlight) return; // don't overlap with a still-pending poll
       inFlight = true;
       try {
-        const res = await fetch(`/api/bus-location?routeId=${liveRouteId}`, {
+        // Ask for pickup progress on the first live poll and then every ~30s.
+        const wantProgress = progressRef.current === undefined || pollCount % PROGRESS_EVERY === 0;
+        pollCount++;
+        const res = await fetch(`/api/bus-location?routeId=${liveRouteId}${wantProgress ? '&progress=1' : ''}`, {
           cache: 'no-store',
           signal: ac.signal,
         });
@@ -273,6 +323,7 @@ export default function RouteStopsMap({
         const m = mapRef.current;
         if (data.live && data.lat != null && data.lng != null && L && m) {
           missedPolls = 0; // fresh fix — reset the tolerance counter
+          if (data.pickup !== undefined) progressRef.current = data.pickup;
           const pos: LatLng = [data.lat, data.lng];
           // Time of the driver's FIX, not of this poll. We poll faster than the
           // driver pings, so the same fix often comes back twice: using poll time
@@ -383,15 +434,24 @@ export default function RouteStopsMap({
 
   const speedLabel = live?.stopped ? 'Stopped' : `${Math.round(live?.speedKmh ?? 0)} km/h`;
 
-  // "N min away" (moving, ETA known) / "Arriving now" (within ~150 m) / distance.
+  // Once the bus has been to the rider's stop the countdown is replaced:
+  // "On board" / "Bus passed your stop"; hidden when the trip is done or the stop
+  // (and every later one) is skipped. Otherwise "N min away" (moving, ETA known) /
+  // "Arriving now" (within ~150 m) / distance.
   const etaLabel =
-    live?.distM == null
-      ? null
-      : live.distM <= 150
-        ? 'Arriving now'
-        : live.etaMin != null
-          ? `~${live.etaMin} min away`
-          : `${(live.distM / 1000).toFixed(1)} km away`;
+    live?.pickupState === 'ON_BOARD'
+      ? 'On board'
+      : live?.pickupState === 'PASSED'
+        ? 'Bus passed your stop'
+        : live?.pickupState === 'DONE' || live?.pickupState === 'NO_STOP'
+          ? null
+          : live?.distM == null
+            ? null
+            : live.distM <= ARRIVED_M
+              ? 'Arriving now'
+              : live.etaMin != null
+                ? `~${live.etaMin} min away`
+                : `${(live.distM / 1000).toFixed(1)} km away`;
 
   return (
     <div className="relative">

@@ -434,6 +434,7 @@ export interface PendingCampusApplication {
   area: string | null;
   adminName: string | null;
   adminEmail: string | null;
+  adminPhone: string | null;
   createdAt: string;
 }
 
@@ -460,13 +461,13 @@ export async function listPendingCampusApplications(): Promise<PendingCampusAppl
 
   const { data: adminRows } = await admin
     .from('profiles')
-    .select('institution_id, full_name, email')
+    .select('institution_id, full_name, email, phone')
     .eq('role', 'INSTITUTION_ADMIN')
     .eq('is_deleted', false)
     .in('institution_id', rows.map((r) => r.id));
-  const byInst = new Map<string, { full_name: string | null; email: string | null }>();
-  for (const a of (adminRows ?? []) as { institution_id: string; full_name: string | null; email: string | null }[]) {
-    if (!byInst.has(a.institution_id)) byInst.set(a.institution_id, { full_name: a.full_name, email: a.email });
+  const byInst = new Map<string, { full_name: string | null; email: string | null; phone: string | null }>();
+  for (const a of (adminRows ?? []) as { institution_id: string; full_name: string | null; email: string | null; phone: string | null }[]) {
+    if (!byInst.has(a.institution_id)) byInst.set(a.institution_id, { full_name: a.full_name, email: a.email, phone: a.phone });
   }
   return rows
     .filter((r) => byInst.has(r.id)) // only campuses that actually have an applicant admin
@@ -478,6 +479,7 @@ export async function listPendingCampusApplications(): Promise<PendingCampusAppl
       area: r.area,
       adminName: byInst.get(r.id)?.full_name ?? null,
       adminEmail: byInst.get(r.id)?.email ?? null,
+      adminPhone: byInst.get(r.id)?.phone ?? null,
       createdAt: r.created_at,
     }));
 }

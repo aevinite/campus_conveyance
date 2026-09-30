@@ -91,6 +91,8 @@ export interface ChildBookingRow {
   payment_status: string | null;
   /** Set once a paid cancellation is filed → show "Refund pending". */
   cancel_requested_at: string | null;
+  /** payments.refund_status (NONE / REQUESTED / PROCESSED / DECLINED), null if unpaid. */
+  refund_status: string | null;
 }
 
 /** The signed-in parent's linked children (via security-definer RPC). */

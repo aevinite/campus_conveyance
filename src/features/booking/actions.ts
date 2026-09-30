@@ -18,7 +18,20 @@ export type ReserveState = {
    *  to the specific approval check that didn't pass. */
   code?: string;
 };
-export type CancelState = { ok?: boolean; error?: string };
+export type CancelValues = {
+  reason?: string;
+  upiId?: string;
+  accountName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+};
+export type CancelState = {
+  ok?: boolean;
+  error?: string;
+  /** Echo of the reason + refund details on error — React 19 resets the
+   *  uncontrolled `<form action>`, so the dialog re-fills from these. */
+  values?: CancelValues;
+};
 export type DetailsState = { ok?: boolean; error?: string };
 export type SubmitUpiState = { status?: string; error?: string; code?: string };
 export type BookingStatusResult = {
@@ -128,8 +141,16 @@ export async function cancelBookingAction(
   _: CancelState,
   formData: FormData,
 ): Promise<CancelState> {
+  const v = (k: string) => String(formData.get(k) ?? '');
+  const values: CancelValues = {
+    reason: v('reason'),
+    upiId: v('upiId'),
+    accountName: v('accountName'),
+    accountNumber: v('accountNumber'),
+    ifsc: v('ifsc'),
+  };
   const parsed = cancelSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: 'Could not identify that booking.' };
+  if (!parsed.success) return { error: 'Could not identify that booking.', values };
   const d = parsed.data;
   // Build the refund payout object from whichever method the student chose.
   let refund: Record<string, string> | null = null;
@@ -148,7 +169,7 @@ export async function cancelBookingAction(
     await cancelBooking(db, d.bookingId, d.reason ?? null, refund);
   } catch (e) {
     // Surface the failure to the user instead of crashing the page.
-    return { error: toErrorResponse(e).message };
+    return { error: toErrorResponse(e).message, values };
   }
   // Cancelling frees a seat → may promote a waitlisted rider; flush both the
   // cancel notice (to parents) and any promotion email/push the trigger queued.

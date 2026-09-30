@@ -42,6 +42,9 @@ function ensureVapid(): boolean {
   return vapidReady;
 }
 
+// Max time the push service may hold an undelivered message (seconds).
+const PUSH_TTL_SECONDS = 60 * 60 * 4;
+
 type Sub = { endpoint: string; p256dh: string; auth: string };
 
 export async function drainPushOutbox(batchSize = 20): Promise<void> {
@@ -57,6 +60,8 @@ export async function drainPushOutbox(batchSize = 20): Promise<void> {
     for (const row of rows as Array<{
       id: string;
       recipient_id: string | null;
+      booking_id: string | null;
+      kind: string | null;
       title: string;
       body: string;
       url: string | null;
@@ -79,6 +84,10 @@ export async function drainPushOutbox(batchSize = 20): Promise<void> {
             title: row.title,
             body: row.body,
             url: row.url ?? '/',
+            // Per-booking tag: a parent with two children gets two separate
+            // notifications instead of the second silently replacing the
+            // first. Later updates for the SAME booking still coalesce.
+            tag: row.booking_id ? `cc-booking-${row.booking_id}` : `cc-${row.id}`,
           });
           // allSettled, not all: one device failing (non-404/410) must not reject
           // the batch and leave the row unsent — that would re-deliver a DUPLICATE
@@ -131,7 +140,13 @@ async function sendOne(
         keys: { p256dh: sub.p256dh, auth: sub.auth },
       },
       payload,
-      { TTL: 60 * 60 * 24 }, // hold up to a day if the device is offline
+      {
+        // These are time-sensitive (seat held, bus arriving, payment window):
+        // a day-late alert is worse than none. Hold at most 4h while the device
+        // is offline, and ask the push service for immediate delivery.
+        TTL: PUSH_TTL_SECONDS,
+        urgency: 'high',
+      },
     );
   } catch (e) {
     const status = (e as { statusCode?: number })?.statusCode;

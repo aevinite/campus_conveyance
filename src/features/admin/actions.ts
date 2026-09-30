@@ -505,14 +505,23 @@ export async function restoreCollegeAction(formData: FormData): Promise<void> {
   if (readErr) throw new AppError('ADMIN', readErr.message);
   if (!inst) return;
   const verified = (inst as { is_verified: boolean }).is_verified === true;
-  const { error } = await db
+  const { data: restored, error } = await db
     .from('institutions')
     // Delete set is_active=false to hide it from students; restoring a verified
     // college flips it back on. An UNVERIFIED one is a (rejected) self-registered
     // application: it returns to "pending review" hidden, never straight to live.
     .update({ is_deleted: false, deleted_at: null, is_active: verified })
-    .eq('id', id);
+    .eq('id', id)
+    // Only an actually-deleted college: a stale click on a live one must not
+    // re-toggle it or log a restore that never happened (audit-4 LOW #14).
+    .eq('is_deleted', true)
+    .select('id')
+    .maybeSingle();
   if (error) throw new AppError('ADMIN', error.message);
+  if (!restored) {
+    revalidatePath('/aevinite/deleted-colleges');
+    return;
+  }
   if (!verified) {
     // Rejecting the application deactivated its campus admin(s); bring them back
     // so it shows again under "Pending campus applications".
@@ -605,14 +614,22 @@ export async function approveCampusApplicationAction(formData: FormData): Promis
   // Guarded write: only flip an application that's still pending (hidden +
   // unverified + not deleted), so a stale double-click can't "re-approve" and a
   // wrong id matches zero rows.
-  const { error } = await db
+  const { data: approved, error } = await db
     .from('institutions')
     .update({ is_active: true, is_verified: true })
     .eq('id', id)
     .eq('is_active', false)
     .eq('is_verified', false)
-    .eq('is_deleted', false);
+    .eq('is_deleted', false)
+    .select('id')
+    .maybeSingle();
   if (error) throw new AppError('ADMIN', error.message);
+  if (!approved) {
+    // Nothing matched (already approved / rejected / not found) — don't write an
+    // audit entry claiming an approval that never happened (audit-4 LOW #14).
+    revalidatePath('/aevinite/colleges');
+    return;
+  }
   await logAction(db, 'CAMPUS_APPLICATION_APPROVED', 'institution', id);
   revalidatePath('/aevinite/colleges');
   revalidatePath('/aevinite'); updateTag('admin-report');
