@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Search, Ticket, ArrowRight, MapPin } from 'lucide-react';
-import { Instrument_Serif } from 'next/font/google';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { isAppRequest } from '@/lib/app-context';
@@ -21,9 +20,6 @@ import RouteStopsMap, { type MapStop } from './routes/[id]/route-stops-map';
 import { formatShortDate, formatWeekdayDate } from '@/lib/format-date';
 
 // Bookings whose bus is worth showing a live map for.
-// Elegant italic serif for the greeting date (website dashboard only).
-const dateSerif = Instrument_Serif({ weight: '400', style: 'italic', subsets: ['latin'] });
-
 const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
 
 const STATUS_META: Record<
@@ -140,9 +136,16 @@ export default async function StudentHome() {
       {/* Greeting hero */}
       <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p className={`${dateSerif.className} text-2xl italic text-muted-foreground sm:text-[1.7rem]`}>
-            {formatWeekdayDate(new Date())}
-          </p>
+          {(() => {
+            // "Wednesday, 30 September" → weekday in brand colour, date muted.
+            const [weekday, ...rest] = formatWeekdayDate(new Date()).split(', ');
+            return (
+              <p className="font-heading text-lg font-medium tracking-tight text-muted-foreground sm:text-xl">
+                <span className="font-semibold text-primary">{weekday}</span>
+                {rest.length > 0 && <span className="tnum">, {rest.join(', ')}</span>}
+              </p>
+            );
+          })()}
           <h1 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl">
             Welcome back, <span className="text-gradient">{name}</span>.
           </h1>
@@ -183,7 +186,6 @@ export default async function StudentHome() {
           busNumber={busNumber}
           manageHref="/student/bookings"
           renewHref={passRenewHref}
-          bookingId={activeBooking.id}
         />
       )}
 
