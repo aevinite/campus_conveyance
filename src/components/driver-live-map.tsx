@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import type * as LeafletNS from 'leaflet';
-import { Navigation, MapPin, Gauge } from 'lucide-react';
+import { Navigation, MapPin, Gauge, LocateFixed } from 'lucide-react';
 import {
   animateMarkerTo,
   bearingDeg,
@@ -15,6 +15,9 @@ import {
 import { escapeHtml } from '@/lib/escape-html';
 import { cn } from '@/lib/utils';
 import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
+import { enableWebMouseExplore, webMapOptions } from '@/lib/map-interaction';
+import { isNativeApp } from '@/lib/native-google-auth';
+import { drawRouteLine } from '@/lib/route-line';
 
 // Below this, treat the fix as jitter (bus stationary) — don't rotate or speed.
 const MOVE_MIN_M = 8;
@@ -25,6 +28,8 @@ export interface SimpleStop {
   name: string;
   lat: number;
   lng: number;
+  /** Which route the stop belongs to — one blue line is drawn per route. */
+  routeId?: string;
 }
 
 /**
@@ -54,6 +59,10 @@ export function DriverLiveMap({
   const areaRef = useRef<string | null>(null);
   const lastAreaPos = useRef<LatLng | null>(null);
   const watchId = useRef<number | null>(null);
+  // Auto-follow the bus. On the website, dragging the map pauses it so the
+  // driver can look around; "Re-center" resumes. The app always follows.
+  const followRef = useRef(true);
+  const [following, setFollowing] = useState(true);
 
   const [status, setStatus] = useState<'locating' | 'live' | 'denied' | 'error'>(
     'locating',
@@ -66,6 +75,7 @@ export function DriverLiveMap({
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupMouse: (() => void) | null = null;
     // Abort in-flight area lookups on unmount so they don't resolve late.
     const ac = new AbortController();
     // Only the latest fetchArea may write the label (drop stale late responses).
@@ -134,8 +144,8 @@ export function DriverLiveMap({
         void fetchArea(pos);
       }
 
-      // Auto-follow (navigation view).
-      m.panTo(pos, { animate: true, duration: 0.5 });
+      // Auto-follow (navigation view), unless the user is exploring the map.
+      if (followRef.current) m.panTo(pos, { animate: true, duration: 0.5 });
       if (
         !lastAreaPos.current ||
         haversineMeters(lastAreaPos.current, pos) >= AREA_MIN_M
@@ -186,10 +196,23 @@ export function DriverLiveMap({
       const L = (await import('leaflet')).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
       leafletRef.current = L;
-      const m = L.map(containerRef.current, { attributionControl: false });
+      const m = L.map(containerRef.current, { attributionControl: false, ...webMapOptions() });
       mapRef.current = m;
+      if (!isNativeApp()) {
+        cleanupMouse = enableWebMouseExplore(m);
+        m.on('dragstart', () => {
+          followRef.current = false;
+          setFollowing(false);
+        });
+      }
       L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
-      // Light route context — small dots for the pickup stops.
+      // Blue line tracing the whole route, then small dots for the pickup stops.
+      const byRoute = new Map<string, SimpleStop[]>();
+      stops.forEach((s) => {
+        const k = s.routeId ?? '';
+        byRoute.set(k, [...(byRoute.get(k) ?? []), s]);
+      });
+      byRoute.forEach((rs) => drawRouteLine(L, m, rs));
       stops.forEach((s) =>
         L.circleMarker([s.lat, s.lng], {
           radius: 5,
@@ -210,6 +233,7 @@ export function DriverLiveMap({
 
     return () => {
       cancelled = true;
+      cleanupMouse?.();
       stopWatch();
       ac.abort();
       document.removeEventListener('visibilitychange', onVisibility);
@@ -220,6 +244,13 @@ export function DriverLiveMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function recenter() {
+    followRef.current = true;
+    setFollowing(true);
+    const pos = markerRef.current?.getLatLng();
+    if (pos) mapRef.current?.panTo(pos, { animate: true, duration: 0.5 });
+  }
 
   const speedLabel = readout.stopped
     ? 'Stopped'
@@ -252,6 +283,16 @@ export function DriverLiveMap({
             {status === 'error' && 'Location isn’t available on this device.'}
           </span>
         </div>
+      )}
+
+      {!following && status === 'live' && (
+        <button
+          type="button"
+          onClick={recenter}
+          className="absolute right-3 bottom-3 z-[1000] inline-flex items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs font-semibold text-foreground shadow-md backdrop-blur-sm transition-colors hover:bg-muted"
+        >
+          <LocateFixed className="size-3.5 text-primary" /> Re-center
+        </button>
       )}
 
       <div

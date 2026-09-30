@@ -383,6 +383,41 @@ input[type="password"]::-ms-clear {
 .leaflet-control-attribution a {
   color: #b4700a !important;
 }
+/* Website-only mouse exploration (see src/lib/map-interaction.ts): grab cursor
+   while panning + a short "how to zoom" hint when the wheel scrolls the page. */
+.cc-web-map.leaflet-grab {
+  cursor: grab;
+}
+.cc-web-map.leaflet-dragging .leaflet-grab,
+.cc-web-map.leaflet-dragging.leaflet-grab {
+  cursor: grabbing;
+}
+.cc-map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 1000;
+  transform: translate(-50%, 6px);
+  max-width: calc(100% - 24px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(24 24 27 / 0.82);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.cc-map-hint.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
 
 /* ---- App-only softer light mode ----
    The website's light mode is a bright near-white; inside the native app that

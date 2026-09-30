@@ -13,6 +13,8 @@ import {
 } from '@/lib/bus-marker';
 import { escapeHtml } from '@/lib/escape-html';
 import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
+import { enableWebMouseExplore, webMapOptions } from '@/lib/map-interaction';
+import { drawRouteLine } from '@/lib/route-line';
 
 export interface MapStop {
   name: string;
@@ -114,6 +116,7 @@ export default function RouteStopsMap({
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupMouse: (() => void) | null = null;
     (async () => {
       const L = (await import('leaflet')).default;
       leafletRef.current = L;
@@ -122,10 +125,18 @@ export default function RouteStopsMap({
         (s): s is MapStop & { lat: number; lng: number } =>
           typeof s.lat === 'number' && typeof s.lng === 'number',
       );
-      const m = L.map(containerRef.current, { attributionControl: false, scrollWheelZoom: false });
+      const m = L.map(containerRef.current, {
+        attributionControl: false,
+        scrollWheelZoom: false,
+        ...webMapOptions(),
+      });
       mapRef.current = m;
+      // Website: drag to pan, click/Ctrl + scroll to zoom (no-op in the app).
+      cleanupMouse = enableWebMouseExplore(m);
       centeredOnBus.current = false; // fresh map — allow the next fix to recenter
       L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
+      // Blue line tracing this bus's whole route, stop to stop.
+      drawRouteLine(L, m, pts);
       pts.forEach((s, i) => {
         const desc = s.description?.trim();
         const addr = s.address?.trim();
@@ -151,6 +162,7 @@ export default function RouteStopsMap({
     })();
     return () => {
       cancelled = true;
+      cleanupMouse?.();
       animCancel.current?.();
       busMarkerRef.current = null;
       mapRef.current?.remove();

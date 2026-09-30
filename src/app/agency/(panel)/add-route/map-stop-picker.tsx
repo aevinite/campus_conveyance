@@ -5,6 +5,7 @@ import type * as LeafletNS from 'leaflet';
 import { LocateFixed, MapPin, Search, X } from 'lucide-react';
 import { escapeHtml } from '@/lib/escape-html';
 import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
+import { enableWebMouseExplore, webMapOptions } from '@/lib/map-interaction';
 
 export interface Stop {
   name: string;
@@ -110,6 +111,7 @@ export default function MapStopPicker({
 
   useEffect(() => {
     let cancelled = false;
+    let cleanupMouse: (() => void) | null = null;
     (async () => {
       const L = (await import('leaflet')).default;
       if (cancelled || !containerRef.current || mapRef.current) return;
@@ -118,7 +120,14 @@ export default function MapStopPicker({
         zoomControl: true,
         attributionControl: false,
         scrollWheelZoom: false, // page scroll shouldn't zoom; use pinch or the +/- buttons
+        ...webMapOptions(),
       }).setView([23.0225, 72.5714], 12);
+      // Website: drag to pan, Ctrl + scroll (or scroll after dragging) to zoom.
+      // Clicking drops a stop here, so the hint points at drag instead of click.
+      cleanupMouse = enableWebMouseExplore(
+        m,
+        'Drag the map, then scroll to zoom, or use Ctrl + scroll',
+      );
       L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
       layerRef.current = L.layerGroup().addTo(m);
       mapRef.current = m;
@@ -134,6 +143,7 @@ export default function MapStopPicker({
     })();
     return () => {
       cancelled = true;
+      cleanupMouse?.();
       mountedRef.current = false;
       mapRef.current?.remove();
       mapRef.current = null;
