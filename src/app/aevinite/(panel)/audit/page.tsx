@@ -6,6 +6,7 @@ import { DataTable } from '@/components/data-table';
 import { Pager, pageParams } from '@/components/pager';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 // Human-readable label + tone for each logged action code.
 const ACTIONS: Record<string, { label: string; tone: 'good' | 'bad' | 'warn' | 'muted' }> = {
@@ -57,6 +58,7 @@ export default async function AdminAuditPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();

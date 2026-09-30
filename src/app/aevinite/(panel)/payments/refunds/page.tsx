@@ -6,6 +6,7 @@ import { processRefundAction } from '@/features/admin/ops-actions';
 import { DataTable } from '@/components/data-table';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,7 @@ export default async function AdminRefundsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const { rows, total } = await listPendingRefunds({ limit: OPS_PAGE_SIZE, offset });

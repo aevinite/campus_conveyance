@@ -6,12 +6,14 @@ import { updateCollegeAction } from '@/features/admin/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CollegeForm } from '../../../college-form';
 import { CampusAdminsPanel, type CampusAdmin } from './campus-admins-panel';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export default async function EditCollegePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireSuperAdminPage();
   const { id } = await params;
   const db = await createClient();
   const { data: college } = await db

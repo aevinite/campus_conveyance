@@ -7,12 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { AgencyProfileForm } from '@/app/agency/(panel)/account/agency-profile-form';
 import { cn } from '@/lib/utils';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export default async function EditProviderPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireSuperAdminPage();
   const { id } = await params;
   const db = await createClient();
   const agency = await getAgencyDetail(db, id);

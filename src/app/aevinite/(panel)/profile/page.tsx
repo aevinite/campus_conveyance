@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChangePasswordForm } from '@/components/profile/change-password-form';
 import { EditProfileForm } from '@/components/profile/edit-profile-form';
 import { formatDate, formatDateTime } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: 'Super Admin',
@@ -17,6 +18,7 @@ const fmtDate = (v?: string | null) => formatDate(v);
 const fmtDateTime = (v?: string | null) => formatDateTime(v, 'Never');
 
 export default async function AdminProfilePage() {
+  await requireSuperAdminPage();
   const db = await createClient();
   const {
     data: { user },

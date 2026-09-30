@@ -7,12 +7,14 @@ import { DataTable } from '@/components/data-table';
 import { SubmitButton } from '@/components/submit-button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
 import { Pager, pageParams } from '@/components/pager';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export default async function AdminDeletedCollegesPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();

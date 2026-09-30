@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/panel/page-header';
 import { StatStrip } from '@/components/panel/stat-strip';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionDashboard() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   // The layout renders a "no campus linked" gate when this is null, so children
   // only ever mount with a real id — but stay defensive.

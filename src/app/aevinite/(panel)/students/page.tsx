@@ -7,12 +7,14 @@ import { deleteStudentAction } from '@/features/admin/actions';
 import { DataTable } from '@/components/data-table';
 import { ConfirmSubmit } from '@/components/confirm-submit';
 import { Pager, pageParams } from '@/components/pager';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export default async function AdminStudentsPage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string; mpage?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam, mpage: mpageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const { page: mpage, offset: moffset } = pageParams(mpageParam, ADMIN_PAGE_SIZE);

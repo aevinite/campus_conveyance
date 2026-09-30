@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
 import { formatDateTime } from '@/lib/format-date';
 import { UpiSettingsForm } from './upi-settings-form';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 function MaintenanceToggle({
   target,
@@ -74,6 +75,7 @@ function MaintenanceToggle({
 }
 
 export default async function AdminSettingsPage() {
+  await requireSuperAdminPage();
   const [{ website, app, updatedAt }, upi] = await Promise.all([
     getMaintenance(),
     getUpiSettings(),

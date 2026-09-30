@@ -9,6 +9,7 @@ import { formatDateTime, formatDateMedium } from '@/lib/format-date';
 import { relativeTime } from '@/lib/format';
 import BusGallery from '@/app/(dashboard)/student/routes/[id]/bus-gallery';
 import RouteStopsMap from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,7 @@ function RiderTable({ riders }: { riders: SeatRider[] }) {
 }
 
 export default async function AdminVehicleDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSuperAdminPage();
   const { id } = await params;
   const detail = await getVehicleDetail(id);
   if (!detail) notFound();

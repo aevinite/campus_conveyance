@@ -3,6 +3,7 @@ import { UsersRound, GraduationCap, Mail, Phone, MapPin, Bus, KeyRound, UserPlus
 import { listParentsDetailed, listActiveLinkCodes, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export default async function AdminParentsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const [{ rows, total }, codes] = await Promise.all([

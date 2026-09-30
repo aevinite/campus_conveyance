@@ -17,6 +17,7 @@ import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
 import { Pager, pageParams } from '@/components/pager';
 import { serviceRequestStage, STAGE_LABEL, STAGE_TONE } from '@/lib/service-request-stage';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 const PAGE_SIZE = 15;
 
@@ -25,6 +26,7 @@ export default async function AdminServiceRequestsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, PAGE_SIZE);
   const db = await createClient();

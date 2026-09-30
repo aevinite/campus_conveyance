@@ -2,8 +2,10 @@ import { PlusCircle } from 'lucide-react';
 import { addCollegeAction } from '@/features/admin/actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CollegeForm } from '../college-form';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
-export default function AddCollegePage() {
+export default async function AddCollegePage() {
+  await requireSuperAdminPage();
   return (
     <section className="space-y-4">
       <div>

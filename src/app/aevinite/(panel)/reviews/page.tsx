@@ -8,6 +8,7 @@ import { Pager, pageParams } from '@/components/pager';
 import { SubmitButton } from '@/components/submit-button';
 import { StarRating } from '@/components/ui/star-rating';
 import { formatDateTime } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,7 @@ export default async function AdminReviewsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const { rows, total } = await listReviews({ limit: OPS_PAGE_SIZE, offset });

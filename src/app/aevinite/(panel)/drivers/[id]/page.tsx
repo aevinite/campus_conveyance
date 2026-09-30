@@ -7,6 +7,7 @@ import { DataTable } from '@/components/data-table';
 import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { formatDateTime, formatDateMedium } from '@/lib/format-date';
 import { relativeTime } from '@/lib/format';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 }
 
 export default async function AdminDriverDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSuperAdminPage();
   const { id } = await params;
   const detail = await getDriverDetail(id);
   if (!detail) notFound();

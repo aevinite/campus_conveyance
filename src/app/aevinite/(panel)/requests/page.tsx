@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
 import { Pager, pageParams } from '@/components/pager';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 const PAGE_SIZE = 10;
 
@@ -29,6 +30,7 @@ export default async function AdminRequestsPage({
 }: {
   searchParams: Promise<{ page?: string; rej?: string }>;
 }) {
+  await requireSuperAdminPage();
   const sp = await searchParams;
   // Two independent lists on one page: pending (?page=) and rejected (?rej=).
   const { page, offset } = pageParams(sp.page, PAGE_SIZE);

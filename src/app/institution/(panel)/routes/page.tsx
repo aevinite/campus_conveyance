@@ -12,6 +12,7 @@ import { Pager, pageParams } from '@/components/pager';
 import { Input } from '@/components/ui/input';
 import { formatTime } from '@/lib/format-date';
 import { cn } from '@/lib/utils';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export default async function InstitutionRoutesPage({
 }: {
   searchParams: Promise<{ page?: string; q?: string; type?: string }>;
 }) {
+  if (!(await requireActiveCampusPage())) return null;
   const { page: pageParam, q, type: typeParam } = await searchParams;
   const institutionId = await resolveInstitutionId();
   const type = TYPES.includes((typeParam ?? 'ALL').toUpperCase() as (typeof TYPES)[number])

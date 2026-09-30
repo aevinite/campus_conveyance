@@ -9,6 +9,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { ConfirmSubmit } from '@/components/confirm-submit';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateMedium } from '@/lib/format-date';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 const fmtDate = (v?: string | null) => formatDateMedium(v);
 
@@ -17,6 +18,7 @@ export default async function AdminProvidersPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();

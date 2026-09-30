@@ -13,10 +13,12 @@ import { SubmitButton } from '@/components/submit-button';
 import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/format-date';
 import { serviceRequestStage, STAGE_LABEL, STAGE_TONE } from '@/lib/service-request-stage';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionRequestsPage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const requests = institutionId ? await listServiceRequestsForInstitution(institutionId) : [];
   const pending = requests.filter((r) => r.campusStatus === 'PENDING');

@@ -2,10 +2,12 @@ import { IdCard } from 'lucide-react';
 import { resolveInstitutionId, listDriversForInstitution } from '@/features/institution/repository';
 import { DataTable } from '@/components/data-table';
 import { StatusBadge } from '@/components/status-badge';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionDriversPage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const rows = institutionId ? await listDriversForInstitution(institutionId) : [];
 

@@ -2,10 +2,12 @@ import { Building2 } from 'lucide-react';
 import { resolveInstitutionId, listAgenciesForInstitution } from '@/features/institution/repository';
 import { DataTable } from '@/components/data-table';
 import { StatusBadge } from '@/components/status-badge';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionAgenciesPage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const rows = institutionId ? await listAgenciesForInstitution(institutionId) : [];
 

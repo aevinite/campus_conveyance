@@ -2,10 +2,12 @@ import { Radio, Bus } from 'lucide-react';
 import { resolveInstitutionId, liveBusesForInstitution } from '@/features/institution/repository';
 import { DataTable } from '@/components/data-table';
 import { relativeTime } from '@/lib/format';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionLivePage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const buses = institutionId ? await liveBusesForInstitution(institutionId) : [];
 

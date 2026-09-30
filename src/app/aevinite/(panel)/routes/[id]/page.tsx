@@ -8,6 +8,7 @@ import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import RouteStopsMap from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import { formatDateTime } from '@/lib/format-date';
 import { rupees } from '@/lib/format';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default async function AdminRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSuperAdminPage();
   const { id } = await params;
   const detail = await getRouteDetail(id);
   if (!detail) notFound();

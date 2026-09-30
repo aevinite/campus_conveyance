@@ -6,6 +6,7 @@ import { DataTable } from '@/components/data-table';
 import { BoolBadge } from '@/components/status-badge';
 import { Pager, pageParams } from '@/components/pager';
 import { rupees } from '@/lib/format';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,7 @@ export default async function AdminRoutesPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const { rows, total } = await listRoutes({ limit: OPS_PAGE_SIZE, offset });

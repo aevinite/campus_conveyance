@@ -16,12 +16,14 @@ import { ConfirmSubmit } from '@/components/confirm-submit';
 import { VerifiedBadge } from '@/components/verified-badge';
 import { Pager, pageParams } from '@/components/pager';
 import { cn } from '@/lib/utils';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export default async function ManageCollegePage({
   searchParams,
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();

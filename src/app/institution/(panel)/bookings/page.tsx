@@ -11,6 +11,7 @@ import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
 import { cn } from '@/lib/utils';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export default async function InstitutionBookingsPage({
 }: {
   searchParams: Promise<{ page?: string; status?: string }>;
 }) {
+  if (!(await requireActiveCampusPage())) return null;
   const { page: pageParam, status: statusParam } = await searchParams;
   const institutionId = await resolveInstitutionId();
   const status = FILTERS.includes((statusParam ?? 'ALL').toUpperCase() as (typeof FILTERS)[number])

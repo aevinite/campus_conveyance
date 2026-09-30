@@ -8,11 +8,13 @@ import { DonutChart } from '@/components/charts/donut-chart';
 import { DownloadReportButton } from '@/components/download-report-button';
 import { PageHeader } from '@/components/panel/page-header';
 import { StatStrip } from '@/components/panel/stat-strip';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 // Currency uses the shared rupees() helper (was a duplicated local formatter).
 const inr = rupees;
 
 export default async function AdminDashboard() {
+  await requireSuperAdminPage();
   const db = await createClient();
   // The report (incl. counts) is cached 60s + shared with the CSV. The pending
   // count is the actionable one an admin watches, so read it LIVE here so a

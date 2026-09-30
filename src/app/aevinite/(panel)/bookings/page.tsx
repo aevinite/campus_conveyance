@@ -7,6 +7,7 @@ import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { Pager, pageParams } from '@/components/pager';
 import { formatDateTime } from '@/lib/format-date';
 import { cn } from '@/lib/utils';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,7 @@ export default async function AdminBookingsPage({
 }: {
   searchParams: Promise<{ page?: string; status?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam, status: statusParam } = await searchParams;
   // Default to CONFIRMED (paid) bookings — the admin usually wants the actual
   // riders, not the pending/cancelled/rejected noise. Every status is still one

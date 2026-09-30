@@ -5,6 +5,7 @@ import { listVehicles, OPS_PAGE_SIZE } from '@/features/admin/ops-repository';
 import { DataTable } from '@/components/data-table';
 import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { Pager, pageParams } from '@/components/pager';
+import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,7 @@ export default async function AdminFleetPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSuperAdminPage();
   const { page: pageParam } = await searchParams;
   const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
   const { rows, total } = await listVehicles({ limit: OPS_PAGE_SIZE, offset });

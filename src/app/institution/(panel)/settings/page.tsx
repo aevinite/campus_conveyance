@@ -3,10 +3,12 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveInstitutionId } from '@/features/institution/repository';
 import { getInstitution } from '@/features/catalog/repository';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InstitutionSettingsPage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const db = await createClient();
   const campus = institutionId ? await getInstitution(db, institutionId) : null;

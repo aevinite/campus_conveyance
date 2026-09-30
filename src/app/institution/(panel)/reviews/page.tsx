@@ -3,6 +3,7 @@ import { resolveInstitutionId, listCampusAgencyReviews } from '@/features/instit
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDate } from '@/lib/format-date';
 import { cn } from '@/lib/utils';
+import { requireActiveCampusPage } from '@/features/institution/page-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ function Stars({ value }: { value: number }) {
 }
 
 export default async function InstitutionReviewsPage() {
+  if (!(await requireActiveCampusPage())) return null;
   const institutionId = await resolveInstitutionId();
   const agencies = institutionId ? await listCampusAgencyReviews(institutionId) : [];
 
