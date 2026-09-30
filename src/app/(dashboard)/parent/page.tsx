@@ -123,6 +123,7 @@ export default async function ParentDashboard() {
         whoLabel={firstName(b.student_name)}
         manageHref={`/parent/book/${studentId}`}
         renewHref={`/parent/renew/${b.booking_id}`}
+        bookingId={b.booking_id}
         compact
       />
     );
@@ -242,7 +243,7 @@ export default async function ParentDashboard() {
                       </span>
                     )}
                   </div>
-                  <RouteStopsMap stops={stopsByRoute.get(g.route_id) ?? []} liveRouteId={g.route_id} />
+                  <RouteStopsMap tapToShow stops={stopsByRoute.get(g.route_id) ?? []} liveRouteId={g.route_id} />
                 </div>
               ))}
             </div>

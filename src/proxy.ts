@@ -16,6 +16,9 @@ const PUBLIC = [
   // establish the session, and clicking the email link never logs anyone in.
   '/confirm',
   '/maintenance',
+  // Ride-pass QR scan target: anyone scanning a rider's QR sees the basic
+  // verification card; staff-only details are gated inside ride_pass() (0131).
+  '/pass',
   // Anonymous endpoint behind the landing-page stats band — without this the
   // proxy redirects the fetch to /login and the numbers never load for
   // logged-out visitors.

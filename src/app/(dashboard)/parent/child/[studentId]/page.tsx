@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { RidePassQr } from '@/components/ride-pass-qr';
 import { notFound } from 'next/navigation';
 import { GraduationCap, Mail, Phone, MapPin, Home, Ticket, Bus } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
@@ -7,6 +8,7 @@ import { listChildren } from '@/features/parent/repository';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { EditChildForm } from './edit-child-form';
 import { AppBackLink } from '@/components/ui/app-back-link';
+import { isAppRequest } from '@/lib/app-context';
 import RouteStopsMap, { type MapStop } from '../../../student/routes/[id]/route-stops-map';
 
 const STATUS_PILL: Record<string, string> = {
@@ -124,12 +126,17 @@ export default async function ParentChildHub({
             )}
           </div>
         </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+        {confirmed && child.active_booking_id && !child.active_cancel_requested_at && (
+          <RidePassQr bookingId={child.active_booking_id} studentName={childName} />
+        )}
         <Link
           href={cta.href}
           className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <Ticket className="size-4" /> {cta.label}
         </Link>
+        </div>
       </div>
 
       {/* Live bus map — only once the ride is confirmed. */}
@@ -142,7 +149,7 @@ export default async function ParentChildHub({
             Live location of {child.active_route_name ?? 'their ride'} — shows while the driver is online.
           </p>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-xs">
-            <RouteStopsMap stops={stops} liveRouteId={child.active_route_id} heightClass="h-[24rem] sm:h-[28rem]" />
+            <RouteStopsMap tapToShow={await isAppRequest()} stops={stops} liveRouteId={child.active_route_id} heightClass="h-[24rem] sm:h-[28rem]" />
           </div>
         </section>
       )}

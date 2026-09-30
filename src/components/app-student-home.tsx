@@ -109,6 +109,7 @@ export function AppStudentHome({
             busNumber={active.busNumber}
             manageHref="/student/bookings"
             renewHref={`/student/renew/${active.booking_id}`}
+            bookingId={active.booking_id}
             compact
           />
           {/* Live bus map right in the home */}
@@ -117,7 +118,7 @@ export function AppStudentHome({
               <p className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
                 <Navigation className="size-3.5 text-primary" /> Live location — shows while the driver is online
               </p>
-              <RouteStopsMap stops={trackStops} liveRouteId={trackRouteId} heightClass="h-[26rem] sm:h-[30rem]" />
+              <RouteStopsMap tapToShow stops={trackStops} liveRouteId={trackRouteId} heightClass="h-[26rem] sm:h-[30rem]" />
             </div>
           ) : (
             <p className="px-1 text-xs text-muted-foreground">

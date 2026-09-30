@@ -363,6 +363,7 @@ export default async function RouteDetailPage({
         <CardContent className="space-y-4">
           {hasGeo && (
             <RouteStopsMap
+              tapToShow={app}
               stops={data.stops.map((s) => ({
                 name: s.name,
                 lat: s.lat,

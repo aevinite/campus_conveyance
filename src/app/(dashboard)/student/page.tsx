@@ -183,6 +183,7 @@ export default async function StudentHome() {
           busNumber={busNumber}
           manageHref="/student/bookings"
           renewHref={passRenewHref}
+          bookingId={activeBooking.id}
         />
       )}
 

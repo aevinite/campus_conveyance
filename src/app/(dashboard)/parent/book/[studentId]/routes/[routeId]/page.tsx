@@ -4,6 +4,7 @@ import { Bus, CheckCircle2, Clock3, GraduationCap, Phone } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
 import { createClient } from '@/lib/supabase/server';
 import { AppBackLink } from '@/components/ui/app-back-link';
+import { isAppRequest } from '@/lib/app-context';
 import { getRouteWithStops, getAvailability, listLateUtrBookings } from '@/features/booking/repository';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { LateUtrForm } from '@/components/late-utr-form';
@@ -294,6 +295,7 @@ export default async function ParentBookRoute({
             <CardContent className="space-y-4">
               {hasGeo && (
                 <RouteStopsMap
+                  tapToShow={await isAppRequest()}
                   stops={data.stops.map((s) => ({
                     name: s.name,
                     lat: s.lat,

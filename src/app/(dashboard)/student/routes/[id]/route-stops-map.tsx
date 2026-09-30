@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
+import { MapPin, X } from 'lucide-react';
 import type * as LeafletNS from 'leaflet';
 import {
   animateMarkerTo,
@@ -89,12 +90,61 @@ interface LiveState {
   pickupState: string | null;
 }
 
+/**
+ * Route map. With `tapToShow` (the native app's student/parent screens) the map
+ * starts collapsed behind a "Show map" card and only mounts once tapped: an
+ * inline map there caught the finger mid page-scroll and panned instead of
+ * scrolling. Collapsed = no Leaflet and no live polling. The website never sets
+ * it, so it keeps the map inline as before.
+ */
 export default function RouteStopsMap({
-  stops,
-  liveRouteId,
-  pickupStop,
-  heightClass = 'h-[24rem]',
-}: {
+  tapToShow = false,
+  ...props
+}: RouteStopsMapProps & {
+  /** Start collapsed behind a "Show map" button (app only). */
+  tapToShow?: boolean;
+}) {
+  const [open, setOpen] = useState(!tapToShow);
+  if (!open) {
+    const live = !!props.liveRouteId;
+    const n = props.stops.filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number').length;
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left shadow-xs transition active:scale-[0.99]"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+          <MapPin className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">{live ? 'Live bus location' : 'Stops on map'}</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {live ? 'Tap to see where the bus is' : `${n} pickup stop${n === 1 ? '' : 's'} · tap to view`}
+          </span>
+        </span>
+        <span className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+          Show map
+        </span>
+      </button>
+    );
+  }
+  if (!tapToShow) return <RouteStopsMapView {...props} />;
+  return (
+    <div className="relative">
+      <RouteStopsMapView {...props} />
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="absolute bottom-3 right-3 z-[1000] inline-flex items-center gap-1 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm backdrop-blur-sm"
+      >
+        <X className="size-3.5" /> Hide map
+      </button>
+    </div>
+  );
+}
+
+interface RouteStopsMapProps {
   stops: MapStop[];
   /** When set, poll for and show this route's live bus position. */
   liveRouteId?: string;
@@ -102,7 +152,14 @@ export default function RouteStopsMap({
   pickupStop?: { lat: number; lng: number; name: string } | null;
   /** Tailwind height class for the map box (e.g. a taller map on the home page). */
   heightClass?: string;
-}) {
+}
+
+function RouteStopsMapView({
+  stops,
+  liveRouteId,
+  pickupStop,
+  heightClass = 'h-[24rem]',
+}: RouteStopsMapProps) {
   // Read the latest pickup stop from a ref so the poll effect (keyed on
   // liveRouteId) never has to re-subscribe when the prop object identity changes.
   const pickupRef = useRef(pickupStop);

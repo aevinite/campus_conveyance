@@ -8,6 +8,7 @@ import { LateUtrForm } from '@/components/late-utr-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Pager, pageParams } from '@/components/pager';
 import { CancelBookingButton } from './cancel-booking-button';
+import { RidePassQr } from '@/components/ride-pass-qr';
 import { AgencyReviewWidget } from './agency-review-widget';
 import { getMyReviews } from '@/features/reviews/repository';
 import { formatTime } from '@/lib/format-date';
@@ -338,6 +339,8 @@ export default async function BookingsPage({
                       <AlertTriangle className="size-4" /> Pay now to confirm your seat
                     </Link>
                   )}
+
+                  {b.status === 'CONFIRMED' && !b.cancelRequestedAt && <RidePassQr bookingId={b.id} />}
 
                   {/* Only a real rider (confirmed booking) can rate the agency. */}
                   {b.status === 'CONFIRMED' && b.agencyId && b.agencyName && (

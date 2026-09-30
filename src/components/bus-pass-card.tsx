@@ -3,6 +3,7 @@ import { BusFront, CalendarClock, Clock3, MapPin, ArrowRight, RefreshCw, CheckCi
 import { periodLabel, type BillingPeriod } from '@/lib/billing';
 import { computePass, daysLeftLabel } from '@/lib/pass';
 import { formatDateMedium } from '@/lib/format-date';
+import { RidePassQr } from '@/components/ride-pass-qr';
 
 export interface BusPassCardProps {
   routeName: string | null;
@@ -20,6 +21,8 @@ export interface BusPassCardProps {
   manageHref: string;
   /** Where "Renew" goes (the route so they can buy a new plan). */
   renewHref: string;
+  /** Booking id — enables the "Show QR pass" button on a confirmed pass. */
+  bookingId?: string | null;
   /** Optional owner label for the parent view, e.g. "Aarav". */
   whoLabel?: string | null;
   /** Denser padding + smaller number, for the app + per-child grids. */
@@ -79,6 +82,7 @@ export function BusPassCard(props: BusPassCardProps) {
     manageHref,
     renewHref,
     whoLabel,
+    bookingId,
     compact = false,
     className = '',
   } = props;
@@ -191,6 +195,7 @@ export function BusPassCard(props: BusPassCardProps) {
             <RefreshCw className="size-4" /> Renew pass
           </Link>
         ) : null}
+        {bookingId && <RidePassQr bookingId={bookingId} studentName={whoLabel} />}
         <Link
           href={manageHref}
           className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
