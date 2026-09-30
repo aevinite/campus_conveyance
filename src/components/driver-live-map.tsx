@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { TILE_URL, TILE_OPTIONS } from '@/lib/map-tiles';
 import { enableWebMouseExplore, webMapOptions } from '@/lib/map-interaction';
 import { isNativeApp } from '@/lib/native-google-auth';
-import { drawRouteLine } from '@/lib/route-line';
+import { drawRouteLine, pickupPin } from '@/lib/route-line';
 
 // Below this, treat the fix as jitter (bus stationary) — don't rotate or speed.
 const MOVE_MIN_M = 8;
@@ -206,24 +206,20 @@ export function DriverLiveMap({
         });
       }
       L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
-      // Blue line tracing the whole route, then small dots for the pickup stops.
       const byRoute = new Map<string, SimpleStop[]>();
       stops.forEach((s) => {
         const k = s.routeId ?? '';
         byRoute.set(k, [...(byRoute.get(k) ?? []), s]);
       });
-      byRoute.forEach((rs) => drawRouteLine(L, m, rs));
-      stops.forEach((s) =>
-        L.circleMarker([s.lat, s.lng], {
-          radius: 5,
-          color: '#6d5efc',
-          weight: 2,
-          fillColor: '#ffffff',
-          fillOpacity: 1,
-        })
-          .addTo(m)
-          .bindTooltip(escapeHtml(s.name), { direction: 'top' }),
-      );
+      // Per route: pickup-order blue line + numbered pickup pins (1, 2, 3 …).
+      byRoute.forEach((rs) => {
+        drawRouteLine(L, m, rs);
+        rs.forEach((s, i) =>
+          L.marker([s.lat, s.lng], { icon: pickupPin(L, i + 1) })
+            .addTo(m)
+            .bindTooltip(`${i + 1}. ${escapeHtml(s.name)}`, { direction: 'top' }),
+        );
+      });
       m.setView(stops[0] ? [stops[0].lat, stops[0].lng] : DEFAULT_MAP_CENTER, 13);
       setTimeout(() => m.invalidateSize(), 0);
 
