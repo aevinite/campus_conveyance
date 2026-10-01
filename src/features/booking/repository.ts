@@ -10,8 +10,6 @@ export interface DriverChange {
   phone: string | null;
   reason: string | null;
   govtId: string | null;
-  bloodGroup: string | null;
-  altPhone: string | null;
 }
 
 export interface RouteSummary {
@@ -48,18 +46,13 @@ export interface VehicleInfo {
   photos: string[] | null;
   driver_name: string | null;
   driver_phone: string | null;
-  driver_license_no: string | null;
   driver_experience_years: number | null;
   driver_photo_url: string | null;
   driver_govt_id: string | null;
-  driver_alt_phone: string | null;
-  driver_blood_group: string | null;
   driver_verified: boolean | null;
   conductor_name: string | null;
   conductor_phone: string | null;
   conductor_govt_id: string | null;
-  conductor_blood_group: string | null;
-  conductor_alt_phone: string | null;
   conductor_verified: boolean | null;
 }
 export interface Availability {
@@ -205,9 +198,10 @@ export async function getRouteWithStops(
     db
       .from('routes')
       .select(
-        // Only the vehicle columns the detail page actually renders (dropped the
-        // never-shown driver_address/driver_dob/conductor_address/conductor_dob).
-        'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, is_active, institution_id, agency_id, vehicle_type, institutions(name, is_active, is_deleted), agencies(name, status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_license_no, driver_experience_years, driver_photo_url, driver_govt_id:driver_govt_id_last4, driver_alt_phone, driver_blood_group, driver_verified, conductor_name, conductor_phone, conductor_govt_id:conductor_govt_id_last4, conductor_alt_phone, conductor_blood_group, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id:driver_govt_id_last4, driver_blood_group, driver_alt_phone, effective_date))',
+        // Only the vehicle columns riders may see. Licence no., alt phone, blood
+        // group, email and bus documents are column-revoked from authenticated
+        // (M#3) — staff panels read them via the service role.
+        'id, name, price_cents, price_monthly_cents, price_semester_cents, price_yearly_cents, is_active, institution_id, agency_id, vehicle_type, institutions(name, is_active, is_deleted), agencies(name, status, is_deleted), vehicles(id, bus_number, capacity, registration_no, is_ac, bus_model, bus_color, image_url, photos, driver_name, driver_phone, driver_experience_years, driver_photo_url, driver_govt_id:driver_govt_id_last4, driver_verified, conductor_name, conductor_phone, conductor_govt_id:conductor_govt_id_last4, conductor_verified, bus_driver_changes(role, driver_name, driver_phone, reason, driver_govt_id:driver_govt_id_last4, effective_date))',
       )
       .eq('id', routeId)
       // Only TODAY's substitute rows are embedded (bus_driver_changes accumulate
@@ -240,7 +234,7 @@ export async function getRouteWithStops(
   const agencyName = agency?.name ?? null;
   type ChangeRow = {
     role: string; driver_name: string; driver_phone: string | null; reason: string | null;
-    driver_govt_id: string | null; driver_blood_group: string | null; driver_alt_phone: string | null;
+    driver_govt_id: string | null;
   };
   type VehicleRow = VehicleInfo & { id?: string; bus_driver_changes?: ChangeRow[] };
   const v = (route as { vehicles: VehicleRow | VehicleRow[] | null }).vehicles;
@@ -258,8 +252,6 @@ export async function getRouteWithStops(
       phone: c.driver_phone ?? null,
       reason: c.reason ?? null,
       govtId: c.driver_govt_id ?? null,
-      bloodGroup: c.driver_blood_group ?? null,
-      altPhone: c.driver_alt_phone ?? null,
     };
     if (c.role === 'CONDUCTOR') conductorChange = change;
     else driverChange = change;

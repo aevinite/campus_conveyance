@@ -12,10 +12,10 @@ import { requireSuperAdminPage } from '@/features/admin/page-guard';
 export default async function AdminDeletedStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; error?: string }>;
 }) {
   await requireSuperAdminPage();
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, error: purgeError } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
   const { rows: students, total } = await listDeletedStudents(db, { limit: ADMIN_PAGE_SIZE, offset });
@@ -33,6 +33,11 @@ export default async function AdminDeletedStudentsPage({
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Deleted Students</h1>
         <p className="text-muted-foreground">Restore a student, or remove them for good.</p>
       </div>
+      {purgeError && (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {purgeError.slice(0, 400)}
+        </p>
+      )}
       <DataTable
         headers={['Name', 'Email', 'Phone', 'Action']}
         rows={students.map((s) => [
@@ -51,7 +56,7 @@ export default async function AdminDeletedStudentsPage({
               fields={{ studentId: s.id }}
               triggerLabel="Delete permanently"
               title="Permanently delete this student?"
-              description={`“${s.full_name ?? s.email ?? 'This student'}” and their login will be permanently removed, freeing their email for reuse. This cannot be undone.`}
+              description={`“${s.full_name ?? s.email ?? 'This student'}” and their login will be permanently removed, freeing their email for reuse. Their payment records are kept. Blocked while they still hold a booking (pending, confirmed or waitlisted), a payment awaits verification, or a refund is still to settle. This cannot be undone.`}
               confirmLabel="Delete permanently"
               pendingText="Deleting…"
             />

@@ -237,12 +237,6 @@ export default async function RouteDetailPage({
                         {data.driverChange.govtId && (
                           <p className="text-muted-foreground">ID card: {maskId(data.driverChange.govtId)}</p>
                         )}
-                        {data.driverChange.bloodGroup && (
-                          <p className="text-muted-foreground">Blood group: {data.driverChange.bloodGroup}</p>
-                        )}
-                        {data.driverChange.altPhone && (
-                          <p className="text-muted-foreground">Emergency contact: {data.driverChange.altPhone}</p>
-                        )}
                         {data.driverChange.reason && (
                           <p className="text-muted-foreground">{data.driverChange.reason}</p>
                         )}
@@ -265,20 +259,11 @@ export default async function RouteDetailPage({
                             <Phone className="size-3.5" /> {v.driver_phone}
                           </p>
                         )}
-                        {v.driver_license_no && (
-                          <p className="text-muted-foreground">Licence: {v.driver_license_no}</p>
-                        )}
                         {v.driver_govt_id && (
                           <p className="text-muted-foreground">ID card: {maskId(v.driver_govt_id)}</p>
                         )}
-                        {v.driver_blood_group && (
-                          <p className="text-muted-foreground">Blood group: {v.driver_blood_group}</p>
-                        )}
                         {v.driver_experience_years != null && (
                           <p className="text-muted-foreground">{v.driver_experience_years} yrs experience</p>
-                        )}
-                        {v.driver_alt_phone && (
-                          <p className="text-muted-foreground">Emergency contact: {v.driver_alt_phone}</p>
                         )}
                       </>
                     )}
@@ -308,12 +293,6 @@ export default async function RouteDetailPage({
                         {data.conductorChange.govtId && (
                           <p className="text-muted-foreground">ID card: {maskId(data.conductorChange.govtId)}</p>
                         )}
-                        {data.conductorChange.bloodGroup && (
-                          <p className="text-muted-foreground">Blood group: {data.conductorChange.bloodGroup}</p>
-                        )}
-                        {data.conductorChange.altPhone && (
-                          <p className="text-muted-foreground">Emergency contact: {data.conductorChange.altPhone}</p>
-                        )}
                         {data.conductorChange.reason && (
                           <p className="text-muted-foreground">{data.conductorChange.reason}</p>
                         )}
@@ -338,12 +317,6 @@ export default async function RouteDetailPage({
                         )}
                         {v.conductor_govt_id && (
                           <p className="text-muted-foreground">ID card: {maskId(v.conductor_govt_id)}</p>
-                        )}
-                        {v.conductor_blood_group && (
-                          <p className="text-muted-foreground">Blood group: {v.conductor_blood_group}</p>
-                        )}
-                        {v.conductor_alt_phone && (
-                          <p className="text-muted-foreground">Emergency contact: {v.conductor_alt_phone}</p>
                         )}
                       </>
                     )}

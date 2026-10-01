@@ -1,8 +1,11 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import { after } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { AppError, toErrorResponse } from '@/lib/errors/app-error';
+import { drainEmailOutbox } from '@/lib/email-outbox';
+import { drainPushOutbox } from '@/lib/push';
 
 export type MarkStageResult = { ok?: boolean; stage?: string; error?: string };
 
@@ -63,6 +66,8 @@ export async function setNextStopAction(
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
+  // The RPC queued push rows for the riders at that stop — flush them now.
+  after(() => drainPushOutbox());
   revalidatePath('/driver/stops');
   return { ok: true };
 }
@@ -85,6 +90,9 @@ export async function skipStopAction(
       p_stop_id: parsed.data.stopId,
     });
     if (error) throw new AppError('DRIVER', error.message);
+    // Riders at the skipped stop(s) were queued push + email — flush promptly.
+    after(() => drainEmailOutbox());
+    after(() => drainPushOutbox());
     revalidatePath('/driver/stops');
     return { ok: true, nextStop: (data as string | null) ?? null };
   } catch (e) {

@@ -10,7 +10,9 @@ import { cn } from '@/lib/utils';
 import { RideStageControl } from './ride-stage-control';
 
 const LABEL: Record<string, string> = {
-  PENDING: 'Pending',
+  // A PENDING booking hasn't been paid/confirmed yet — it isn't a rider the
+  // driver can board (driver_mark_stage requires CONFIRMED).
+  PENDING: 'Awaiting payment',
   CONFIRMED: 'Confirmed',
 };
 
@@ -161,11 +163,19 @@ export default async function DriverRidersPage({
                     </div>
 
                     <div className="border-t border-border pt-3">
-                      <RideStageControl
-                        bookingId={b.booking_id}
-                        studentName={b.student_name ?? ''}
-                        currentStage={b.current_stage}
-                      />
+                      {b.status === 'CONFIRMED' ? (
+                        <RideStageControl
+                          bookingId={b.booking_id}
+                          studentName={b.student_name ?? ''}
+                          currentStage={b.current_stage}
+                        />
+                      ) : (
+                        // Only CONFIRMED riders can be marked boarded/got off —
+                        // the stage RPC rejects anything else, so no buttons here.
+                        <p className="text-xs text-muted-foreground">
+                          Awaiting payment — this seat isn&apos;t confirmed yet, so there&apos;s nothing to mark.
+                        </p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

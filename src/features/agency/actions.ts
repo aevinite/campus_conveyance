@@ -38,6 +38,7 @@ import {
 import { loginSchema } from '@/features/auth/schemas';
 import { rateLimit, getClientIp, registerOtpAttempt, clearOtpFailures } from '@/lib/rate-limit';
 import { getSiteUrl } from '@/lib/site-url';
+import { createSignupIntent } from '@/features/auth/signup-intent';
 
 // Guard id-shaped form inputs before they reach Postgres so a malformed value is
 // a clean no-op instead of a 22P02 (invalid uuid) crash to the error page.
@@ -235,6 +236,14 @@ export async function agencyRegisterAction(
   // Free up the email if a previous, never-confirmed signup is still holding it.
   const free = await ensureEmailFreeForSignup(admin, d.email);
   if (free.error) return { error: free.error };
+  // Server-issued single-use intent: the signup trigger only grants AGENCY with
+  // it (M#4), so a raw auth.signUp({role:'AGENCY'}) can't skip the checks above.
+  let signupIntent: string;
+  try {
+    signupIntent = await createSignupIntent(admin, d.email, 'AGENCY');
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'signup',
     email: d.email,
@@ -251,6 +260,7 @@ export async function agencyRegisterAction(
           d.contactPerson.trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') ||
           'agency',
         role: 'AGENCY',
+        signup_intent: signupIntent,
         phone: d.phone,
         contact_person: d.contactPerson,
         legal_name: d.legalName,
@@ -491,7 +501,9 @@ export async function addBusAction(_: FormState, formData: FormData): Promise<Fo
     const driverPhotoUrl = ownStoragePhoto(formData.get('driverPhotoUrl'));
     const driverId = await resolveAgencyDriverId(db, agency.id, d.driverId);
 
-    const { error } = await db.from('vehicles').insert({
+    // Vehicles are service-role-write only (direct API writes revoked, M#1);
+    // ownership = the approved agency resolved from the session above.
+    const { error } = await createAdminClient().from('vehicles').insert({
       agency_id: agency.id,
       vehicle_type: 'BUS',
       bus_number: d.busNumber,
@@ -603,7 +615,8 @@ export async function updateBusAction(_: FormState, formData: FormData): Promise
     const driverPhotoUrl = ownStoragePhoto(formData.get('driverPhotoUrl'));
     if (driverPhotoUrl) patch.driver_photo_url = driverPhotoUrl;
 
-    const { error } = await db
+    // Service-role write (M#1), still scoped to the caller's own agency.
+    const { error } = await createAdminClient()
       .from('vehicles')
       .update(patch)
       .eq('id', busId)
@@ -825,13 +838,15 @@ export async function createDriverAction(_: FormState, formData: FormData): Prom
     const free = await emailHasNoAccount(admin, d.email);
     if (free.error) return { error: free.error };
 
+    // The signup trigger grants DRIVER only with a server-issued intent (M#4) —
+    // GoTrue writes app_metadata AFTER the auth.users insert, so the trigger
+    // can't rely on it; app_metadata is still set for the access-token side.
+    const signupIntent = await createSignupIntent(admin, d.email, 'DRIVER');
     const { data: created, error: cErr } = await admin.auth.admin.createUser({
       email: d.email,
       password: d.password,
       email_confirm: true, // agency-vouched — can log in immediately, no email step
-      user_metadata: { role: 'DRIVER', full_name: d.name, phone: d.phone ?? '' },
-      // The signup trigger only takes DRIVER from app_metadata (service-role only),
-      // never from client-controllable user_metadata.
+      user_metadata: { role: 'DRIVER', signup_intent: signupIntent, full_name: d.name, phone: d.phone ?? '' },
       app_metadata: { role: 'DRIVER' },
     });
     if (cErr || !created.user) {

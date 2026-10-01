@@ -216,8 +216,9 @@ const childCampusSchema = z.object({
 });
 
 /**
- * Set the campus of a linked child that has none yet (a code-linked student who
- * never booked), so the parent can browse that campus's agencies and book.
+ * Set the campus of a MANAGED (login-less) child, so the parent can browse that
+ * campus's agencies and book. A child with their own login sets their campus
+ * themselves — the set_child_campus RPC refuses those (issue #15).
  */
 export async function setChildCampusAction(
   _: ChildCampusState,

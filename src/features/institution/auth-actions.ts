@@ -21,6 +21,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { slugify } from '@/features/admin/schemas';
 import { institutionRegisterSchema } from './schemas';
 import { getSiteUrl } from '@/lib/site-url';
+import { createSignupIntent } from '@/features/auth/signup-intent';
 
 export type FormState = { error?: string; message?: string };
 
@@ -79,6 +80,15 @@ export async function institutionRegisterAction(
   );
   const free = await ensureEmailFreeForSignup(admin, d.email);
   if (free.error) return { error: free.error };
+  // Server-issued single-use intent: the signup trigger only grants
+  // INSTITUTION_ADMIN with it (M#4), so a raw auth.signUp() can't skip the OTP
+  // + form checks above.
+  let signupIntent: string;
+  try {
+    signupIntent = await createSignupIntent(admin, d.email, 'INSTITUTION_ADMIN');
+  } catch (e) {
+    return { error: toErrorResponse(e).message };
+  }
 
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'signup',
@@ -91,6 +101,7 @@ export async function institutionRegisterAction(
         // The signup trigger creates the INSTITUTION_ADMIN profile from this.
         full_name: d.contactPerson,
         role: 'INSTITUTION_ADMIN',
+        signup_intent: signupIntent,
         phone: d.phone,
         campus_name: d.name,
         campus_kind: d.kind,
@@ -119,6 +130,10 @@ export async function institutionRegisterAction(
       contact_email: d.email,
       is_active: false,
       is_verified: false,
+      // Marks this as a genuine self-registered APPLICATION (issue #12) — only
+      // these appear under "Pending campus applications" and can be rejected,
+      // so an admin-created college left unverified is never mistaken for one.
+      self_registered: true,
     })
     .select('id')
     .single();

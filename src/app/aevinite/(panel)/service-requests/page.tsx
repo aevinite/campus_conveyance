@@ -88,13 +88,21 @@ export default async function AdminServiceRequestsPage({
                       This campus has no campus admin, so you decide on its behalf as well.
                     </p>
                   )}
+                  {r.agencyInactive && (
+                    <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      This provider has been rejected or removed, so this request can&apos;t be
+                      approved. Reject it to close it.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-                    <form action={approveServiceRequestAction}>
-                      <input type="hidden" name="requestId" value={r.id} />
-                      <SubmitButton size="sm" pendingText="Approving…">
-                        Approve &amp; go live
-                      </SubmitButton>
-                    </form>
+                    {!r.agencyInactive && (
+                      <form action={approveServiceRequestAction}>
+                        <input type="hidden" name="requestId" value={r.id} />
+                        <SubmitButton size="sm" pendingText="Approving…">
+                          Approve &amp; go live
+                        </SubmitButton>
+                      </form>
+                    )}
                     <form action={rejectServiceRequestAction} className="flex items-end gap-2">
                       <input type="hidden" name="requestId" value={r.id} />
                       <Input

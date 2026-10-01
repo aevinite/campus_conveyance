@@ -31,8 +31,10 @@ export default async function ParentBookPickAgency({
     child.institution_id
       ? listInstitutionAgencies(db, child.institution_id, vehicleType)
       : Promise.resolve([]),
-    // No campus yet (code-linked child who never booked) → offer a picker.
-    child.institution_id ? Promise.resolve([]) : listInstitutions(db),
+    // No campus yet → offer a picker, but ONLY for a managed (login-less) child.
+    // A child with their own login picks their campus themselves (issue #15:
+    // a parent setting it would expose the child's details to that campus).
+    child.institution_id || !child.managed ? Promise.resolve([]) : listInstitutions(db),
   ]);
 
   const childName = child.full_name ?? 'your child';
@@ -82,7 +84,15 @@ export default async function ParentBookPickAgency({
         </div>
       )}
 
-      {!child.institution_id ? (
+      {!child.institution_id && !child.managed ? (
+        <div className="space-y-1 rounded-2xl border border-dashed border-border p-6 text-sm">
+          <p className="font-medium">{childName} hasn&apos;t chosen a campus yet</p>
+          <p className="text-muted-foreground">
+            {childName} has their own account, so they choose their campus themselves — ask them to
+            pick it from their app or the website. You can book for them once it&apos;s set.
+          </p>
+        </div>
+      ) : !child.institution_id ? (
         <ChildCampusForm
           studentId={studentId}
           childName={childName}

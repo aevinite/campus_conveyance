@@ -735,6 +735,9 @@ export interface InstitutionServiceRequestRow {
   campusStatus: string; // this campus's decision: PENDING | APPROVED | REJECTED
   rejectedReason: string | null;
   created_at: string | null;
+  /** Issue #13: the agency is no longer APPROVED or was deleted — the campus
+   *  can only reject this request, not accept it. */
+  agencyInactive: boolean;
 }
 
 /**
@@ -756,14 +759,18 @@ export async function listServiceRequestsForInstitution(
     vehicle_type: string | null; status: string; campus_status: string;
     rejected_reason: string | null; created_at: string | null;
   }[];
-  const agencies = await mapByIds<{ id: string; name: string }>(
+  const agencies = await mapByIds<{ id: string; name: string; status: string; is_deleted: boolean }>(
     client,
     'agencies',
-    'id, name',
+    'id, name, status, is_deleted',
     rows.map((r) => r.agency_id),
   );
   const out: InstitutionServiceRequestRow[] = rows.map((r) => ({
     id: r.id,
+    agencyInactive: (() => {
+      const a = agencies.get(r.agency_id);
+      return !a || a.status !== 'APPROVED' || a.is_deleted === true;
+    })(),
     agencyName: agencies.get(r.agency_id)?.name ?? '—',
     name: r.name,
     description: r.description,

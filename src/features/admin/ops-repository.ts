@@ -1027,7 +1027,7 @@ export async function listCompletedUpiPayments(opts: PageOpts = {}): Promise<Pag
   const client = db();
   let q = client
     .from('payments')
-    .select('booking_id, amount_cents, upi_utr, reference, method, status, submitted_at, verified_at, verify_note', { count: 'exact' })
+    .select('booking_id, amount_cents, upi_utr, reference, method, status, submitted_at, verified_at, verify_note, rider_name, rider_email, route_name', { count: 'exact' })
     // Every completed/processed payment — verified UPI ones (with a UTR) AND any
     // legacy/mock completions (no UTR). Newest verification first; the rest after.
     // REFUNDED = verified money later refunded — still part of the history.
@@ -1054,9 +1054,12 @@ export async function listCompletedUpiPayments(opts: PageOpts = {}): Promise<Pag
       const b = bookings.get(r.booking_id as string);
       return {
         bookingId: r.booking_id as string,
-        studentName: b?.student_name ?? null,
-        studentEmail: b?.student_email ?? null,
-        routeName: b?.route_id ? (routes.get(b.route_id)?.name ?? '—') : '—',
+        // Fall back to the payment's own snapshot (0133) once the booking/route
+        // is gone (e.g. its college was permanently deleted).
+        studentName: b?.student_name ?? (r.rider_name as string | null) ?? null,
+        studentEmail: b?.student_email ?? (r.rider_email as string | null) ?? null,
+        routeName:
+          (b?.route_id ? routes.get(b.route_id)?.name : undefined) ?? (r.route_name as string | null) ?? '—',
         amountCents: (r.amount_cents as number) ?? 0,
         utr: (r.upi_utr as string) ?? null,
         reference: (r.reference as string) ?? null,
@@ -1193,8 +1196,12 @@ export async function listPendingRefunds(opts: PageOpts = {}): Promise<Paged<Pen
   const client = db();
   let q = client
     .from('payments')
-    .select('booking_id, amount_cents, status, updated_at, upi_utr', { count: 'exact' })
+    // bookings!inner + the OR filter: only LEGITIMATE requests — the booking is
+    // closed (CANCELLED/REJECTED) or someone actually asked to cancel it. A stray
+    // REQUESTED flag on an active pass isn't listed (process_refund refuses it).
+    .select('booking_id, amount_cents, status, updated_at, upi_utr, bookings!inner(id)', { count: 'exact' })
     .eq('refund_status', 'REQUESTED')
+    .or('status.in.(CANCELLED,REJECTED),cancel_requested_at.not.is.null', { referencedTable: 'bookings' })
     // Only money verified as received. An unverified UTR stays under "To verify"
     // until the admin confirms it (process_refund also refuses unverified ones).
     // REFUNDED + REQUESTED = a renewal paid after the fare was already refunded.

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * One booking in the family's booking history — a CONFIRMED booking, or a
- * CANCELLED one that had been paid for (see my_booking_history / migration 0116).
+ * CANCELLED/REJECTED one that had been paid for (see my_booking_history / 0116, 0133).
  */
 export interface BookingHistoryRow {
   booking_id: string;
@@ -12,8 +12,8 @@ export interface BookingHistoryRow {
   bus_number: string | null;
   agency_name: string | null;
   pickup_name: string | null;
-  /** Only ever 'CONFIRMED' or 'CANCELLED' (SQL filters the rest out). */
-  status: 'CONFIRMED' | 'CANCELLED';
+  /** 'CONFIRMED', or a paid booking that was 'CANCELLED' / 'REJECTED' (SQL filters the rest out). */
+  status: 'CONFIRMED' | 'CANCELLED' | 'REJECTED';
   /** Refund state of the payment (for a paid-then-cancelled booking). */
   refund_status: 'NONE' | 'REQUESTED' | 'PROCESSED' | 'DECLINED';
   /** Amount paid, in paise/cents. 0 if no payment row. */

@@ -42,6 +42,28 @@ export async function approveCampusServiceRequestAction(formData: FormData): Pro
   const { userId } = await getSessionClaims(server);
   const admin = createAdminClient();
 
+  // Issue #13: an agency that was rejected / never approved / deleted can't be
+  // accepted (the DB trigger on agency_service_requests enforces this too).
+  const { data: reqRow } = await admin
+    .from('agency_service_requests')
+    .select('agency_id')
+    .eq('id', id)
+    .eq('institution_id', campus)
+    .maybeSingle();
+  if (!reqRow) {
+    refresh();
+    return;
+  }
+  const { data: ag } = await admin
+    .from('agencies')
+    .select('status, is_deleted')
+    .eq('id', (reqRow as { agency_id: string }).agency_id)
+    .maybeSingle();
+  const agRow = ag as { status: string; is_deleted: boolean } | null;
+  if (!agRow || agRow.status !== 'APPROVED' || agRow.is_deleted) {
+    throw new Error('This agency is no longer approved on the platform, so its request can only be rejected.');
+  }
+
   // Atomic claim: flip campus_status PENDING→APPROVED only if still pending at
   // the campus AND belonging to this campus. A double-click / cross-campus id
   // matches nothing. No agency_services row is created here — that's the admin's

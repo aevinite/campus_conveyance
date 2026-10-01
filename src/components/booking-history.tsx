@@ -41,7 +41,8 @@ export function BookingHistory({ rows }: { rows: BookingHistoryRow[] }) {
   return (
     <div className="space-y-4">
       {rows.map((b) => {
-        const cancelled = b.status === 'CANCELLED';
+        // A paid booking the operator rejected/removed is closed just like a cancelled one.
+        const cancelled = b.status === 'CANCELLED' || b.status === 'REJECTED';
         const refundLabel = cancelled ? REFUND_LABEL[b.refund_status] : null;
         return (
           <Card key={b.booking_id}>
@@ -64,7 +65,7 @@ export function BookingHistory({ rows }: { rows: BookingHistoryRow[] }) {
                           : 'border border-success/30 bg-success/10 text-success'
                       }`}
                     >
-                      {cancelled ? 'Cancelled' : 'Confirmed'}
+                      {b.status === 'REJECTED' ? 'Rejected' : cancelled ? 'Cancelled' : 'Confirmed'}
                     </span>
                     {refundLabel && (
                       <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">

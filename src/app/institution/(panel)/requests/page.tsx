@@ -61,13 +61,21 @@ export default async function InstitutionRequestsPage() {
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Description</p>
                   <p className="text-sm">{r.description || '—'}</p>
                 </div>
+                {r.agencyInactive && (
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    This agency is no longer approved on the platform, so its request can&apos;t be
+                    accepted. Reject it to close it.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-                  <form action={approveCampusServiceRequestAction}>
-                    <input type="hidden" name="requestId" value={r.id} />
-                    <SubmitButton size="sm" pendingText="Accepting…">
-                      Accept &amp; forward
-                    </SubmitButton>
-                  </form>
+                  {!r.agencyInactive && (
+                    <form action={approveCampusServiceRequestAction}>
+                      <input type="hidden" name="requestId" value={r.id} />
+                      <SubmitButton size="sm" pendingText="Accepting…">
+                        Accept &amp; forward
+                      </SubmitButton>
+                    </form>
+                  )}
                   <form action={rejectCampusServiceRequestAction} className="flex items-end gap-2">
                     <input type="hidden" name="requestId" value={r.id} />
                     <Input name="reason" placeholder="Reason (optional)" className="h-7 w-48 text-xs" />

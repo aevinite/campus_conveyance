@@ -12,10 +12,10 @@ import { requireSuperAdminPage } from '@/features/admin/page-guard';
 export default async function AdminDeletedCollegesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; error?: string }>;
 }) {
   await requireSuperAdminPage();
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, error: purgeError } = await searchParams;
   const { page, offset } = pageParams(pageParam, ADMIN_PAGE_SIZE);
   const db = await createClient();
   const { rows: colleges, total } = await listDeletedColleges(db, { limit: ADMIN_PAGE_SIZE, offset });
@@ -31,6 +31,11 @@ export default async function AdminDeletedCollegesPage({
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Deleted Colleges</h1>
         <p className="text-muted-foreground">Restore a college, or remove it for good.</p>
       </div>
+      {purgeError && (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {purgeError.slice(0, 400)}
+        </p>
+      )}
       <DataTable
         headers={['Name', 'Type', 'City', 'Action']}
         rows={colleges.map((c) => [
@@ -49,7 +54,7 @@ export default async function AdminDeletedCollegesPage({
               fields={{ id: c.id }}
               triggerLabel="Delete permanently"
               title="Permanently delete this college?"
-              description={`“${c.name}” and its routes, stops, agency service listings and all bookings on those routes will be permanently erased. Students, drivers, buses and payment records are kept (they just lose this college). Blocked while any booking is active, a payment awaits verification or a refund is owed. This cannot be undone.`}
+              description={`“${c.name}” and its routes, stops, agency service listings and all bookings on those routes will be permanently erased. Students, drivers, buses, payments and pass-renewal records are kept (with the rider, route and college names preserved). Blocked while any booking is active, a payment or renewal awaits verification, or a refund is still to settle. This cannot be undone.`}
               confirmLabel="Delete permanently"
               pendingText="Deleting…"
             />

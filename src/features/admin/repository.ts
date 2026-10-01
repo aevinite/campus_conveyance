@@ -146,15 +146,21 @@ export interface ServiceRequest {
   institutionId: string;
   /** Campus has no campus admin, so the platform admin decides both stages. */
   noCampusAdmin?: boolean;
+  /** Issue #13: the requesting agency is no longer APPROVED (rejected/pending)
+   *  or was deleted — the request can only be rejected, never approved. */
+  agencyInactive: boolean;
 }
 
 const SR_SELECT =
-  'id, name, description, vehicle_type, status, campus_status, created_at, institution_id, agencies(name), institutions(name)';
+  'id, name, description, vehicle_type, status, campus_status, created_at, institution_id, agencies(name, status, is_deleted), institutions(name)';
 
 function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
-  const ag = r.agencies as { name: string } | { name: string }[] | null;
+  type Ag = { name: string; status?: string; is_deleted?: boolean };
+  const agRaw = r.agencies as Ag | Ag[] | null;
+  const ag = Array.isArray(agRaw) ? agRaw[0] ?? null : agRaw;
   const inst = r.institutions as { name: string } | { name: string }[] | null;
   return {
+    agencyInactive: !ag || ag.status !== 'APPROVED' || ag.is_deleted === true,
     id: r.id as string,
     name: r.name as string,
     description: (r.description as string) ?? '',
@@ -163,7 +169,7 @@ function mapServiceRequest(r: Record<string, unknown>): ServiceRequest {
     campusStatus: r.campus_status as string,
     institutionId: r.institution_id as string,
     created_at: r.created_at as string,
-    agencyName: (Array.isArray(ag) ? ag[0]?.name : ag?.name) ?? '—',
+    agencyName: ag?.name ?? '—',
     institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
   };
 }
@@ -449,6 +455,8 @@ export async function listPendingCampusApplications(): Promise<PendingCampusAppl
   const { data: insts, error } = await admin
     .from('institutions')
     .select('id, name, kind, city, area, created_at')
+    // Issue #12: only campuses that registered THEMSELVES are applications.
+    .eq('self_registered', true)
     .eq('is_deleted', false)
     .eq('is_active', false)
     .eq('is_verified', false)
