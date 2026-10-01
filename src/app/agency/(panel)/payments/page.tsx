@@ -38,19 +38,27 @@ export default async function AgencyPaymentsPage({
           Completed payments
         </h1>
         <p className="text-muted-foreground">
-          Students who have fully paid for a ride on your routes ({total}) — the confirmed amount and
-          when it was paid.
+          Verified payments on your routes ({total}) — fares and pass renewals, the amount and when it
+          was paid. A partly refunded payment stays here with the refunded amount.
         </p>
       </div>
       <DataTable
-        headers={['Rider', 'Route', 'Amount', 'UTR', 'Paid on']}
+        headers={['Rider', 'Route', 'Amount', 'Refunded', 'UTR', 'Paid on']}
         rows={rows.map((p) => [
           <div key="s" className="min-w-0">
             <p className="font-medium">{p.studentName ?? '—'}</p>
             {p.studentEmail && <p className="truncate text-xs text-muted-foreground">{p.studentEmail}</p>}
           </div>,
           p.routeName,
-          <span key="a" className="tnum font-semibold">{inr(p.amountCents)}</span>,
+          <div key="a">
+            <p className="tnum font-semibold">{inr(p.amountCents)}</p>
+            {p.kind === 'RENEWAL' && <p className="text-xs text-muted-foreground">Renewal</p>}
+          </div>,
+          p.refundAmountCents != null && p.refundAmountCents > 0 ? (
+            <span key="rf" className="tnum text-sm text-destructive">−{inr(p.refundAmountCents)}</span>
+          ) : (
+            <span key="rf" className="text-muted-foreground">—</span>
+          ),
           <span key="u" className="font-mono text-sm">{p.utr ?? '—'}</span>,
           p.verifiedAt ? formatDateTime(p.verifiedAt) : p.submittedAt ? formatDateTime(p.submittedAt) : '—',
         ])}

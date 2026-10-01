@@ -11,6 +11,8 @@ import BusGallery from '@/app/(dashboard)/student/routes/[id]/bus-gallery';
 import RouteStopsMap from '@/app/(dashboard)/student/routes/[id]/route-stops-map';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const dynamic = 'force-dynamic';
 
 const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
@@ -62,6 +64,8 @@ function RiderTable({ riders }: { riders: SeatRider[] }) {
 export default async function AdminVehicleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const detail = await getVehicleDetail(id);
   if (!detail) notFound();
   const { vehicle: v, agencyName, assignments, live, changes } = detail;
@@ -240,6 +244,7 @@ export default async function AdminVehicleDetailPage({ params }: { params: Promi
                           lng: st.lng,
                           description: st.description,
                           address: st.address,
+                          sequence: st.sequence ?? null,
                         }))}
                         liveRouteId={a.routeId}
                         heightClass="h-80"

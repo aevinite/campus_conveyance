@@ -9,6 +9,8 @@ import { AgencyProfileForm } from '@/app/agency/(panel)/account/agency-profile-f
 import { cn } from '@/lib/utils';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function EditProviderPage({
   params,
 }: {
@@ -16,6 +18,8 @@ export default async function EditProviderPage({
 }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const db = await createClient();
   const agency = await getAgencyDetail(db, id);
   if (!agency) notFound();

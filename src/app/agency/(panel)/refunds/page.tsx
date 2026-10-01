@@ -45,7 +45,7 @@ export default async function AgencyRefundsPage({
         </p>
       </div>
       <DataTable
-        headers={['Rider', 'Route', 'Paid', 'Refund to', 'Reason', 'Cancelled', 'Status']}
+        headers={['Rider', 'Route', 'Paid', 'Refunded', 'Refund to', 'Reason', 'Date', 'Status']}
         rows={rows.map((r) => {
           const meta = STATUS[r.refundStatus] ?? { label: r.refundStatus, cls: 'border-border bg-muted text-muted-foreground' };
           return [
@@ -55,19 +55,38 @@ export default async function AgencyRefundsPage({
             </div>,
             r.routeName,
             <span key="a" className="tnum font-semibold">{inr(r.amountCents)}</span>,
+            r.refundStatus === 'PROCESSED' && r.refundAmountCents != null ? (
+              <span key="rf" className="tnum font-semibold">{inr(Math.min(r.refundAmountCents, r.amountCents))}</span>
+            ) : (
+              <span key="rf" className="text-muted-foreground">{r.refundStatus === 'DECLINED' ? 'None' : '—'}</span>
+            ),
             <div key="p" className="min-w-0 text-sm">
               <p className="font-medium">{r.payoutMethod ?? '—'}</p>
               <p className="break-all font-mono text-xs text-muted-foreground">{r.payoutDetails ?? '—'}</p>
             </div>,
             <span key="r" className="block max-w-xs text-sm text-muted-foreground">{r.reason ?? '—'}</span>,
-            r.requestedAt ? formatDateTime(r.requestedAt) : '—',
+            // Pending: when it was cancelled. Decided (refunded / declined): the decision date.
+            <div key="d" className="text-sm">
+              {r.refundStatus !== 'REQUESTED' && r.refundedAt ? (
+                <>
+                  <p>{formatDateTime(r.refundedAt)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.refundStatus === 'DECLINED' ? 'Declined' : 'Refunded'}
+                  </p>
+                </>
+              ) : r.requestedAt ? (
+                <>
+                  <p>{formatDateTime(r.requestedAt)}</p>
+                  <p className="text-xs text-muted-foreground">Requested</p>
+                </>
+              ) : (
+                '—'
+              )}
+            </div>,
             <div key="st" className="space-y-1">
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${meta.cls}`}>
                 {meta.label}
               </span>
-              {r.refundStatus === 'PROCESSED' && r.refundAmountCents != null && (
-                <p className="tnum text-xs text-muted-foreground">{inr(r.refundAmountCents)} refunded</p>
-              )}
             </div>,
           ];
         })}

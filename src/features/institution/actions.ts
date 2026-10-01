@@ -16,7 +16,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionClaims } from '@/features/auth/session';
 import { agencyReportTag } from '@/features/agency/repository';
-import { resolveInstitutionId } from './repository';
+import { resolveActiveInstitutionId } from './repository';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,7 +35,7 @@ function refresh() {
 export async function approveCampusServiceRequestAction(formData: FormData): Promise<void> {
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
-  const campus = await resolveInstitutionId();
+  const campus = await resolveActiveInstitutionId(); // #20: live campus only
   if (!campus) return; // not a campus admin, or unlinked account
 
   const server = await createClient();
@@ -94,7 +94,7 @@ export async function rejectCampusServiceRequestAction(formData: FormData): Prom
   const id = String(formData.get('requestId') ?? '');
   if (!UUID_RE.test(id)) return;
   const reason = String(formData.get('reason') ?? '').trim();
-  const campus = await resolveInstitutionId();
+  const campus = await resolveActiveInstitutionId(); // #20: live campus only
   if (!campus) return;
 
   const server = await createClient();

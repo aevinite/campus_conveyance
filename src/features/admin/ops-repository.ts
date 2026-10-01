@@ -1003,7 +1003,9 @@ export interface PendingPaymentRow {
 }
 
 export interface CompletedPaymentRow {
-  bookingId: string;
+  /** FARE = the booking's first payment, RENEWAL = an in-place pass renewal. */
+  kind: 'FARE' | 'RENEWAL';
+  bookingId: string | null;
   studentName: string | null;
   studentEmail: string | null;
   routeName: string;
@@ -1013,64 +1015,61 @@ export interface CompletedPaymentRow {
   method: string | null;
   /** PAID = verified, REFUNDED = verified then refunded, FAILED = rejected. */
   status: string;
+  /** Fare rows only: NONE / REQUESTED / PROCESSED / DECLINED. */
+  refundStatus: string | null;
+  /** Fare rows only: total refunded on the booking (fare + renewals). */
+  refundAmountCents: number | null;
+  /** When the refund was processed or declined. */
+  refundedAt: string | null;
+  refundNote: string | null;
   submittedAt: string | null;
   verifiedAt: string | null;
   note: string | null;
 }
 
 /**
- * UPI payments the admin has already processed — verified (PAID) or rejected
- * (FAILED) — for the admin "Payment History" log: who paid, how much, the UTR
- * they submitted, and when it was verified. Service-role read.
+ * Every UPI payment the admin has processed — verified (PAID), rejected (FAILED)
+ * or later refunded — for the admin "Payment History" log. Includes pass
+ * renewals and the refund outcome (amount + PROCESSED/DECLINED/REQUESTED).
+ * Backed by the admin_payment_history RPC (service_role only, 0134) so fares
+ * and renewals page together.
  */
 export async function listCompletedUpiPayments(opts: PageOpts = {}): Promise<Paged<CompletedPaymentRow>> {
   const client = db();
-  let q = client
-    .from('payments')
-    .select('booking_id, amount_cents, upi_utr, reference, method, status, submitted_at, verified_at, verify_note, rider_name, rider_email, route_name', { count: 'exact' })
-    // Every completed/processed payment — verified UPI ones (with a UTR) AND any
-    // legacy/mock completions (no UTR). Newest verification first; the rest after.
-    // REFUNDED = verified money later refunded — still part of the history.
-    .in('status', ['PAID', 'FAILED', 'REFUNDED'])
-    .order('verified_at', { ascending: false, nullsFirst: false });
-  q = range(q, opts);
-  const { data, error, count } = await q;
+  const [{ data, error }, { data: cnt, error: cErr }] = await Promise.all([
+    client.rpc('admin_payment_history', { p_limit: opts.limit ?? null, p_offset: opts.offset ?? 0 }),
+    client.rpc('admin_payment_history_count'),
+  ]);
   if (error) throw error;
-  const rows = (data ?? []) as Record<string, unknown>[];
-  const bookings = await mapByIds<{ id: string; student_name: string | null; student_email: string | null; route_id: string | null }>(
-    client,
-    'bookings',
-    'id, student_name, student_email, route_id',
-    rows.map((r) => r.booking_id as string),
-  );
-  const routes = await mapByIds<{ id: string; name: string }>(
-    client,
-    'routes',
-    'id, name',
-    [...bookings.values()].map((b) => b.route_id),
-  );
+  if (cErr) throw cErr;
+  type Row = {
+    kind: string; booking_id: string | null; rider_name: string | null; rider_email: string | null;
+    route_name: string | null; amount_cents: number | null; upi_utr: string | null; reference: string | null;
+    method: string | null; status: string; refund_status: string | null; refund_amount_cents: number | null;
+    refunded_at: string | null; refund_note: string | null; submitted_at: string | null;
+    verified_at: string | null; verify_note: string | null;
+  };
   return {
-    rows: rows.map((r) => {
-      const b = bookings.get(r.booking_id as string);
-      return {
-        bookingId: r.booking_id as string,
-        // Fall back to the payment's own snapshot (0133) once the booking/route
-        // is gone (e.g. its college was permanently deleted).
-        studentName: b?.student_name ?? (r.rider_name as string | null) ?? null,
-        studentEmail: b?.student_email ?? (r.rider_email as string | null) ?? null,
-        routeName:
-          (b?.route_id ? routes.get(b.route_id)?.name : undefined) ?? (r.route_name as string | null) ?? '—',
-        amountCents: (r.amount_cents as number) ?? 0,
-        utr: (r.upi_utr as string) ?? null,
-        reference: (r.reference as string) ?? null,
-        method: (r.method as string) ?? null,
-        status: (r.status as string) ?? '',
-        submittedAt: (r.submitted_at as string) ?? null,
-        verifiedAt: (r.verified_at as string) ?? null,
-        note: (r.verify_note as string) ?? null,
-      };
-    }),
-    total: count ?? 0,
+    rows: ((data ?? []) as Row[]).map((r) => ({
+      kind: r.kind === 'RENEWAL' ? 'RENEWAL' : 'FARE',
+      bookingId: r.booking_id,
+      studentName: r.rider_name,
+      studentEmail: r.rider_email,
+      routeName: r.route_name ?? '—',
+      amountCents: Number(r.amount_cents ?? 0),
+      utr: r.upi_utr,
+      reference: r.reference,
+      method: r.method,
+      status: r.status ?? '',
+      refundStatus: r.refund_status,
+      refundAmountCents: r.refund_amount_cents != null ? Number(r.refund_amount_cents) : null,
+      refundedAt: r.refunded_at,
+      refundNote: r.refund_note,
+      submittedAt: r.submitted_at,
+      verifiedAt: r.verified_at,
+      note: r.verify_note,
+    })),
+    total: Number(cnt ?? 0),
   };
 }
 
@@ -1134,14 +1133,16 @@ export interface PendingRenewalRow {
 }
 
 /** In-place pass renewals (pass_renewals, 0127) whose UPI payment awaits verification. */
-export async function listPendingRenewals(): Promise<PendingRenewalRow[]> {
+export async function listPendingRenewals(opts: PageOpts = {}): Promise<Paged<PendingRenewalRow>> {
   const client = db();
-  const { data, error } = await client
+  let q = client
     .from('pass_renewals')
-    .select('id, booking_id, billing_period, amount_cents, upi_utr, reference, submitted_at')
+    .select('id, booking_id, billing_period, amount_cents, upi_utr, reference, submitted_at', { count: 'exact' })
     .eq('status', 'CREATED')
     .order('submitted_at', { ascending: true })
-    .limit(100);
+    .order('id', { ascending: true });
+  q = range(q, opts);
+  const { data, error, count } = await q;
   if (error) throw error;
   const rows = (data ?? []) as Record<string, unknown>[];
   const bookings = await mapByIds<{ id: string; student_name: string | null; route_id: string | null }>(
@@ -1156,7 +1157,7 @@ export async function listPendingRenewals(): Promise<PendingRenewalRow[]> {
     'id, name',
     [...bookings.values()].map((b) => b.route_id),
   );
-  return rows.map((r) => {
+  const mapped = rows.map((r) => {
     const b = bookings.get(r.booking_id as string);
     return {
       renewalId: r.id as string,
@@ -1169,6 +1170,7 @@ export async function listPendingRenewals(): Promise<PendingRenewalRow[]> {
       submittedAt: r.submitted_at as string,
     };
   });
+  return { rows: mapped, total: count ?? 0 };
 }
 
 // ---- Refunds awaiting processing ------------------------------------------

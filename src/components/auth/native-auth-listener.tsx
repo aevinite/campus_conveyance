@@ -27,37 +27,56 @@ export function NativeAuthListener() {
       const { Browser } = await import('@capacitor/browser');
       const { createClient } = await import('@/lib/supabase/client');
 
-      // A cold start can deliver the SAME deep link through both getLaunchUrl and
-      // the appUrlOpen listener. Guard so a one-time PKCE code is never exchanged
-      // twice (the second exchange fails on a consumed code and would bounce the
-      // user to /login?error).
-      //
-      // getLaunchUrl keeps returning the launch link for the whole app session,
-      // and every handled link ends in a full-page navigation that remounts this
-      // component — so the "handled" set must survive navigations (sessionStorage),
-      // or a cold-start link is re-processed on every load → endless reload loop.
-      const KEY = 'cc:handled-auth-links';
-      const readHandled = (): string[] => {
+      // Dedupe rules (issue #4):
+      //  - getLaunchUrl keeps returning the SAME launch link for the whole app
+      //    session, and every handled link ends in a full-page navigation that
+      //    remounts this component — so the launch link is processed at most once
+      //    per session (sessionStorage), or a cold start would reload forever.
+      //  - appUrlOpen events are NOT deduped session-wide: the email-confirm link
+      //    is always the identical tokenless URL, so a second/third tap must still
+      //    open the login screen. We only drop an exact repeat within a few
+      //    seconds (a cold start can deliver one link through BOTH paths), and a
+      //    one-time PKCE code is never exchanged twice.
+      const LAUNCH_KEY = 'cc:handled-launch-url';
+      const RECENT_KEY = 'cc:recent-auth-links';
+      const CODES_KEY = 'cc:used-auth-codes';
+      const REPEAT_WINDOW_MS = 5000;
+      const readJson = <T,>(key: string, fallback: T): T => {
         try {
-          const v = JSON.parse(sessionStorage.getItem(KEY) ?? '[]');
-          return Array.isArray(v) ? v : [];
+          const v = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+          return v ?? fallback;
         } catch {
-          return [];
+          return fallback;
         }
       };
-      const handled = new Set<string>(readHandled());
-      const markHandled = (url: string) => {
-        handled.add(url);
+      const writeJson = (key: string, value: unknown) => {
         try {
-          sessionStorage.setItem(KEY, JSON.stringify([...handled].slice(-10)));
+          sessionStorage.setItem(key, JSON.stringify(value));
         } catch {
-          /* storage unavailable — the in-memory set still guards this page */
+          /* storage unavailable — in-memory state still guards this page */
         }
+      };
+      let launchUrl: string | null = null;
+      const recent: Record<string, number> = readJson(RECENT_KEY, {});
+      const usedCodes: string[] = readJson(CODES_KEY, []);
+      /** True when this exact link was just handled (cold-start double delivery). */
+      const isRepeat = (url: string) => {
+        const at = recent[url];
+        return typeof at === 'number' && Date.now() - at < REPEAT_WINDOW_MS;
+      };
+      const markHandled = (url: string) => {
+        const now = Date.now();
+        recent[url] = now;
+        for (const [k, t] of Object.entries(recent)) {
+          if (now - t > REPEAT_WINDOW_MS * 4) delete recent[k];
+        }
+        writeJson(RECENT_KEY, recent);
+        if (launchUrl && url === launchUrl) writeJson(LAUNCH_KEY, url);
       };
 
       const handleUrl = async (url: string) => {
         if (!url || !url.startsWith('campusconveyance://auth')) return;
-        if (handled.has(url)) return;
+        if (isRepeat(url)) return;
         markHandled(url);
         await Browser.close().catch(() => {});
         try {
@@ -83,6 +102,9 @@ export function NativeAuthListener() {
             return;
           }
           if (!code) return; // nothing actionable
+          if (usedCodes.includes(code)) return; // one-time code already exchanged
+          usedCodes.push(code);
+          writeJson(CODES_KEY, usedCodes.slice(-10));
 
           // Only finish a Google sign-in this app started in the last 15 minutes.
           let startedAt = 0;
@@ -112,14 +134,21 @@ export function NativeAuthListener() {
         }
       };
 
-      // Cold start: the app may have been launched BY the deep link.
+      // Cold start: the app may have been launched BY the deep link. Process the
+      // launch link only once per app session (it is replayed on every mount).
       try {
         const launch = await App.getLaunchUrl();
-        if (launch?.url) await handleUrl(launch.url);
+        if (launch?.url) {
+          launchUrl = launch.url;
+          if (readJson<string | null>(LAUNCH_KEY, null) !== launch.url) {
+            await handleUrl(launch.url);
+          }
+        }
       } catch {
         // no launch URL / not supported — ignore.
       }
 
+      // Warm opens: every tap is handled (only an immediate duplicate is dropped).
       const handle = await App.addListener('appUrlOpen', ({ url }) => {
         void handleUrl(url);
       });

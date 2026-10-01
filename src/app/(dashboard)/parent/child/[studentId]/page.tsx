@@ -10,17 +10,7 @@ import { EditChildForm } from './edit-child-form';
 import { AppBackLink } from '@/components/ui/app-back-link';
 import { isAppRequest } from '@/lib/app-context';
 import RouteStopsMap, { type MapStop } from '../../../student/routes/[id]/route-stops-map';
-
-const STATUS_PILL: Record<string, string> = {
-  CONFIRMED: 'border-success/30 bg-success/10 text-success',
-  PENDING: 'border-warning/30 bg-warning/10 text-warning',
-  WAITLISTED: 'border-primary/30 bg-primary/10 text-primary',
-};
-const STATUS_LABEL: Record<string, string> = {
-  CONFIRMED: 'Confirmed',
-  PENDING: 'Pending',
-  WAITLISTED: 'Waitlisted',
-};
+import { bookingStatusLabel, TONE_PILL } from '@/features/booking/status-label';
 
 export default async function ParentChildHub({
   params,
@@ -65,6 +55,7 @@ export default async function ParentChildHub({
       lng: s.lng as number | null,
       address: s.address as string | null,
       description: s.description as string | null,
+      sequence: s.sequence as number | null,
     }));
   }
 
@@ -109,16 +100,20 @@ export default async function ParentChildHub({
             <p className="text-xs font-medium uppercase tracking-wide text-primary">Bus booking</p>
             {child.active_status ? (
               <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm">
-                {(child.active_status === 'CONFIRMED' || child.active_status === 'PENDING') &&
-                child.active_cancel_requested_at ? (
-                  <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">
-                    Refund pending
-                  </span>
-                ) : (
-                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[child.active_status] ?? STATUS_PILL.PENDING}`}>
-                    {STATUS_LABEL[child.active_status] ?? child.active_status}
-                  </span>
-                )}
+                {(() => {
+                  // Same wording as the parent dashboard + the student's own screens.
+                  const pill = bookingStatusLabel({
+                    status: child.active_status,
+                    is_paid: child.active_payment_status === 'PAID',
+                    payment_status: child.active_payment_status,
+                    cancel_requested_at: child.active_cancel_requested_at,
+                  });
+                  return (
+                    <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONE_PILL[pill.tone]}`}>
+                      {pill.label}
+                    </span>
+                  );
+                })()}
                 {child.active_route_name && <span className="font-medium">{child.active_route_name}</span>}
               </p>
             ) : (
@@ -149,7 +144,7 @@ export default async function ParentChildHub({
             Live location of {child.active_route_name ?? 'their ride'} — shows while the driver is online.
           </p>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-xs">
-            <RouteStopsMap tapToShow={await isAppRequest()} stops={stops} liveRouteId={child.active_route_id} heightClass="h-[24rem] sm:h-[28rem]" />
+            <RouteStopsMap tapToShow={await isAppRequest()} stops={stops} liveRouteId={child.active_cancel_requested_at ? undefined : child.active_route_id} liveNote={child.active_cancel_requested_at ? 'Live tracking is paused while the cancellation is being processed.' : null} heightClass="h-[24rem] sm:h-[28rem]" />
           </div>
         </section>
       )}

@@ -19,6 +19,7 @@ import { LinkChildForm } from './link-child-form';
 import { AddChildForm } from './add-child-form';
 import { UnlinkChildButton } from './unlink-child-button';
 import { formatShortDate } from '@/lib/format-date';
+import { bookingStatusLabel, isActiveRide, liveTrackingNote, TONE_PILL } from '@/features/booking/status-label';
 
 const ACTIVE_STATUSES = new Set(['CONFIRMED', 'PENDING', 'WAITLISTED']);
 const firstName = (n: string | null | undefined) => (n ?? '').trim().split(/\s+/)[0] || 'Your child';
@@ -26,52 +27,24 @@ const firstName = (n: string | null | undefined) => (n ?? '').trim().split(/\s+/
 // Bookings the child could actually be riding — worth showing a live bus map for.
 const TRACKABLE = new Set(['CONFIRMED', 'PENDING']);
 
-const STATUS_PILL: Record<string, string> = {
-  CONFIRMED: 'border-success/30 bg-success/10 text-success',
-  WAITLISTED: 'border-warning/30 bg-warning/10 text-warning',
-  PENDING: 'border-primary/30 bg-primary/10 text-primary',
-  CANCELLED: 'border-border bg-muted text-muted-foreground',
-  REJECTED: 'border-destructive/30 bg-destructive/10 text-destructive',
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  CONFIRMED: 'Confirmed',
-  WAITLISTED: 'Waitlisted',
-  PENDING: 'Pending',
-  CANCELLED: 'Cancelled',
-  REJECTED: 'Rejected',
-};
-
-const REFUND_PENDING = { label: 'Refund pending', cls: 'border-warning/30 bg-warning/10 text-warning' };
-
-// Friendly labels matching the student side: a paid booking the family asked to
-// cancel (still CONFIRMED, or PENDING while its UPI payment is verified) reads
-// "Refund pending" until the admin processes it; a closed booking whose payment
-// is being refunded shows that too; a hold shows where its payment stands.
+// Same wording as the student's own screens (shared helper): a paid booking the
+// family asked to cancel reads "Cancellation requested — refund pending" until the
+// admin processes it; a closed booking whose payment is still being verified or
+// refunded says so; a hold shows where its payment stands.
 function bookingPill(b: ChildBookingRow): { label: string; cls: string } {
-  if ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.cancel_requested_at) {
-    return REFUND_PENDING;
-  }
-  if (b.status === 'CANCELLED' || b.status === 'REJECTED') {
-    if (b.refund_status === 'REQUESTED') return REFUND_PENDING;
-    if (b.refund_status === 'PROCESSED') {
-      return { label: 'Refunded', cls: 'border-border bg-muted text-muted-foreground' };
-    }
-  }
-  if (b.status === 'PENDING') {
-    if (b.is_paid) return { label: 'Paid — awaiting confirmation', cls: STATUS_PILL.PENDING };
-    if (b.payment_status === 'SUBMITTED') return { label: 'Verifying payment', cls: STATUS_PILL.PENDING };
-    if (b.payment_status === 'REJECTED') {
-      return { label: 'Payment failed — pay again', cls: STATUS_PILL.REJECTED };
-    }
-    return { label: 'Awaiting payment', cls: STATUS_PILL.PENDING };
-  }
-  return {
-    label: STATUS_LABEL[b.status] ?? b.status,
-    cls: STATUS_PILL[b.status] ?? STATUS_PILL.PENDING,
-  };
+  const { label, tone } = bookingStatusLabel(b);
+  return { label, cls: TONE_PILL[tone] };
 }
 
+// Live bus polling only for an ACTIVE ride (confirmed, no cancellation pending,
+// pass valid) — the bus never appears for a pending hold.
+const rideIsLive = (b: ChildBookingRow) =>
+  isActiveRide({
+    status: b.status,
+    cancel_requested_at: b.cancel_requested_at,
+    billing_period: b.billing_period,
+    passStartIso: b.pass_start_at ?? b.paid_at ?? b.created_at,
+  });
 
 export default async function ParentDashboard() {
   await requireRole('PARENT');
@@ -159,6 +132,10 @@ export default async function ParentDashboard() {
       institution_name: string | null;
       bus_number: string | null;
       students: string[];
+      /** Any booking in this group is an active ride → poll the live bus. */
+      live: boolean;
+      /** Why live tracking is off (shown under the map when !live). */
+      note: string;
     }
   >();
   for (const b of trackable) {
@@ -168,6 +145,7 @@ export default async function ParentDashboard() {
     if (g) {
       if (!g.students.includes(student)) g.students.push(student);
       if (!g.bus_number) g.bus_number = b.bus_number ?? null;
+      if (rideIsLive(b)) g.live = true;
     } else {
       trackableRoutes.set(id, {
         route_id: id,
@@ -175,6 +153,8 @@ export default async function ParentDashboard() {
         institution_name: b.institution_name ?? null,
         bus_number: b.bus_number ?? null,
         students: [student],
+        live: rideIsLive(b),
+        note: liveTrackingNote(b),
       });
     }
   }
@@ -187,7 +167,7 @@ export default async function ParentDashboard() {
       .order('sequence');
     for (const s of stopRows ?? []) {
       const list = stopsByRoute.get(s.route_id) ?? [];
-      list.push({ name: s.name, lat: s.lat, lng: s.lng, description: s.description, address: s.address });
+      list.push({ name: s.name, lat: s.lat, lng: s.lng, description: s.description, address: s.address, sequence: s.sequence });
       stopsByRoute.set(s.route_id, list);
     }
   }
@@ -243,7 +223,12 @@ export default async function ParentDashboard() {
                       </span>
                     )}
                   </div>
-                  <RouteStopsMap tapToShow stops={stopsByRoute.get(g.route_id) ?? []} liveRouteId={g.route_id} />
+                  <RouteStopsMap
+                    tapToShow
+                    stops={stopsByRoute.get(g.route_id) ?? []}
+                    liveRouteId={g.live ? g.route_id : undefined}
+                    liveNote={g.live ? null : g.note}
+                  />
                 </div>
               ))}
             </div>
@@ -450,7 +435,8 @@ export default async function ParentDashboard() {
                 </div>
                 <RouteStopsMap
                   stops={stopsByRoute.get(g.route_id) ?? []}
-                  liveRouteId={g.route_id}
+                  liveRouteId={g.live ? g.route_id : undefined}
+                  liveNote={g.live ? null : g.note}
                 />
               </div>
             ))}

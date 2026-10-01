@@ -9,7 +9,15 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: '/',
+        // Public operator sign-up/sign-in pages (listed in the sitemap) stay
+        // crawlable — the longer Allow rule wins over the panel Disallow.
+        allow: [
+          '/',
+          '/agency/register',
+          '/agency/login',
+          '/institution/register',
+          '/institution/login',
+        ],
         disallow: [
           '/aevinite',
           '/agency',

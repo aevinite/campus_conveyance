@@ -110,6 +110,7 @@ export default async function AdminRequestsPage({
                           {s.institutionName}
                           <span className="text-[0.65rem] uppercase text-primary/70">
                             {s.vehicleType === 'VAN' ? 'Van' : 'Bus'}
+                            {s.requested ? ' · requested' : ''}
                           </span>
                         </span>
                       ))}

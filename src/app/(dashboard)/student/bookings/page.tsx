@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { bookingStatusLabel, TONE_PILL } from '@/features/booking/status-label';
 import { redirect } from 'next/navigation';
 import { CheckCircle2, Circle, Clock3, Timer, XCircle, AlertTriangle, Ticket, ArrowRight, History } from 'lucide-react';
 import { requireRole } from '@/features/auth/guard';
@@ -138,33 +139,17 @@ function StepIcon({ state, isLast }: { state: StepState; isLast: boolean }) {
 }
 
 function statusPill(b: BookingRow) {
-  // A paid booking the rider asked to cancel: held until the admin processes the
-  // refund, so it still reads CONFIRMED but shows the pending state.
-  if (b.status === 'CONFIRMED' && b.cancelRequestedAt) {
-    return (
-      <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-warning">
-        Cancellation requested — refund pending
-      </span>
-    );
-  }
-  const map: Record<string, { label: string; cls: string }> = {
-    CONFIRMED: { label: 'Confirmed', cls: 'border-success/30 bg-success/10 text-success' },
-    WAITLISTED: { label: 'Waitlisted', cls: 'border-warning/30 bg-warning/10 text-warning' },
-    CANCELLED: { label: 'Cancelled', cls: 'border-border bg-muted text-muted-foreground' },
-    REJECTED: { label: 'Rejected', cls: 'border-destructive/30 bg-destructive/10 text-destructive' },
-  };
-  const pending = !b.approved_at
-    ? { label: 'Awaiting approval', cls: 'border-warning/30 bg-warning/10 text-warning' }
-    : b.is_paid
-      ? { label: 'Paid — awaiting confirmation', cls: 'border-primary/30 bg-primary/10 text-primary' }
-      : b.payment_status === 'SUBMITTED'
-        ? { label: 'Verifying payment', cls: 'border-primary/30 bg-primary/10 text-primary' }
-        : b.payment_status === 'REJECTED'
-          ? { label: 'Payment failed — pay again', cls: 'border-destructive/30 bg-destructive/10 text-destructive' }
-          : { label: 'Approved — pay now', cls: 'border-primary/30 bg-primary/10 text-primary' };
-  const m = map[b.status] ?? pending;
+  // Shared with the parent screens so the same booking reads the same for both
+  // (e.g. a cancellation pending while its payment is verified / refunded).
+  const m = bookingStatusLabel({
+    status: b.status,
+    is_paid: b.is_paid,
+    payment_status: b.payment_status,
+    cancel_requested_at: b.cancelRequestedAt,
+    approved_at: b.approved_at,
+  });
   return (
-    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${m.cls}`}>
+    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${TONE_PILL[m.tone]}`}>
       {m.label}
     </span>
   );

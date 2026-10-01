@@ -10,6 +10,8 @@ import { formatDateTime } from '@/lib/format-date';
 import { rupees } from '@/lib/format';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const dynamic = 'force-dynamic';
 
 const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
@@ -27,6 +29,8 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 export default async function AdminRouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const detail = await getRouteDetail(id);
   if (!detail) notFound();
   const { route: r, institutionName, agencyName, busNumber, stops, occupancy, riders, progress } = detail;
@@ -119,6 +123,7 @@ export default async function AdminRouteDetailPage({ params }: { params: Promise
                 lng: st.lng,
                 description: st.description,
                 address: st.address,
+                sequence: st.sequence ?? null,
               }))}
               liveRouteId={r.id as string}
               heightClass="h-96"

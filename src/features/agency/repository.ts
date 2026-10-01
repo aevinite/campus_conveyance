@@ -603,6 +603,10 @@ export interface AgencyPaymentRow {
   reference: string | null;
   submittedAt: string | null;
   verifiedAt: string | null;
+  /** FARE = first payment, RENEWAL = in-place pass renewal. */
+  kind: 'FARE' | 'RENEWAL';
+  /** Fare rows of a partially refunded booking: amount refunded (fare + renewals). */
+  refundAmountCents: number | null;
 }
 
 export async function listAgencyCompletedPayments(
@@ -620,6 +624,7 @@ export async function listAgencyCompletedPayments(
     booking_id: string; student_name: string | null; student_email: string | null;
     route_name: string; amount_cents: number | null; upi_utr: string | null;
     reference: string | null; submitted_at: string | null; verified_at: string | null;
+    kind?: string | null; refund_amount_cents?: number | null;
   };
   return ((data ?? []) as Row[]).map((r) => ({
     bookingId: r.booking_id,
@@ -631,6 +636,8 @@ export async function listAgencyCompletedPayments(
     reference: r.reference,
     submittedAt: r.submitted_at,
     verifiedAt: r.verified_at,
+    kind: r.kind === 'RENEWAL' ? 'RENEWAL' : 'FARE',
+    refundAmountCents: r.refund_amount_cents != null ? Number(r.refund_amount_cents) : null,
   }));
 }
 

@@ -24,6 +24,7 @@ import RouteStopsMap from './route-stops-map';
 import BusGallery from './bus-gallery';
 import { formatTime } from '@/lib/format-date';
 import { checkoutPlans, planPrice, periodLabel } from '@/lib/billing';
+import { isActiveRide, liveTrackingNote } from '@/features/booking/status-label';
 
 // 0 means the agency never set a price — treat it like "not set".
 const inr = (cents: number | null) =>
@@ -77,6 +78,14 @@ export default async function RouteDetailPage({
     redirect(`/student/details?next=${encodeURIComponent(`/student/routes/${id}`)}`);
   }
   const activeBooking = currentBooking?.routeId === id ? currentBooking : null;
+  const activeLive =
+    !!activeBooking &&
+    isActiveRide({
+      status: activeBooking.status,
+      cancel_requested_at: activeBooking.cancel_requested_at,
+      billing_period: activeBooking.billing_period,
+      passStartIso: activeBooking.pass_start_at ?? activeBooking.paid_at ?? activeBooking.created_at,
+    });
   const otherBooking = currentBooking && currentBooking.routeId !== id ? currentBooking : null;
   const soldOut = availability.available <= 0;
   // The plans the agency priced for this route — the student picks one at checkout.
@@ -343,14 +352,16 @@ export default async function RouteDetailPage({
                 lng: s.lng,
                 description: s.description,
                 address: s.address,
+                sequence: s.sequence,
               }))}
-              // Live tracking only for a student who actually has a seat on this
-              // route (PENDING hold or CONFIRMED) — a WAITLISTED rider has no seat
-              // and isn't on the bus, so they don't get the live map.
-              liveRouteId={activeBooking && activeBooking.status !== 'WAITLISTED' ? id : undefined}
+              // Live tracking only for an ACTIVE ride (confirmed seat, no
+              // cancellation pending, pass valid) — the bus never shows for a
+              // pending hold / waitlist, so polling for it would be wasted.
+              liveRouteId={activeLive ? id : undefined}
+              liveNote={activeBooking && !activeLive ? liveTrackingNote(activeBooking) : null}
               // The rider's own pickup stop → powers the live "N min away" ETA badge.
               pickupStop={(() => {
-                if (!activeBooking || activeBooking.status === 'WAITLISTED') return null;
+                if (!activeBooking || !activeLive) return null;
                 const s = data.stops.find((x) => x.id === activeBooking.pickup_stop_id);
                 return s && s.lat != null && s.lng != null
                   ? { lat: s.lat, lng: s.lng, name: s.name }

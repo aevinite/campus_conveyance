@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toErrorResponse, AppError } from '@/lib/errors/app-error';
 import { sendSignupConfirmationEmail, sendEmailOtpEmail } from '@/lib/mailer';
+import { signupConfirmLink } from '@/features/auth/confirm-link';
 import { createOtpChallenge, verifyOtpChallenge, isEmailVerified } from './email-otp';
 import {
   agencyRegisterSchema,
@@ -289,7 +290,7 @@ export async function agencyRegisterAction(
     /* best-effort — signup already succeeded */
   }
   try {
-    await sendSignupConfirmationEmail(d.email, data.properties.action_link);
+    await sendSignupConfirmationEmail(d.email, signupConfirmLink(site, data.properties));
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }
@@ -729,13 +730,22 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
   try {
     const agency = await requireApprovedAgency(db);
     // The agency is the service — resolve its own service row for the chosen
-    // college (prefer the BUS one) so the route stays linked, no picker needed.
+    // college AND the chosen vehicle's type (an agency approved only for vans
+    // here can't run a bus route; add_route + the routes trigger re-enforce).
+    const { data: veh, error: vehErr } = await createAdminClient()
+      .from('vehicles')
+      .select('vehicle_type')
+      .eq('id', parsed.data.vehicleId)
+      .eq('agency_id', agency.id)
+      .maybeSingle();
+    if (vehErr) throw new AppError('SERVICE', vehErr.message);
+    const vehicleType = (veh as { vehicle_type: string } | null)?.vehicle_type ?? 'BUS';
     const { data: svc, error: svcErr } = await db
       .from('agency_services')
       .select('id')
       .eq('agency_id', agency.id)
       .eq('institution_id', parsed.data.institutionId)
-      .order('vehicle_type', { ascending: true }) // 'BUS' before 'VAN'
+      .eq('vehicle_type', vehicleType)
       .limit(1)
       .maybeSingle();
     // Surface a lookup failure — otherwise the route is created UNLINKED to its
@@ -746,7 +756,10 @@ export async function addRouteAction(_: FormState, formData: FormData): Promise<
     // invisible to students. The agency must have an approved service here first.
     const serviceId = (svc as { id: string } | null)?.id ?? null;
     if (!serviceId) {
-      return { error: 'You don’t have an approved service area for this college yet. Request one first.' };
+      const kind = vehicleType === 'VAN' ? 'van' : 'bus';
+      return {
+        error: `You aren’t approved to run ${kind} routes at this college yet. Request a ${kind} service area for it first.`,
+      };
     }
     await addRoute(db, agency.id, parsed.data, serviceId, stops);
     // The bus picker lives on /agency/add-route and hides buses already on a route;

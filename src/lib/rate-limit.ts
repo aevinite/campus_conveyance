@@ -133,3 +133,32 @@ export async function clearLoginFailures(subject: string): Promise<void> {
     /* best effort */
   }
 }
+
+// ── Per-EMAIL login lockout (IP-independent, audit #27) ──────────────────────
+// The per-(email|IP) guard above is dodged by rotating IPs. This second, looser
+// cap counts every password attempt against an ACCOUNT regardless of source, so
+// a distributed guesser still hits a wall. It is higher than the per-IP cap so a
+// single attacker host can't trivially lock a real user out; a successful login
+// clears it.
+const LOGIN_EMAIL_MAX_ATTEMPTS = 30;
+const LOGIN_EMAIL_SCOPE = 'login:fail:email';
+
+/** Atomically reserve one login attempt for this email (any IP). Seconds to wait, or 0. */
+export async function registerLoginAttemptForEmail(email: string): Promise<number> {
+  return rateLimit(LOGIN_EMAIL_SCOPE, email, LOGIN_EMAIL_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS, {
+    failClosed: true,
+  });
+}
+
+export async function clearLoginFailuresForEmail(email: string): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    await admin
+      .from(TABLE)
+      .delete()
+      .eq('scope', LOGIN_EMAIL_SCOPE)
+      .eq('subject', email.trim().toLowerCase());
+  } catch {
+    /* best effort */
+  }
+}

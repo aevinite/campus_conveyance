@@ -16,17 +16,29 @@ const inr = (cents: number) => `₹${Math.round((cents ?? 0) / 100).toLocaleStri
 export default async function AdminPaymentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; rpage?: string }>;
 }) {
   await requireSuperAdminPage();
-  const { page: pageParam } = await searchParams;
-  const { page, offset } = pageParams(pageParam, OPS_PAGE_SIZE);
-  const [{ rows, total }, renewals] = await Promise.all([
+  const sp = await searchParams;
+  // Two independent paged lists: UPI fares (?page=) and pass renewals (?rpage=).
+  const { page, offset } = pageParams(sp.page, OPS_PAGE_SIZE);
+  const { page: rPage, offset: rOffset } = pageParams(sp.rpage, OPS_PAGE_SIZE);
+  const [{ rows, total }, { rows: renewals, total: renewalTotal }] = await Promise.all([
     listPendingUpiPayments({ limit: OPS_PAGE_SIZE, offset }),
-    listPendingRenewals(),
+    listPendingRenewals({ limit: OPS_PAGE_SIZE, offset: rOffset }),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / OPS_PAGE_SIZE));
-  if (total > 0 && page > totalPages) redirect(`/aevinite/payments?page=${totalPages}`);
+  const renewalPages = Math.max(1, Math.ceil(renewalTotal / OPS_PAGE_SIZE));
+  const clampUrl = (p: number, rp: number) => {
+    const q = new URLSearchParams();
+    if (p > 1) q.set('page', String(p));
+    if (rp > 1) q.set('rpage', String(rp));
+    const qs = q.toString();
+    return qs ? `/aevinite/payments?${qs}` : '/aevinite/payments';
+  };
+  if (total > 0 && page > totalPages) redirect(clampUrl(totalPages, rPage));
+  if (renewalTotal > 0 && rPage > renewalPages) redirect(clampUrl(page, renewalPages));
+  const carry = { page: sp.page, rpage: sp.rpage };
 
   return (
     <section className="space-y-4">
@@ -90,10 +102,10 @@ export default async function AdminPaymentsPage({
         ])}
         empty="No UPI payments waiting for verification."
       />
-      <Pager page={page} totalPages={totalPages} basePath="/aevinite/payments" />
+      <Pager page={page} totalPages={totalPages} basePath="/aevinite/payments" param="page" params={carry} />
 
       <div className="pt-4">
-        <h2 className="text-lg font-bold tracking-tight">Pass renewals to verify ({renewals.length})</h2>
+        <h2 className="text-lg font-bold tracking-tight">Pass renewals to verify ({renewalTotal})</h2>
         <p className="text-sm text-muted-foreground">
           Riders renewing an active pass in place. Approving extends the same booking from its current end
           date — the seat is kept.
@@ -138,6 +150,7 @@ export default async function AdminPaymentsPage({
         ])}
         empty="No pass renewals waiting for verification."
       />
+      <Pager page={rPage} totalPages={renewalPages} basePath="/aevinite/payments" param="rpage" params={carry} />
     </section>
   );
 }

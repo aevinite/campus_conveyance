@@ -14,8 +14,10 @@ export interface AgencyRequest {
   pan_number: string | null;
   registered_address: string | null;
   rejected_reason?: string | null;
-  // Colleges/schools + vehicle types the agency picked at signup (seeded services).
-  services: { institutionName: string; vehicleType: string }[];
+  // Colleges/schools + vehicle types the agency picked at signup. Since 0133 the
+  // signup trigger seeds agency_service_requests (not agency_services), so these
+  // are the approved services plus any still-open requests (`requested: true`).
+  services: { institutionName: string; vehicleType: string; requested?: boolean }[];
 }
 export interface AgencyRow {
   id: string;
@@ -42,7 +44,7 @@ export interface CollegeRow {
 }
 
 const REQUEST_COLS =
-  'id, name, email, phone, contact_person, legal_name, registration_no, gst_number, pan_number, registered_address, rejected_reason, agency_services(vehicle_type, institutions(name))';
+  'id, name, email, phone, contact_person, legal_name, registration_no, gst_number, pan_number, registered_address, rejected_reason, agency_services(vehicle_type, institutions(name)), agency_service_requests(vehicle_type, status, institutions(name))';
 
 /** Agency applications in a given status (PENDING for review, REJECTED so a
  *  rejected provider stays visible and can be re-approved or removed). */
@@ -83,13 +85,28 @@ async function agencyApplications(
       pan_number: (a.pan_number as string) ?? null,
       registered_address: (a.registered_address as string) ?? null,
       rejected_reason: (a.rejected_reason as string) ?? null,
-      services: rows.map((s) => {
-        const inst = s.institutions;
-        return {
-          institutionName: (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—',
-          vehicleType: s.vehicle_type,
-        };
-      }),
+      services: (() => {
+        const nameOf = (inst: { name: string } | { name: string }[] | null) =>
+          (Array.isArray(inst) ? inst[0]?.name : inst?.name) ?? '—';
+        const out: { institutionName: string; vehicleType: string; requested?: boolean }[] =
+          rows.map((s) => ({ institutionName: nameOf(s.institutions), vehicleType: s.vehicle_type }));
+        const seen = new Set(out.map((s) => `${s.institutionName}|${s.vehicleType}`));
+        const reqs = (a.agency_service_requests ?? []) as {
+          vehicle_type: string;
+          status: string;
+          institutions: { name: string } | { name: string }[] | null;
+        }[];
+        for (const r of reqs) {
+          // Open (PENDING) picks, plus everything for a rejected application so
+          // the admin can still see what was asked for before re-approving.
+          if (r.status !== 'PENDING' && status !== 'REJECTED') continue;
+          const key = `${nameOf(r.institutions)}|${r.vehicle_type}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ institutionName: nameOf(r.institutions), vehicleType: r.vehicle_type, requested: true });
+        }
+        return out;
+      })(),
     };
   });
 }
@@ -215,6 +232,31 @@ export async function listActionableServiceRequests(db: SupabaseClient): Promise
 }
 
 /**
+ * Campuses holding a PENDING/PENDING request but with NO live campus admin —
+ * those requests are in the actionable list (noCampusAdmin), so the pipeline
+ * must exclude them or they appear twice (audit #19).
+ */
+async function unstaffedPendingCampuses(db: SupabaseClient): Promise<string[]> {
+  const { data, error } = await db
+    .from('agency_service_requests')
+    .select('institution_id')
+    .eq('campus_status', 'PENDING')
+    .eq('status', 'PENDING');
+  if (error) throw error;
+  const ids = [...new Set(((data ?? []) as { institution_id: string }[]).map((r) => r.institution_id))];
+  const staffed = await campusesWithAdmin(ids);
+  return ids.filter((id) => !staffed.has(id));
+}
+
+/** PostgREST or-filter for "NOT actionable" (the complement of listActionableServiceRequests). */
+function pipelineFilter(unstaffed: string[]): string {
+  // actionable = status PENDING AND (campus APPROVED OR (campus PENDING AND campus unstaffed))
+  if (unstaffed.length === 0) return 'campus_status.neq.APPROVED,status.neq.PENDING';
+  const list = unstaffed.join(',');
+  return `status.neq.PENDING,and(campus_status.neq.APPROVED,or(campus_status.neq.PENDING,institution_id.not.in.(${list})))`;
+}
+
+/**
  * The rest of the pipeline (everything NOT currently awaiting the admin) — for
  * read-only visibility: awaiting campus, rejected by campus, live, rejected by
  * admin. Most-recent first, paginated.
@@ -223,12 +265,12 @@ export async function listServiceRequests(
   db: SupabaseClient,
   opts: { limit?: number; offset?: number } = {},
 ): Promise<ServiceRequest[]> {
+  const unstaffed = await unstaffedPendingCampuses(db);
   let q = db
     .from('agency_service_requests')
     .select(SR_SELECT)
-    // NOT (campus_status=APPROVED AND status=PENDING) — that set is the
-    // actionable list shown separately.
-    .or('campus_status.neq.APPROVED,status.neq.PENDING')
+    // Everything not in the actionable list shown separately.
+    .or(pipelineFilter(unstaffed))
     .order('created_at', { ascending: false });
   if (opts.limit != null) {
     const off = opts.offset ?? 0;
@@ -241,10 +283,11 @@ export async function listServiceRequests(
 
 /** Count of pipeline (non-actionable) requests, for that page's pager. */
 export async function countServiceRequests(db: SupabaseClient): Promise<number> {
+  const unstaffed = await unstaffedPendingCampuses(db);
   const { count, error } = await db
     .from('agency_service_requests')
     .select('id', { count: 'exact', head: true })
-    .or('campus_status.neq.APPROVED,status.neq.PENDING');
+    .or(pipelineFilter(unstaffed));
   if (error) throw error;
   return count ?? 0;
 }
@@ -548,6 +591,12 @@ export interface PaymentSummary {
   unpaidCount: number;
   paidCents: number;
   unpaidCents: number;
+  /** All verified money (fares + renewals), any booking status (0134 #17). */
+  grossCents?: number;
+  /** Refunded back to riders. */
+  refundedCents?: number;
+  /** Net platform revenue = gross − refunded. */
+  revenueCents?: number;
 }
 export interface AdminReport {
   counts: AdminCounts;

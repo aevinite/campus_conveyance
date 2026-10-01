@@ -30,6 +30,9 @@ export interface SimpleStop {
   lng: number;
   /** Which route the stop belongs to — one blue line is drawn per route. */
   routeId?: string;
+  /** route_stops.sequence — the pin number, so a stop without a location (not
+   *  passed here) leaves a gap instead of renumbering the stops after it. */
+  sequence?: number | null;
 }
 
 /**
@@ -214,11 +217,12 @@ export function DriverLiveMap({
       // Per route: pickup-order blue line + numbered pickup pins (1, 2, 3 …).
       byRoute.forEach((rs) => {
         drawRouteLine(L, m, rs);
-        rs.forEach((s, i) =>
-          L.marker([s.lat, s.lng], { icon: pickupPin(L, i + 1) })
+        rs.forEach((s, i) => {
+          const n = s.sequence ?? i + 1;
+          L.marker([s.lat, s.lng], { icon: pickupPin(L, n) })
             .addTo(m)
-            .bindTooltip(`${i + 1}. ${escapeHtml(s.name)}`, { direction: 'top' }),
-        );
+            .bindTooltip(`${n}. ${escapeHtml(s.name)}`, { direction: 'top' });
+        });
       });
       m.setView(stops[0] ? [stops[0].lat, stops[0].lng] : DEFAULT_MAP_CENTER, 13);
       setTimeout(() => m.invalidateSize(), 0);

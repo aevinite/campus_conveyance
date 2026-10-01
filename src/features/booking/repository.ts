@@ -90,16 +90,6 @@ export interface BookingRow {
   agencyName: string | null;
 }
 
-/**
- * Release every approved-but-unpaid booking whose 10-minute payment window has
- * passed (RPC, trigger frees the seats). Called before availability/booking
- * reads so a lapsed window never blocks a seat. Best-effort — a failure must
- * not break the page.
- */
-export async function expireStaleHolds(db: SupabaseClient): Promise<void> {
-  await db.rpc('expire_stale_holds');
-}
-
 /** The caller's active (PENDING/CONFIRMED/WAITLISTED) booking on a route, if any. */
 export interface ActiveBooking {
   id: string;
@@ -118,6 +108,8 @@ export interface ActiveBooking {
   paid_at: string | null;
   /** Start of the current window after an in-place renewal (overrides paid_at). */
   pass_start_at?: string | null;
+  /** Set while a cancellation (refund) is pending — the seat is still held. */
+  cancel_requested_at?: string | null;
 }
 
 /** The caller's single active booking on ANY route (one bus at a time). */
@@ -135,7 +127,7 @@ export async function getMyActiveBooking(
   // of a separate students lookup, then the active booking, in a single query.
   const { data, error } = await db
     .from('bookings')
-    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, created_at, paid_at, pass_start_at, routes(id, name), students!inner(profile_id)')
+    .select('id, status, is_paid, approved_at, expires_at, pickup_stop_id, billing_period, payment_status, created_at, paid_at, pass_start_at, cancel_requested_at, routes(id, name), students!inner(profile_id)')
     .eq('students.profile_id', userId)
     .in('status', ['PENDING', 'CONFIRMED', 'WAITLISTED'])
     // The one-active-booking unique index already guarantees ≤1 match; the
@@ -175,6 +167,7 @@ export async function getMyActiveBooking(
     created_at: (data.created_at as string) ?? null,
     paid_at: (data.paid_at as string) ?? null,
     pass_start_at: (data.pass_start_at as string) ?? null,
+    cancel_requested_at: (data.cancel_requested_at as string) ?? null,
     routeId: route?.id ?? null,
     routeName: route?.name ?? null,
   };

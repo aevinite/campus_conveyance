@@ -8,6 +8,8 @@ import { StatusBadge, BoolBadge } from '@/components/status-badge';
 import { formatDateTime } from '@/lib/format-date';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const dynamic = 'force-dynamic';
 
 function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
@@ -22,6 +24,8 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 export default async function AdminStudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const detail = await getStudentDetail(id);
   if (!detail) notFound();
   const { profile, student, institutionName, bookings, parents } = detail;

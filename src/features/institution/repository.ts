@@ -127,6 +127,40 @@ export async function getCampusApproval(institutionId: string): Promise<CampusAp
   return { name: r.name, isActive: r.is_active, isVerified: r.is_verified, isDeleted: r.is_deleted };
 }
 
+/**
+ * Like resolveInstitutionId, but only for a LIVE campus (active, not deleted).
+ * Server actions use this: they can be invoked directly (bypassing the panel
+ * layout and requireActiveCampusPage), so a disabled/removed campus's admin must
+ * not be able to approve/reject requests (audit #20). The DB side matches:
+ * jwt_institution() returns NULL for an inactive/deleted campus.
+ */
+export const resolveActiveInstitutionId = cache(async (): Promise<string | null> => {
+  const institutionId = await resolveInstitutionId();
+  if (!institutionId) return null;
+  const approval = await getCampusApproval(institutionId);
+  if (!approval || approval.isDeleted || !approval.isActive) return null;
+  return institutionId;
+});
+
+/**
+ * Read every row of a query past PostgREST's 1000-row response cap (audit #24),
+ * paging with a stable order. `build` must return a fresh query each call.
+ */
+async function fetchAllPages<T>(
+  build: () => { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }> },
+  pageSize = 1000,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await build().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
 // ---- Overview (dashboard home KPIs + charts) ------------------------------
 
 export interface InstitutionOverview {
@@ -177,15 +211,19 @@ async function studentCountsByRoute(
   institutionId: string,
   visibleRouteIds: Set<string>,
 ): Promise<{ perRoute: Map<string, Set<string>>; allStudents: Set<string> }> {
-  const { data, error } = await client
-    .from('bookings')
-    .select('route_id, student_id')
-    .eq('institution_id', institutionId)
-    .in('status', ['PENDING', 'CONFIRMED']);
-  if (error) throw error;
+  // Paged: a plain select silently stops at PostgREST's 1000-row cap, which
+  // undercounted "Students riding" at scale (audit #24).
+  const data = await fetchAllPages<{ route_id: string | null; student_id: string | null }>(() =>
+    client
+      .from('bookings')
+      .select('route_id, student_id')
+      .eq('institution_id', institutionId)
+      .in('status', ['PENDING', 'CONFIRMED'])
+      .order('id'),
+  );
   const perRoute = new Map<string, Set<string>>();
   const allStudents = new Set<string>();
-  for (const b of (data ?? []) as { route_id: string | null; student_id: string | null }[]) {
+  for (const b of data) {
     // Only routes shown in the breakdown, so the headline matches the rows.
     if (!b.route_id || !b.student_id || !visibleRouteIds.has(b.route_id)) continue;
     if (!perRoute.has(b.route_id)) perRoute.set(b.route_id, new Set());
@@ -816,14 +854,20 @@ export async function listCampusAgencyReviews(institutionId: string): Promise<Ca
   if (agencies.length === 0) return [];
   const agencyIds = agencies.map((a) => a.id);
 
-  const { data: reviewRows } = await client
-    .from('reviews')
-    .select(
-      'id, agency_id, rating, comment, created_at, booking:bookings(institution_id), student:students(institution_id)',
-    )
-    .in('agency_id', agencyIds)
-    .eq('is_hidden', false)
-    .order('created_at', { ascending: false });
+  // Paged past PostgREST's 1000-row cap so the campus average/count include
+  // every review, not just the newest 1000 (audit #24). Newest first (id as a
+  // tiebreak keeps pages stable), so the "recent 5" per agency stay correct.
+  const reviewRows = await fetchAllPages<unknown>(() =>
+    client
+      .from('reviews')
+      .select(
+        'id, agency_id, rating, comment, created_at, booking:bookings(institution_id), student:students(institution_id)',
+      )
+      .in('agency_id', agencyIds)
+      .eq('is_hidden', false)
+      .order('created_at', { ascending: false })
+      .order('id'),
+  );
 
   type Row = {
     id: string;
@@ -838,7 +882,7 @@ export async function listCampusAgencyReviews(institutionId: string): Promise<Ca
 
   const statsByAgency = new Map<string, { sum: number; count: number }>();
   const reviewsByAgency = new Map<string, CampusAgencyReview[]>();
-  for (const r of (reviewRows ?? []) as unknown as Row[]) {
+  for (const r of reviewRows as Row[]) {
     const campus = one(r.booking)?.institution_id ?? one(r.student)?.institution_id ?? null;
     if (campus !== institutionId) continue;
     const st = statsByAgency.get(r.agency_id) ?? { sum: 0, count: 0 };

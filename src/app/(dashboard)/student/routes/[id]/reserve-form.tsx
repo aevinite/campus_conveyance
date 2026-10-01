@@ -62,7 +62,7 @@ function stepForCode(code?: string): 0 | 1 | 2 | null {
     case 'P0012': // invalid pickup stop for this route
       return 1;
     case 'P0010': // route no longer available
-    case 'P0011': // campus not available
+    case 'P0011': // campus not available, or the route isn't at the rider's campus
     case 'P0013': // ride not offered on the chosen plan
       return 2;
     default:

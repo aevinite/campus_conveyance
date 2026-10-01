@@ -46,19 +46,22 @@ export default async function AdminPaymentHistoryPage({
         </span>
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Payment history</h1>
         <p className="text-muted-foreground">
-          Every UPI payment you have processed ({total}) — who paid, how much, the UTR they submitted,
-          and when it was verified or rejected.
+          Every UPI payment you have processed ({total}), fares and pass renewals — who paid, how much,
+          the UTR they submitted, when it was verified or rejected, and any refund outcome.
         </p>
       </div>
       <Tabs active="history" />
       <DataTable
-        headers={['Rider', 'Route', 'Amount', 'UTR', 'Ref', 'Status', 'Submitted', 'Verified', 'Note']}
+        headers={['Rider', 'Route', 'Type', 'Amount', 'UTR', 'Ref', 'Status', 'Refund', 'Submitted', 'Verified', 'Note']}
         rows={rows.map((p) => [
           <div key="s" className="min-w-0">
             <p className="font-medium">{p.studentName ?? '—'}</p>
             {p.studentEmail && <p className="truncate text-xs text-muted-foreground">{p.studentEmail}</p>}
           </div>,
           p.routeName,
+          <span key="k" className="text-xs font-semibold uppercase text-muted-foreground">
+            {p.kind === 'RENEWAL' ? 'Renewal' : 'Fare'}
+          </span>,
           <span key="a" className="tnum font-semibold">{inr(p.amountCents)}</span>,
           <span key="u" className="font-mono text-sm">{p.utr ?? '—'}</span>,
           <span key="r" className="font-mono text-xs text-muted-foreground">{p.reference ?? '—'}</span>,
@@ -74,6 +77,23 @@ export default async function AdminPaymentHistoryPage({
           >
             {p.status === 'PAID' ? 'Verified' : p.status === 'REFUNDED' ? 'Verified · refunded' : 'Rejected'}
           </span>,
+          <div key="rf" className="space-y-0.5 text-sm">
+            {p.refundStatus === 'PROCESSED' ? (
+              <p className="tnum font-medium">{inr(p.refundAmountCents ?? 0)} refunded</p>
+            ) : p.refundStatus === 'DECLINED' ? (
+              <p className="font-medium text-destructive">Declined</p>
+            ) : p.refundStatus === 'REQUESTED' ? (
+              <p className="font-medium text-warning">Requested</p>
+            ) : p.kind === 'RENEWAL' && p.status === 'REFUNDED' ? (
+              <p className="text-muted-foreground">With the fare</p>
+            ) : (
+              <p className="text-muted-foreground">—</p>
+            )}
+            {p.refundedAt && (p.refundStatus === 'PROCESSED' || p.refundStatus === 'DECLINED') && (
+              <p className="text-xs text-muted-foreground">{formatDateTime(p.refundedAt)}</p>
+            )}
+            {p.refundNote && <p className="text-xs text-muted-foreground">{p.refundNote}</p>}
+          </div>,
           p.submittedAt ? formatDateTime(p.submittedAt) : '—',
           p.verifiedAt ? formatDateTime(p.verifiedAt) : '—',
           <span key="n" className="text-sm text-muted-foreground">{p.note || '—'}</span>,

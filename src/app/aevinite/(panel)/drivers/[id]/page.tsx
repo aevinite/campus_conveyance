@@ -9,6 +9,8 @@ import { formatDateTime, formatDateMedium } from '@/lib/format-date';
 import { relativeTime } from '@/lib/format';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const dynamic = 'force-dynamic';
 
 const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
@@ -25,6 +27,8 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 export default async function AdminDriverDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const detail = await getDriverDetail(id);
   if (!detail) notFound();
   const { driver: d, name, email, phone, agencyName, vehicle, isOnline, lastPing, changes } = detail;

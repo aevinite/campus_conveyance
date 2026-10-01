@@ -8,6 +8,8 @@ import { CollegeForm } from '../../../college-form';
 import { CampusAdminsPanel, type CampusAdmin } from './campus-admins-panel';
 import { requireSuperAdminPage } from '@/features/admin/page-guard';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function EditCollegePage({
   params,
 }: {
@@ -15,6 +17,8 @@ export default async function EditCollegePage({
 }) {
   await requireSuperAdminPage();
   const { id } = await params;
+  // A malformed id would make Postgres throw (22P02) → error page; show 404 instead.
+  if (!UUID_RE.test(id)) notFound();
   const db = await createClient();
   const { data: college } = await db
     .from('institutions')

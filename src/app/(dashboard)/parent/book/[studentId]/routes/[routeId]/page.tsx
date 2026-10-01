@@ -302,6 +302,7 @@ export default async function ParentBookRoute({
                     lng: s.lng,
                     description: s.description,
                     address: s.address,
+                    sequence: s.sequence,
                   }))}
                 />
               )}

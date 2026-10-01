@@ -12,6 +12,7 @@ import { isAccountDeactivated } from './account-status';
 import { loginFor } from '@/lib/rbac/roles';
 import { toErrorResponse, AuthError } from '@/lib/errors/app-error';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '@/lib/mailer';
+import { signupConfirmLink } from '@/features/auth/confirm-link';
 import { PUSH_ENDPOINT_COOKIE } from '@/lib/push-cookie';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { getSiteUrl } from '@/lib/site-url';
@@ -111,7 +112,7 @@ export async function registerAction(
   // clears the email too; other failures keep every field.
   if (error) return fail(error.message, /already|registered|exists/i.test(error.message));
   try {
-    await sendSignupConfirmationEmail(parsed.data.email, data.properties.action_link);
+    await sendSignupConfirmationEmail(parsed.data.email, signupConfirmLink(site, data.properties));
   } catch (e) {
     return fail(toErrorResponse(e).message);
   }

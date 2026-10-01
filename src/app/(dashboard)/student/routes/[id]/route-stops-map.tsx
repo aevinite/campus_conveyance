@@ -23,6 +23,10 @@ export interface MapStop {
   lng: number | null;
   description?: string | null;
   address?: string | null;
+  /** route_stops.sequence — the pin number (matches the numbered stop list).
+   *  Falls back to the stop's position in the FULL list, so stops without a
+   *  location never shift the numbers of the ones after them. */
+  sequence?: number | null;
 }
 
 // How often to poll for the live bus position (balanced freshness vs. load).
@@ -146,8 +150,13 @@ export default function RouteStopsMap({
 
 interface RouteStopsMapProps {
   stops: MapStop[];
-  /** When set, poll for and show this route's live bus position. */
+  /** When set, poll for and show this route's live bus position. Callers set it
+   *  only for an ACTIVE ride (confirmed seat, no cancellation pending, pass valid)
+   *  — the bus never appears for anything else, so polling would be wasted. */
   liveRouteId?: string;
+  /** Short note shown under the map when live tracking is off (e.g. "Live
+   *  tracking starts once the seat is confirmed."). Ignored when liveRouteId is set. */
+  liveNote?: string | null;
   /** The viewing rider's own pickup stop — enables the "N min away" ETA badge. */
   pickupStop?: { lat: number; lng: number; name: string } | null;
   /** Tailwind height class for the map box (e.g. a taller map on the home page). */
@@ -159,6 +168,7 @@ function RouteStopsMapView({
   liveRouteId,
   pickupStop,
   heightClass = 'h-[24rem]',
+  liveNote,
 }: RouteStopsMapProps) {
   // Read the latest pickup stop from a ref so the poll effect (keyed on
   // liveRouteId) never has to re-subscribe when the prop object identity changes.
@@ -191,7 +201,7 @@ function RouteStopsMapView({
   // Keying the init effect on a stable signature avoids a needless teardown that
   // would drop the live bus marker / flicker the map.
   const stopsSig = useMemo(
-    () => stops.map((s) => `${s.name}|${s.lat}|${s.lng}`).join('~'),
+    () => stops.map((s) => `${s.name}|${s.lat}|${s.lng}|${s.sequence ?? ""}`).join('~'),
     [stops],
   );
 
@@ -202,10 +212,14 @@ function RouteStopsMapView({
       const L = (await import('leaflet')).default;
       leafletRef.current = L;
       if (cancelled || !containerRef.current || mapRef.current) return;
-      const pts = stops.filter(
-        (s): s is MapStop & { lat: number; lng: number } =>
-          typeof s.lat === 'number' && typeof s.lng === 'number',
-      );
+      // Number every stop BEFORE dropping the ones without a location, so a
+      // missing pin leaves a gap (1, 3, 4) instead of renumbering the rest.
+      const pts = stops
+        .map((s, i) => ({ ...s, n: s.sequence ?? i + 1 }))
+        .filter(
+          (s): s is MapStop & { lat: number; lng: number; n: number } =>
+            typeof s.lat === 'number' && typeof s.lng === 'number',
+        );
       const m = L.map(containerRef.current, {
         attributionControl: false,
         scrollWheelZoom: false,
@@ -218,18 +232,18 @@ function RouteStopsMapView({
       L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(m);
       // Blue line tracing this bus's whole route, stop to stop.
       drawRouteLine(L, m, pts);
-      pts.forEach((s, i) => {
+      pts.forEach((s) => {
         const desc = s.description?.trim();
         const addr = s.address?.trim();
         const popup =
           `<div style="font:500 13px system-ui,sans-serif;min-width:160px;max-width:220px">` +
-          `<div style="font-weight:700;margin-bottom:2px">${i + 1}. ${escapeHtml(s.name)}</div>` +
+          `<div style="font-weight:700;margin-bottom:2px">${s.n}. ${escapeHtml(s.name)}</div>` +
           (desc ? `<div style="color:#4b5563">${escapeHtml(desc)}</div>` : '') +
           (addr ? `<div style="color:#9ca3af;font-size:11px;margin-top:2px">${escapeHtml(addr)}</div>` : '') +
           `</div>`;
-        L.marker([s.lat, s.lng], { icon: numberedPin(L, i + 1) })
+        L.marker([s.lat, s.lng], { icon: numberedPin(L, s.n) })
           .addTo(m)
-          .bindTooltip(`${i + 1}. ${escapeHtml(s.name)}`, { direction: 'top' })
+          .bindTooltip(`${s.n}. ${escapeHtml(s.name)}`, { direction: 'top' })
           .bindPopup(popup);
       });
       if (pts.length === 1) {
@@ -536,6 +550,9 @@ function RouteStopsMapView({
         // map can't paint over the sticky header/footer when scrolling.
         className={`relative z-0 isolate ${heightClass} w-full overflow-hidden rounded-2xl border border-border shadow-sm ring-1 ring-black/5`}
       />
+      {!liveRouteId && liveNote && (
+        <p className="mt-2 px-1 text-xs text-muted-foreground">{liveNote}</p>
+      )}
     </div>
   );
 }

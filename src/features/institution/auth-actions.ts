@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toErrorResponse } from '@/lib/errors/app-error';
 import { sendSignupConfirmationEmail } from '@/lib/mailer';
+import { signupConfirmLink } from '@/features/auth/confirm-link';
 import { isEmailVerified } from '@/features/agency/email-otp';
 import { sendAgencyEmailOtp, verifyAgencyEmailOtp } from '@/features/agency/actions';
 import { ensureEmailFreeForSignup, signInAndRoute } from '@/features/auth/services';
@@ -158,7 +159,7 @@ export async function institutionRegisterAction(
   }
 
   try {
-    await sendSignupConfirmationEmail(d.email, data.properties.action_link);
+    await sendSignupConfirmationEmail(d.email, signupConfirmLink(site, data.properties));
   } catch (e) {
     return { error: toErrorResponse(e).message };
   }

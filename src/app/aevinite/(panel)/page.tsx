@@ -121,6 +121,13 @@ export default async function AdminDashboard() {
             <Stat label="Unpaid" value={String(payments.unpaidCount)} sub={inr(payments.unpaidCents) + ' due'} />
             <Stat label="Total billed" value={inr(payments.paidCents + payments.unpaidCents)} />
             <Stat label="Bookings" value={String(totalBookings)} />
+            {payments.revenueCents != null && (
+              <Stat
+                label="Net revenue"
+                value={inr(payments.revenueCents)}
+                sub={`all-time · ${inr(payments.refundedCents ?? 0)} refunded`}
+              />
+            )}
           </div>
         </CardContent>
       </Card>

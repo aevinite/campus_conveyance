@@ -25,6 +25,7 @@ export default async function DriverLivePage() {
         lat: s.lat as number,
         lng: s.lng as number,
         routeId: s.route_id as string,
+        sequence: s.sequence as number,
       }));
   }
 
